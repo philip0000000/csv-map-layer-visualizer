@@ -1,0 +1,9 @@
+date,longitude,latitude,comment
+
+1920-01-01,12.5,55.6,"ok row"
+1920-01-02,,"missing longitude"
+,13.1,55.7,"missing date"
+1920-01-03,13.2,,"missing latitude"
+
+1920-01-04,13.3,55.8,"ok row again"
+

@@ -1,42 +1,274 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+/* src/App.css */
+
+.appRoot {
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: #0b1220;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+/* Map container wrapper */
+.rightPane {
+  height: 100%;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* --- Overlay panel on top of map --- */
+.csvOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+
+  z-index: 1200;
+  display: block;
+
+  background: #0f172a;
+  color: #e2e8f0;
+
+  border-right: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+
+  /* slide animation */
+  transition: transform 160ms ease;
+  will-change: transform;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+/* The handle tab (always visible even when collapsed) */
+.csvOverlayHandle {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translate(50%, -50%);
+
+  width: 34px;
+  height: 64px;
+  border-radius: 12px;
+
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.95);
+  color: #e2e8f0;
+
+  cursor: pointer;
+  user-select: none;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 18px;
+  font-weight: 800;
 }
 
-.card {
-  padding: 2em;
+.csvOverlayHandle:hover {
+  background: rgba(15, 23, 42, 1);
 }
 
-.read-the-docs {
-  color: #888;
+/* Panel content area */
+.csvOverlayContent {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
 }
+
+/* Resizable divider at the right edge of the panel */
+.csvOverlayDivider {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+
+  width: 6px;
+  cursor: col-resize;
+  background: rgba(255, 255, 255, 0.06);
+  user-select: none;
+}
+.csvOverlayDivider:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* --- CSV panel internals (your existing styles) --- */
+.csvPanel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.csvPanelHeader {
+  padding: 10px 10px 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.csvPanelHeaderTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.csvPanelTitle {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+}
+
+.csvPanelControls {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.csvRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.csvLabel {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.csvSelect {
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.8);
+  color: #e2e8f0;
+  padding: 0 10px;
+  outline: none;
+}
+
+.csvButtonsRow {
+  display: flex;
+  gap: 8px;
+}
+
+.csvBtnPrimary,
+.csvBtnDanger {
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.8);
+  color: #e2e8f0;
+  padding: 0 10px;
+  cursor: pointer;
+  outline: none;
+}
+
+.csvBtnPrimary {
+  flex: 1;
+  font-weight: 600;
+}
+
+.csvBtnDanger {
+  width: 90px;
+  opacity: 0.95;
+}
+
+.csvBtnDanger:disabled,
+.csvBtnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.csvPanelBody {
+  padding: 10px;
+  overflow: auto;
+  flex: 1;
+}
+
+.csvEmptyState {
+  opacity: 0.85;
+  font-size: 13px;
+  padding: 10px 2px;
+}
+
+.csvMeta {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  font-size: 12px;
+  opacity: 0.95;
+  margin-bottom: 10px;
+}
+
+.csvMetaLabel {
+  font-weight: 700;
+  opacity: 0.95;
+}
+
+.csvErrors {
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.08);
+  font-size: 12px;
+}
+
+.csvErrors summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.csvErrors ul {
+  margin: 8px 0 0 18px;
+  padding: 0;
+}
+
+.csvErrorsMore {
+  margin-top: 8px;
+  opacity: 0.9;
+}
+
+.csvPreviewTitle {
+  font-weight: 700;
+  font-size: 12px;
+  margin: 12px 0 8px;
+  opacity: 0.95;
+}
+
+.csvTableWrap {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  overflow: hidden;
+  background: rgba(2, 6, 23, 0.35);
+}
+
+.csvTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.csvTable thead th {
+  text-align: left;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.csvTable tbody td {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.csvEmptyPreview {
+  padding: 10px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+

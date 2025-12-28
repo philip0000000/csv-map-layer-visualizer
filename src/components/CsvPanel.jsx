@@ -18,6 +18,7 @@ export default function CsvPanel({
   onSelect,         // Callback to change selected CSV
   onImportFiles,    // Callback to import new CSV files
   onUnloadSelected, // Callback to unload the selected CSV
+  onUpdateMapping,  // Callback when user changes latitude/longitude fields
 }) {
   /**
    * Hidden file input reference.
@@ -160,6 +161,93 @@ export default function CsvPanel({
               <div>
                 <span className="csvMetaLabel">Columns:</span>{" "}
                 {selected.headers.length}
+              </div>
+            </div>
+
+            {/* =========================
+                Coordinate mapping
+                =========================
+                This section lets the user choose which CSV columns
+                should be used as latitude and longitude.
+
+                The choices are saved per file and used later
+                to create map points.
+            */}
+            <div className="csvMeta" style={{ marginTop: 10 }}>
+              {/* Latitude column selector */}
+              <div>
+                <span className="csvMetaLabel">
+                  Latitude field:
+                </span>
+
+                {/* Dropdown with all CSV headers */}
+                <select
+                  className="csvSelect"
+
+                  // Current selected latitude column (or empty)
+                  value={selected.latField || ""}
+
+                  // Update the selected file when user changes the value
+                  onChange={(e) =>
+                    onUpdateMapping?.(
+                      selected.id,
+                      { latField: e.target.value || null }
+                    )
+                  }
+
+                  aria-label="Select latitude field"
+                  style={{ marginTop: 6 }}
+                >
+                  {/* No column selected */}
+                  <option value="">
+                    (not set)
+                  </option>
+
+                  {/* One option for each CSV header */}
+                  {selected.headers.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Longitude column selector */}
+              <div>
+                <span className="csvMetaLabel">
+                  Longitude field:
+                </span>
+
+                {/* Dropdown with all CSV headers */}
+                <select
+                  className="csvSelect"
+
+                  // Current selected longitude column (or empty)
+                  value={selected.lonField || ""}
+
+                  // Update the selected file when user changes the value
+                  onChange={(e) =>
+                    onUpdateMapping?.(
+                      selected.id,
+                      { lonField: e.target.value || null }
+                    )
+                  }
+
+                  aria-label="Select longitude field"
+                  style={{ marginTop: 6 }}
+                >
+                  {/* No column selected */}
+                  <option value="">
+                    (not set)
+                  </option>
+
+                  {/* One option for each CSV header */}
+                  {selected.headers.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

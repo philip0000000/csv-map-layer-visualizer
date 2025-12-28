@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { parseCsvFile } from "./csvParse";
+import { autoDetectLatLon } from "./geoColumns";
 
 // Key used to store CSV state in sessionStorage.
 // sessionStorage survives page refresh, but not a new tab.
@@ -11,9 +12,12 @@ const STORAGE_KEY = "csv-map-layer-visualizer.csvFiles.v1";
  * - Allows importing multiple CSV files
  * - Keeps track of the currently selected file
  * - Persists state for the lifetime of the browser tab
+ *
+ * - Auto-detect latitude/longitude columns on import (when possible)
+ * - Store latField/lonField per file so it can be persisted
+ * - Provide updateFileMapping() so UI can change mapping later
  */
 export function useCsvFiles() {
-
   // List of loaded CSV files.
   // On first load, try to restore from sessionStorage.
   const [files, setFiles] = useState(() => {
@@ -73,6 +77,9 @@ export function useCsvFiles() {
   /**
    * Import one or more CSV files.
    * Files are parsed client-side only.
+   *
+   * On import we also try to auto-detect the lat/lon columns
+   * based on common header names.
    */
   async function importFiles(fileList) {
     // Hard limit to avoid memory issues with huge imports.
@@ -90,6 +97,21 @@ export function useCsvFiles() {
       // Parse CSV content into structured data.
       const parsed = await parseCsvFile(file);
 
+      // Auto-detect mapping from headers.
+      // This does not change parsing; it only saves suggested column names.
+      const { latField, lonField } = autoDetectLatLon(parsed.headers);
+
+      // Keep parse warnings, and add a warning if mapping could not be detected.
+      const parseErrors = Array.isArray(parsed.parseErrors)
+        ? [...parsed.parseErrors]
+        : [];
+
+      if (!latField || !lonField) {
+        parseErrors.push(
+          "Geo: Could not auto-detect latitude/longitude columns. Choose them manually."
+        );
+      }
+
       // Build internal representation of the CSV file.
       const item = {
         // Use crypto.randomUUID if available, fallback otherwise.
@@ -105,7 +127,11 @@ export function useCsvFiles() {
         rows: parsed.rows,
         previewRows: parsed.previewRows,
         totalRows: parsed.totalRows,
-        parseErrors: parsed.parseErrors,
+        parseErrors,
+
+        // Stored per file so it persists in sessionStorage.
+        latField: latField ?? null,
+        lonField: lonField ?? null,
       };
 
       newItems.push(item);
@@ -113,10 +139,7 @@ export function useCsvFiles() {
 
     // Add new files to the front of the list.
     // Newest files appear first in the UI.
-    setFiles((prev) => {
-      const merged = [...newItems, ...prev];
-      return merged;
-    });
+    setFiles((prev) => [...newItems, ...prev]);
 
     // Automatically select the most recently imported file.
     if (newItems.length > 0) {
@@ -130,19 +153,36 @@ export function useCsvFiles() {
   function unloadSelected() {
     if (!selectedId) return;
 
+    setFiles((prev) => prev.filter((f) => f.id !== selectedId));
+  }
+
+  /**
+   * Update one file with a small patch object.
+   * This is used when the user chooses lat/lon columns manually.
+   *
+   * Example patch:
+   * { latField: "latitude", lonField: "longitude" }
+   */
+  function updateFileMapping(fileId, patch) {
+    if (!fileId || !patch) return;
+
     setFiles((prev) =>
-      prev.filter((f) => f.id !== selectedId)
+      prev.map((f) => {
+        if (f.id !== fileId) return f;
+        return { ...f, ...patch };
+      })
     );
   }
 
   // Public API of this hook.
   return {
-    files,           // all loaded CSV files
-    selectedId,      // ID of selected CSV
-    selected,        // selected CSV object (or null)
-    setSelectedId,   // allow UI to change selection
-    importFiles,     // import new CSV files
-    unloadSelected,  // remove selected CSV
+    files, // all loaded CSV files
+    selectedId, // ID of selected CSV
+    selected, // selected CSV object (or null)
+    setSelectedId, // allow UI to change selection
+    importFiles, // import new CSV files
+    unloadSelected, // remove selected CSV
+    updateFileMapping, // update lat/lon mapping for a file
   };
 }
 

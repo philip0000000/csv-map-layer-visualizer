@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import GeoMap from "./components/GeoMap";
 import CsvPanel from "./components/CsvPanel";
 import { useCsvFiles } from "./components/useCsvFiles";
+import { derivePointsFromCsv } from "./components/derivePoints";
 
 /**
  * Limits for the CSV panel width.
@@ -21,12 +22,35 @@ export default function App() {
   /**
    * CSV file state and actions.
    * - files: all loaded CSV files
-   * - selectedId: currently selected CSV file
+   * - selectedId: currently selected CSV file ID
+   * - selected: the selected CSV file object (or null)
    * - importFiles: load new CSV files
    * - unloadSelected: remove the selected CSV file
+   * - updateFileMapping: update lat/lon mapping for a file
    */
-  const { files, selectedId, setSelectedId, importFiles, unloadSelected } =
-    useCsvFiles();
+  const {
+    files,
+    selectedId,
+    selected,
+    setSelectedId,
+    importFiles,
+    unloadSelected,
+    updateFileMapping,
+  } = useCsvFiles();
+
+  /**
+   * Convert selected CSV rows into map points.
+   * This is re-calculated only when the selected file changes.
+   */
+  const derived = useMemo(() => {
+    if (!selected) return { points: [], skipped: 0 };
+
+    return derivePointsFromCsv({
+      rows: selected.rows,
+      latField: selected.latField,
+      lonField: selected.lonField,
+    });
+  }, [selected]);
 
   /** True when the CSV panel is hidden */
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -41,8 +65,8 @@ export default function App() {
    */
   const dragRef = useRef({
     dragging: false, // true while the mouse is dragging
-    startX: 0,       // mouse X position when drag started
-    startW: 420,     // panel width when drag started
+    startX: 0, // mouse X position when drag started
+    startW: 420, // panel width when drag started
   });
 
   /**
@@ -109,7 +133,7 @@ export default function App() {
       <div className="rightPane">
         {/* Full-screen map.
             The map is always visible and unaffected by the CSV panel. */}
-        <GeoMap />
+        <GeoMap points={derived.points} />
 
         {/* CSV panel overlay.
             This sits on top of the map and slides in/out. */}
@@ -141,6 +165,7 @@ export default function App() {
               onSelect={setSelectedId}
               onImportFiles={importFiles}
               onUnloadSelected={unloadSelected}
+              onUpdateMapping={updateFileMapping}
             />
           </div>
 

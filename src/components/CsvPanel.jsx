@@ -1,4 +1,5 @@
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
+import { useSessionStorageState } from "./useSessionStorageState";
 
 /**
  * CsvPanel
@@ -20,11 +21,100 @@ export default function CsvPanel({
   onUnloadSelected, // Callback to unload the selected CSV
   onUpdateMapping,  // Callback when user changes latitude/longitude fields
 }) {
+
+  // Persisted UI tool state for the CSV panel.
+  // - open: whether each dropdown is expanded
+  // - toggles: boolean feature flags (UI only for now; no feature logic yet)
+  const TOOLS_KEY = "csv-map-layer-visualizer.tools.v1";
+
+  // We only keep "showTimelineFilter" for now (as a placeholder toggle),
+  // and Debug tools is intentionally empty (placeholder text only).
+  const DEFAULT_TOOLS_STATE = {
+    map: {
+      open: true,
+      toggles: {
+        showTimelineFilter: false,
+      },
+    },
+    debug: {
+      open: false,
+      toggles: {
+        // Future toggles will go here later.
+      },
+    },
+  };
+
+  const [tools, setTools] = useSessionStorageState(TOOLS_KEY, DEFAULT_TOOLS_STATE);
+
+    function setSectionOpen(section, isOpen) {
+    setTools((prev) => {
+      // Defensive: keep behavior stable even if state gets partially corrupted in storage
+      const next = {
+        ...prev,
+        map: {
+          ...(prev?.map ?? { open: false, toggles: {} }),
+        },
+        debug: {
+          ...(prev?.debug ?? { open: false, toggles: {} }),
+        },
+      };
+
+      // Apply requested open/close change
+      next[section] = {
+        ...next[section],
+        open: isOpen,
+      };
+
+      // Usability: enforce "only one open at a time" when opening.
+      // Closing a section should not automatically open the other.
+      if (isOpen) {
+        const other = section === "map" ? "debug" : "map";
+        next[other] = {
+          ...next[other],
+          open: false,
+        };
+      }
+
+      return next;
+    });
+  }
+
+  /**
+   * Close all tool dropdowns.
+   * Kept as a helper so outside-click and Esc can share the same logic.
+   */
+  function closeAllToolMenus() {
+    setTools((prev) => ({
+      ...prev,
+      map: { ...(prev?.map ?? { open: false, toggles: {} }), open: false },
+      debug: { ...(prev?.debug ?? { open: false, toggles: {} }), open: false },
+    }));
+  }
+
+  function setToggle(section, toggleKey, isOn) {
+    setTools((prev) => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        toggles: {
+          ...prev[section]?.toggles,
+          [toggleKey]: isOn,
+        },
+      },
+    }));
+  }
+
   /**
    * Hidden file input reference.
    * We trigger this programmatically when user clicks "Import..."
    */
   const fileInputRef = useRef(null);
+
+  /**
+   * Ref for the tool menus container.
+   * Used to detect clicks outside the menus (to auto-close dropdowns).
+   */
+  const toolMenusRef = useRef(null);
 
   /**
    * Find the currently selected CSV file object.
@@ -64,8 +154,113 @@ export default function CsvPanel({
     e.target.value = "";
   }
 
+  /**
+   * Auto-close open tool menus when:
+   * - user clicks anywhere outside the tool menus (including the map)
+   * - user presses Escape
+   *
+   * Using pointerdown + capture phase makes this robust with Leaflet,
+   * which sometimes stops propagation on map interactions.
+   */
+  useEffect(() => {
+    const anyOpen = !!tools?.map?.open || !!tools?.debug?.open;
+    if (!anyOpen) return;
+
+    function onPointerDownCapture(e) {
+      const root = toolMenusRef.current;
+      if (!root) return;
+
+      // If the click is inside the tool menus area, do nothing.
+      if (root.contains(e.target)) return;
+
+      // Otherwise, close any open dropdowns.
+      closeAllToolMenus();
+    }
+
+    function onKeyDown(e) {
+      if (e.key !== "Escape") return;
+      closeAllToolMenus();
+    }
+
+    document.addEventListener("pointerdown", onPointerDownCapture, true);
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDownCapture, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [tools?.map?.open, tools?.debug?.open]); // only rebind when open state changes
+
   return (
     <div className="csvPanel" role="region" aria-label="CSV files panel">
+      {/* =========================
+          Tool menus (Map / Debug)
+          - Side-by-side headers
+          - Dropdown bodies overlay content below (no layout push)
+          - State persisted in sessionStorage
+        ========================= */}
+      <div
+        className="csvToolMenus"
+        aria-label="Tool menus"
+        ref={toolMenusRef}
+      >
+        {/* Map tools */}
+        <section className="csvToolMenu">
+          <button
+            type="button"
+            className="csvToolMenuHeader"
+            aria-expanded={!!tools?.map?.open}
+            onClick={() => setSectionOpen("map", !tools?.map?.open)}
+          >
+            <span className="csvToolMenuTitle">Map tools</span>
+            <span className="csvToolMenuChevron" aria-hidden="true">
+              {tools?.map?.open ? "▾" : "▸"}
+            </span>
+          </button>
+
+          {/* Dropdown overlays below content; it does NOT reflow layout */}
+          {tools?.map?.open && (
+            <div className="csvToolMenuBody" role="menu" aria-label="Map tools menu">
+              <label className="csvToolToggle" role="menuitemcheckbox" aria-checked={!!tools?.map?.toggles?.showTimelineFilter}>
+                <input
+                  type="checkbox"
+                  checked={!!tools?.map?.toggles?.showTimelineFilter}
+                  onChange={(e) =>
+                    setToggle("map", "showTimelineFilter", e.target.checked)
+                  }
+                />
+                <span>Show timeline filter (later: slider)</span>
+              </label>
+            </div>
+          )}
+        </section>
+
+        {/* Debug tools */}
+        <section className="csvToolMenu">
+          <button
+            type="button"
+            className="csvToolMenuHeader"
+            aria-expanded={!!tools?.debug?.open}
+            onClick={() => setSectionOpen("debug", !tools?.debug?.open)}
+          >
+            <span className="csvToolMenuTitle">Debug tools</span>
+            <span className="csvToolMenuChevron" aria-hidden="true">
+              {tools?.debug?.open ? "▾" : "▸"}
+            </span>
+          </button>
+
+          {/* Dropdown overlays below content; it does NOT reflow layout */}
+          {tools?.debug?.open && (
+            <div className="csvToolMenuBody" role="menu" aria-label="Debug tools menu">
+              {/* Intentionally empty for now, per requirements */}
+              <div className="csvToolMenuHint">
+                No debug tools yet. This menu will hold developer options later.
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
       {/* =========================
           Panel header
          ========================= */}

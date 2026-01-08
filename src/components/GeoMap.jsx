@@ -26,9 +26,7 @@ function buildPopupFields(row, latField, lonField, limit = 8) {
   return keys.slice(0, limit).map((k) => [k, row[k]]);
 }
 
-// GeoMap is the main map component.
-// It shows the base map and point markers from CSV data.
-export default function GeoMap({ points = [] }) {
+export default function GeoMap({ points = [], latField = null, lonField = null }) {
   return (
     // MapContainer must have a fixed height and width.
     // If not, the map will not render correctly.
@@ -62,17 +60,10 @@ export default function GeoMap({ points = [] }) {
         Each point comes from one CSV row with valid lat/lon values.
       */}
       {points.map((p) => (
-        <Marker
-          key={p.id}
-          position={[p.lat, p.lon]}
-        >
-          {/* Popup shown when the marker is clicked */}
+        <Marker key={p.id} position={[p.lat, p.lon]}>
           <Popup>
             <div style={{ minWidth: 220 }}>
-              {/* Title */}
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>
-                Point
-              </div>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Point</div>
 
               {/* Always show coordinates */}
               <div>
@@ -84,13 +75,11 @@ export default function GeoMap({ points = [] }) {
 
               <hr style={{ opacity: 0.25 }} />
 
-              {/* Show some extra fields from the CSV row */}
-              {buildPopupFields(p.row, "latField", "lonField")
-                .map(([k, v]) => (
-                  <div key={k} style={{ marginBottom: 4 }}>
-                    <b>{k}:</b> {String(v ?? "")}
-                  </div>
-                ))}
+              {buildPopupFields(p.row, latField, lonField).map(([k, v]) => (
+                <div key={k} style={{ marginBottom: 4 }}>
+                  <b>{k}:</b> {String(v ?? "")}
+                </div>
+              ))}
             </div>
           </Popup>
         </Marker>

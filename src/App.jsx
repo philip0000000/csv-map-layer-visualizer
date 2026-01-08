@@ -4,6 +4,8 @@ import GeoMap from "./components/GeoMap";
 import CsvPanel from "./components/CsvPanel";
 import { useCsvFiles } from "./components/useCsvFiles";
 import { derivePointsFromCsv } from "./components/derivePoints";
+import { useTimelineFilterState } from "./components/useTimelineFilterState";
+import { autoDetectTimelineFields, tryGetYear } from "./components/timeline";
 
 /**
  * Limits for the CSV panel width.
@@ -38,19 +40,69 @@ export default function App() {
     updateFileMapping,
   } = useCsvFiles();
 
-  /**
-   * Convert selected CSV rows into map points.
-   * This is re-calculated only when the selected file changes.
-   */
+  const timelineApi = useTimelineFilterState();
+
+  const timelineFields = useMemo(() => {
+    if (!selected?.headers) {
+      return { yearField: null, dateField: null, dayOfYearField: null };
+    }
+    return autoDetectTimelineFields(selected.headers);
+  }, [selected?.headers]);
+
+  // When timeline is enabled, compute year domain from selected file
+  useEffect(() => {
+  if (!selected) return;
+  if (!timelineApi.state.timelineEnabled) return;
+
+  // New: if user has set a manual year domain, do not overwrite it from data
+  if (timelineApi.state.yearDomainMode === "manual") return;
+
+  let min = null;
+  let max = null;
+
+  for (const r of selected.rows ?? []) {
+    const y = tryGetYear(r, timelineFields);
+    if (y == null) continue;
+
+    if (min == null || y < min) min = y;
+    if (max == null || y > max) max = y;
+  }
+
+  timelineApi.setYearDomain(min, max);
+
+  const s = timelineApi.state.startYear;
+  const e = timelineApi.state.endYear;
+
+  if (min != null && max != null) {
+    const nextStart = s == null ? min : Math.max(min, Math.min(max, s));
+    const nextEnd = e == null ? max : Math.max(min, Math.min(max, e));
+
+    const finalStart = Math.min(nextStart, nextEnd);
+    const finalEnd = Math.max(nextStart, nextEnd);
+
+    if (finalStart !== s || finalEnd !== e) {
+      timelineApi.setYearRange(finalStart, finalEnd);
+    }
+  }
+  }, [
+    selected?.id,
+    timelineApi.state.timelineEnabled,
+    timelineApi.state.yearDomainMode,  // New dependency
+    selected?.rows,
+    timelineFields,
+  ]);
+
   const derived = useMemo(() => {
-    if (!selected) return { points: [], skipped: 0 };
+    if (!selected) return { points: [], skipped: 0, skippedByTimeline: 0 };
 
     return derivePointsFromCsv({
       rows: selected.rows,
       latField: selected.latField,
       lonField: selected.lonField,
+      timeline: timelineApi.state,
+      timelineFields,
     });
-  }, [selected]);
+  }, [selected, timelineApi.state, timelineFields]);
 
   /** True when the CSV panel is hidden */
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -64,9 +116,9 @@ export default function App() {
    * do not cause React re-renders.
    */
   const dragRef = useRef({
-    dragging: false, // true while the mouse is dragging
-    startX: 0, // mouse X position when drag started
-    startW: 420, // panel width when drag started
+    dragging: false,
+    startX: 0,
+    startW: 420,
   });
 
   /**
@@ -131,12 +183,12 @@ export default function App() {
   return (
     <div className="appRoot">
       <div className="rightPane">
-        {/* Full-screen map.
-            The map is always visible and unaffected by the CSV panel. */}
-        <GeoMap points={derived.points} />
+        <GeoMap
+          points={derived.points}
+          latField={selected?.latField ?? null}
+          lonField={selected?.lonField ?? null}
+        />
 
-        {/* CSV panel overlay.
-            This sits on top of the map and slides in/out. */}
         <div
           className="csvOverlay"
           style={{
@@ -166,6 +218,12 @@ export default function App() {
               onImportFiles={importFiles}
               onUnloadSelected={unloadSelected}
               onUpdateMapping={updateFileMapping}
+              timelineState={timelineApi.state}
+              timelineFields={timelineFields}
+              onTimelinePatch={timelineApi.patch}
+              timelineStats={{
+                skippedByTimeline: derived.skippedByTimeline ?? 0,
+              }}
             />
           </div>
 

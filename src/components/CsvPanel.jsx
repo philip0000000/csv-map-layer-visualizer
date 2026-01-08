@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { useSessionStorageState } from "./useSessionStorageState";
+import DualRangeSlider from "./DualRangeSlider";
 
 /**
  * CsvPanel
@@ -20,6 +21,11 @@ export default function CsvPanel({
   onImportFiles,    // Callback to import new CSV files
   onUnloadSelected, // Callback to unload the selected CSV
   onUpdateMapping,  // Callback when user changes latitude/longitude fields
+
+  timelineState,
+  timelineFields,
+  onTimelinePatch,
+  timelineStats,
 }) {
 
   // Persisted UI tool state for the CSV panel.
@@ -31,7 +37,7 @@ export default function CsvPanel({
   // and Debug tools is intentionally empty (placeholder text only).
   const DEFAULT_TOOLS_STATE = {
     map: {
-      open: true,
+      open: false,
       toggles: {
         showTimelineFilter: false,
       },
@@ -46,7 +52,7 @@ export default function CsvPanel({
 
   const [tools, setTools] = useSessionStorageState(TOOLS_KEY, DEFAULT_TOOLS_STATE);
 
-    function setSectionOpen(section, isOpen) {
+  function setSectionOpen(section, isOpen) {
     setTools((prev) => {
       // Defensive: keep behavior stable even if state gets partially corrupted in storage
       const next = {
@@ -191,6 +197,46 @@ export default function CsvPanel({
     };
   }, [tools?.map?.open, tools?.debug?.open]); // only rebind when open state changes
 
+  // New: local editable inputs for "Year domain" (min/max + Begin)
+  // These are UI-only text boxes so the user can type without instantly snapping/clamping.
+  const yearMinDraft = timelineState?.yearMinDraft ?? "";
+  const yearMaxDraft = timelineState?.yearMaxDraft ?? "";
+
+  function beginYearDomain() {
+    if (!onTimelinePatch) return;
+
+    const min = toIntOrNull(yearMinDraft);
+    const max = toIntOrNull(yearMaxDraft);
+
+    if (min == null || max == null) return;
+
+    const lo = Math.min(min, max);
+    const hi = Math.max(min, max);
+
+    // Update domain and clamp selection into it.
+    const curStart = timelineState?.startYear;
+    const curEnd = timelineState?.endYear;
+
+    const nextStartRaw = curStart == null ? lo : clampInt(curStart, lo, hi);
+    const nextEndRaw = curEnd == null ? hi : clampInt(curEnd, lo, hi);
+
+    const nextStart = Math.min(nextStartRaw, nextEndRaw);
+    const nextEnd = Math.max(nextStartRaw, nextEndRaw);
+
+    onTimelinePatch({
+      // New: lock the domain so auto-detection does not overwrite it
+      yearDomainMode: "manual",
+
+      yearMin: lo,
+      yearMax: hi,
+      startYear: nextStart,
+      endYear: nextEnd,
+    });
+  }
+
+  const canBeginYearDomain =
+    toIntOrNull(yearMinDraft) != null && toIntOrNull(yearMaxDraft) != null;
+
   return (
     <div className="csvPanel" role="region" aria-label="CSV files panel">
       {/* =========================
@@ -218,18 +264,22 @@ export default function CsvPanel({
             </span>
           </button>
 
-          {/* Dropdown overlays below content; it does NOT reflow layout */}
+          {/* Dropdown overlays below content; */}
           {tools?.map?.open && (
             <div className="csvToolMenuBody" role="menu" aria-label="Map tools menu">
-              <label className="csvToolToggle" role="menuitemcheckbox" aria-checked={!!tools?.map?.toggles?.showTimelineFilter}>
+              <label
+                className="csvToolToggle"
+                role="menuitemcheckbox"
+                aria-checked={!!timelineState?.timelineEnabled}
+              >
                 <input
                   type="checkbox"
-                  checked={!!tools?.map?.toggles?.showTimelineFilter}
+                  checked={!!timelineState?.timelineEnabled}
                   onChange={(e) =>
-                    setToggle("map", "showTimelineFilter", e.target.checked)
+                    onTimelinePatch?.({ timelineEnabled: e.target.checked })
                   }
                 />
-                <span>Show timeline filter (later: slider)</span>
+                <span>Timeline</span>
               </label>
             </div>
           )}
@@ -327,6 +377,201 @@ export default function CsvPanel({
               style={{ display: "none" }}
             />
           </div>
+
+          {/* New: Timeline UI lives inside the panel header (NOT in the dropdown). */}
+          {timelineState?.timelineEnabled && (
+            <div className="csvTimelineBlock" aria-label="Timeline filter">
+              <div className="csvTimelineTitleRow">
+                <div className="csvTimelineTitle">Timeline filter</div>
+              </div>
+
+              {/* New: domain controls (Min/Max + Begin) */}
+              <div className="csvTimelineDomainRow">
+                <label className="csvTimelineField">
+                  <span className="csvTimelineLabel">Min</span>
+                  <input
+                    className="csvSelect"
+                    type="number"
+                    value={yearMinDraft}
+                    onChange={(e) => onTimelinePatch?.({ yearMinDraft: e.target.value })}
+                  />
+                </label>
+
+                <label className="csvTimelineField">
+                  <span className="csvTimelineLabel">Max</span>
+                  <input
+                    className="csvSelect"
+                    type="number"
+                    value={yearMaxDraft}
+                    onChange={(e) => onTimelinePatch?.({ yearMaxDraft: e.target.value })}
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  className="csvBtnPrimary"
+                  style={{ width: 110 }}
+                  onClick={beginYearDomain}
+                  disabled={!canBeginYearDomain}
+                  aria-disabled={!canBeginYearDomain}
+                >
+                  Begin
+                </button>
+              </div>
+
+              <div className="csvTimelineSubLabel">Year range</div>
+
+              <DualRangeSlider
+                min={timelineState?.yearMin ?? 0}
+                max={timelineState?.yearMax ?? 0}
+                step={1}
+                start={timelineState?.startYear ?? timelineState?.yearMin ?? 0}
+                end={timelineState?.endYear ?? timelineState?.yearMax ?? 0}
+                disabled={timelineState?.yearMin == null || timelineState?.yearMax == null}
+                onChange={({ start, end }) =>
+                  onTimelinePatch?.({ startYear: start, endYear: end })
+                }
+              />
+
+              <div className="csvTimelineReadoutRow">
+                <label className="csvTimelineField">
+                  <span className="csvTimelineLabel">Start</span>
+                  <input
+                    className="csvSelect"
+                    type="number"
+                    value={timelineState?.startYear ?? ""}
+                    min={timelineState?.yearMin ?? undefined}
+                    max={timelineState?.yearMax ?? undefined}
+                    onChange={(e) => {
+                      const v = toIntOrNull(e.target.value);
+                      onTimelinePatch?.({ startYear: v });
+                    }}
+                  />
+                </label>
+
+                <label className="csvTimelineField">
+                  <span className="csvTimelineLabel">End</span>
+                  <input
+                    className="csvSelect"
+                    type="number"
+                    value={timelineState?.endYear ?? ""}
+                    min={timelineState?.yearMin ?? undefined}
+                    max={timelineState?.yearMax ?? undefined}
+                    onChange={(e) => {
+                      const v = toIntOrNull(e.target.value);
+                      onTimelinePatch?.({ endYear: v });
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* New: inline expander row (arrow chevron like Map tools/Debug tools) */}
+              <button
+                type="button"
+                className="csvTimelineExpander"
+                aria-expanded={!!timelineState?.moreFiltersOpen}
+                onClick={() => {
+                  const willOpen = !timelineState?.moreFiltersOpen;
+
+                  if (willOpen) {
+                    const hasRange =
+                      Number.isFinite(timelineState?.startDay) &&
+                      Number.isFinite(timelineState?.endDay);
+
+                    onTimelinePatch?.({
+                      moreFiltersOpen: true,
+                      dayFilterEnabled: true,
+
+                      // Only initialize if never set before
+                      ...(hasRange
+                        ? {}
+                        : {
+                            startDay: 1,
+                            endDay: 365,
+                          }),
+                    });
+                    return;
+                  }
+
+                  // Closing More filters:
+                  // - disable day filter, but KEEP values so we can restore them later
+                  onTimelinePatch?.({
+                    moreFiltersOpen: false,
+                    dayFilterEnabled: false,
+                  });
+                }}
+              >
+                <span className="csvTimelineExpanderLeft">
+                  <span className="csvTimelineExpanderChevron" aria-hidden="true">
+                    {timelineState?.moreFiltersOpen ? "▾" : "▸"}
+                  </span>
+                  <span>More filters</span>
+                </span>
+              </button>
+
+              {timelineState?.moreFiltersOpen && (
+                <div className="csvTimelineMoreFilters">
+                  <div style={{ marginTop: 10 }}>
+                  <div className="csvTimelineSubLabel">Day range (1–365)</div>
+
+                  <DualRangeSlider
+                    min={1}
+                    max={365}
+                    step={1}
+                    start={timelineState?.startDay ?? 1}
+                    end={timelineState?.endDay ?? 365}
+                    onChange={({ start, end }) =>
+                      onTimelinePatch?.({ startDay: start, endDay: end })
+                    }
+                  />
+
+                  <div className="csvTimelineReadoutRow">
+                    <label className="csvTimelineField">
+                      <span className="csvTimelineLabel">Start</span>
+                      <input
+                        className="csvSelect"
+                        type="number"
+                        value={timelineState?.startDay ?? 1}
+                        readOnly
+                      />
+                    </label>
+
+                    <label className="csvTimelineField">
+                      <span className="csvTimelineLabel">End</span>
+                      <input
+                        className="csvSelect"
+                        type="number"
+                        value={timelineState?.endDay ?? 365}
+                        readOnly
+                      />
+                    </label>
+                  </div>
+
+                  <div className="csvToolMenuHint" style={{ marginTop: 10 }}>
+                    Wrap-around supported: if Start &gt; End then it means
+                    “day ≥ Start OR day ≤ End”.
+                  </div>
+                </div>
+
+
+                  <div className="csvToolMenuHint" style={{ marginTop: 10 }}>
+                    Detected fields:
+                    <div style={{ marginTop: 6 }}>
+                      <div>Year: {timelineFields?.yearField ?? "(none)"}</div>
+                      <div>Date/time: {timelineFields?.dateField ?? "(none)"}</div>
+                      <div>Day-of-year: {timelineFields?.dayOfYearField ?? "(none)"}</div>
+                    </div>
+                    {timelineStats?.skippedByTimeline ? (
+                      <div style={{ marginTop: 8 }}>
+                        Skipped by timeline: {timelineStats.skippedByTimeline}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -525,6 +770,18 @@ function formatBytes(bytes) {
   }
 
   return `${n.toFixed(u === 0 ? 0 : 1)} ${units[u]}`;
+}
+
+function toIntOrNull(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  const n = Number.parseInt(s, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function clampInt(n, min, max) {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, n));
 }
 
 

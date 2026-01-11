@@ -17,7 +17,7 @@ Built with **React (client-side)** + **Vite**, using **Leaflet** with **OpenStre
 
 ---
 
-## Scope and non-goals (for now)
+## Scope
 
 This project focuses on **visualizing user provided CSV rows as geographic features** on a map, with a timeline oriented workflow. Everything is client side processing. 
 

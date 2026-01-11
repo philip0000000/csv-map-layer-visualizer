@@ -5,8 +5,6 @@ It is designed for datasets where entries represent real world things or events 
 
 Built with **React (client-side)** + **Vite**, using **Leaflet** with **OpenStreetMap** tiles. CSV parsing is done locally in the browser using **PapaParse**.
 
----
-
 ## What it does
 
 - Import **one or more CSV files** in the browser
@@ -15,13 +13,9 @@ Built with **React (client-side)** + **Vite**, using **Leaflet** with **OpenStre
 - Click a point to see more detail from it
 - Optional **timeline filtering** (year range when date fields exist)
 
----
-
 ## Scope
 
 This project focuses on **visualizing user provided CSV rows as geographic features** on a map, with a timeline oriented workflow. Everything is client side processing. 
-
----
 
 ## CSV expectations
 
@@ -40,8 +34,6 @@ Notes:
 - CSV parsing is intentionally tolerant. Bad rows may be skipped and warnings surfaced in the UI.
 - Decimal comma coordinates (e.g. `59,3293`) are supported.
 
----
-
 ## Getting started (development)
 
 ### Prerequisites
@@ -54,8 +46,6 @@ npm run dev
 ```
 
 Then open the URL printed in the terminal (usually http://localhost:5173).
-
----
 
 ## Embedding
 

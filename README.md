@@ -1,16 +1,68 @@
-# React + Vite
+# csv-map-layer-visualizer
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A client side web app for visualizing CSV based geodata on an interactive world map.
+It is designed for datasets where entries represent real world things or events that happened at a place and time, and where a timeline helps explore how the data changes over years.
 
-Currently, two official plugins are available:
+Built with **React (client-side)** + **Vite**, using **Leaflet** with **OpenStreetMap** tiles. CSV parsing is done locally in the browser using **PapaParse**.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## What it does
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Import **one or more CSV files** in the browser
+- Auto detect likely **latitude/longitude** columns (with manual override)
+- Plot rows as **map points**
+- Click a point to see more detail from it
+- Optional **timeline filtering** (year range when date fields exist)
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Scope and non-goals (for now)
+
+This project focuses on **visualizing user provided CSV rows as geographic features** on a map, with a timeline oriented workflow. Everything is client side processing. 
+
+---
+
+## CSV expectations
+
+Minimum required:
+- Two columns that represent coordinates:
+  - Latitude in `[-90..90]`
+  - Longitude in `[-180..180]`
+
+Recommended:
+- A time-related column to enable timeline filtering. The app will try to detect:
+  - `year` (e.g. `Year`, `yr`, etc.)
+  - `date/datetime` (e.g. `date`, `timestamp`, `createdAt`)
+  - `day-of-year` (e.g. `doy`, `dayOfYear`)
+
+Notes:
+- CSV parsing is intentionally tolerant. Bad rows may be skipped and warnings surfaced in the UI.
+- Decimal comma coordinates (e.g. `59,3293`) are supported.
+
+---
+
+## Getting started (development)
+
+### Prerequisites
+- Node.js (recent LTS recommended)
+
+### Install & run
+```bash
+npm install
+npm run dev
+```
+
+Then open the URL printed in the terminal (usually http://localhost:5173).
+
+---
+
+## Embedding
+
+The long term goal is for the app to be embeddable in other web pages.
+
+Currently, it runs as a standalone Vite built client application. A dedicated embeddable build/package does not exist yet.
+
+## Author
+
+Developed and maintained by **philip0000000**.

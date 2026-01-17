@@ -5,6 +5,10 @@ It is designed for datasets where entries represent real world things or events 
 
 Built with **React (client-side)** + **Vite**, using **Leaflet** with **OpenStreetMap** tiles. CSV parsing is done locally in the browser using **PapaParse**.
 
+## Live demo
+
+https://philip0000000.github.io/csv-map-layer-visualizer/
+
 ## What it does
 
 - Import **one or more CSV files** in the browser

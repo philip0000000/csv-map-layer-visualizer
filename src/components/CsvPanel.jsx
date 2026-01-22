@@ -266,7 +266,7 @@ export default function CsvPanel({
             </span>
           </button>
 
-          {/* Dropdown overlays below content; */}
+          {/* Dropdown overlays */}
           {tools?.map?.open && (
             <div className="csvToolMenuBody" role="menu" aria-label="Map tools menu">
               {/* Toggle timeline filter on/off */}
@@ -348,6 +348,30 @@ export default function CsvPanel({
                   />
                 </div>
               )}
+            </div>
+          )}
+        </section>
+
+        {/* Debug tools (placeholder for future) */}
+        <section className="csvToolMenu">
+          <button
+            type="button"
+            className="csvToolMenuHeader"
+            aria-expanded={!!tools?.debug?.open}
+            onClick={() => setSectionOpen("debug", !tools?.debug?.open)}
+          >
+            <span className="csvToolMenuTitle">Debug tools</span>
+            <span className="csvToolMenuChevron" aria-hidden="true">
+              {tools?.debug?.open ? "▾" : "▸"}
+            </span>
+          </button>
+
+          {/* Dropdown overlays */}
+          {tools?.debug?.open && (
+            <div className="csvToolMenuBody" role="menu" aria-label="Debug tools menu">
+              <div className="csvToolMenuHint">
+                No debug tools yet. This menu will hold developer options later.
+              </div>
             </div>
           )}
         </section>

@@ -3,7 +3,18 @@
 // TileLayer is used to load map tiles (images).
 // Marker and Popup are used to show points on the map.
 // LayersControl provides Leaflet's built-in "layers" button (base maps + overlays).
-import { MapContainer, LayersControl, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet";
+import {
+  MapContainer,
+  LayersControl,
+  TileLayer,
+  Marker,
+  Popup,
+  ZoomControl,
+} from "react-leaflet";
+
+// MarkerClusterGroup is a React wrapper around Leaflet's marker clustering plugin.
+// It groups nearby markers into clusters for readability and performance.
+import MarkerClusterGroup from "react-leaflet-cluster";
 
 /**
  * Build a list of fields to show in the popup.
@@ -19,12 +30,40 @@ function buildPopupFields(row, latField, lonField, limit = 8) {
   if (!row || typeof row !== "object") return [];
 
   // Get all column names except lat/lon
-  const keys = Object.keys(row).filter(
-    (k) => k !== latField && k !== lonField
-  );
+  const keys = Object.keys(row).filter((k) => k !== latField && k !== lonField);
 
   // Keep only the first few fields to keep popup readable
   return keys.slice(0, limit).map((k) => [k, row[k]]);
+}
+
+/**
+ * Build the popup content for one point.
+ * Kept in a helper so the Marker and Clustered Marker render paths stay identical.
+ */
+function renderPointPopup(p, latField, lonField) {
+  return (
+    <Popup>
+      <div style={{ minWidth: 220 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Point</div>
+
+        {/* Always show coordinates */}
+        <div>
+          <b>lat:</b> {p.lat}
+        </div>
+        <div>
+          <b>lon:</b> {p.lon}
+        </div>
+
+        <hr style={{ opacity: 0.25 }} />
+
+        {buildPopupFields(p.row, latField, lonField).map(([k, v]) => (
+          <div key={k} style={{ marginBottom: 4 }}>
+            <b>{k}:</b> {String(v ?? "")}
+          </div>
+        ))}
+      </div>
+    </Popup>
+  );
 }
 
 /**
@@ -66,6 +105,11 @@ export default function GeoMap({
   points = [],
   latField = null,
   lonField = null,
+
+  // When true, nearby markers are grouped into clusters (visual-only feature).
+  // When false, markers are rendered normally (current behavior).
+  clusterMarkersEnabled = false,
+  clusterRadius = 80,   // default strength
 }) {
   const { BaseLayer, Overlay } = LayersControl;
 
@@ -130,34 +174,36 @@ export default function GeoMap({
       </LayersControl>
 
       {/*
-        Render one marker for each point.
-        Each point comes from one CSV row with valid lat/lon values.
+        Render markers for each point derived from the selected CSV file.
+
+        Optional marker clustering.
+        - When clustering is enabled, markers are grouped into clusters (Leaflet.markercluster behavior).
+        - Clicking a cluster zooms in and reveals the markers inside.
+        - When disabled, markers are shown normally (current behavior).
       */}
-      {points.map((p) => (
-        <Marker key={p.id} position={[p.lat, p.lon]}>
-          <Popup>
-            <div style={{ minWidth: 220 }}>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Point</div>
-
-              {/* Always show coordinates */}
-              <div>
-                <b>lat:</b> {p.lat}
-              </div>
-              <div>
-                <b>lon:</b> {p.lon}
-              </div>
-
-              <hr style={{ opacity: 0.25 }} />
-
-              {buildPopupFields(p.row, latField, lonField).map(([k, v]) => (
-                <div key={k} style={{ marginBottom: 4 }}>
-                  <b>{k}:</b> {String(v ?? "")}
-                </div>
-              ))}
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+      {clusterMarkersEnabled ? (
+        <MarkerClusterGroup
+          // Force a re-init when clustering settings change.
+          // Leaflet.markercluster does not always apply maxClusterRadius updates dynamically.
+          key={`cluster:${clusterMarkersEnabled ? 1 : 0}:${clusterRadius}`}
+          // chunkedLoading improves responsiveness when there are many markers.
+          // It progressively adds markers to the map instead of blocking the UI.
+          chunkedLoading
+          maxClusterRadius={clusterRadius}
+        >
+          {points.map((p) => (
+            <Marker key={p.id} position={[p.lat, p.lon]}>
+              {renderPointPopup(p, latField, lonField)}
+            </Marker>
+          ))}
+        </MarkerClusterGroup>
+      ) : (
+        points.map((p) => (
+          <Marker key={p.id} position={[p.lat, p.lon]}>
+            {renderPointPopup(p, latField, lonField)}
+          </Marker>
+        ))
+      )}
     </MapContainer>
   );
 }

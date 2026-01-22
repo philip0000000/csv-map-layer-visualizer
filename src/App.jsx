@@ -6,6 +6,7 @@ import { useCsvFiles } from "./components/useCsvFiles";
 import { derivePointsFromCsv } from "./components/derivePoints";
 import { useTimelineFilterState } from "./components/useTimelineFilterState";
 import { autoDetectTimelineFields, tryGetYear } from "./components/timeline";
+import { useMapToolsState } from "./components/useMapToolsState";
 
 /**
  * Limits for the CSV panel width.
@@ -41,6 +42,7 @@ export default function App() {
   } = useCsvFiles();
 
   const timelineApi = useTimelineFilterState();
+  const mapToolsApi = useMapToolsState();
 
   const timelineFields = useMemo(() => {
     if (!selected?.headers) {
@@ -187,6 +189,8 @@ export default function App() {
           points={derived.points}
           latField={selected?.latField ?? null}
           lonField={selected?.lonField ?? null}
+          clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
+          clusterRadius={mapToolsApi.state.clusterRadius}
         />
 
         <div
@@ -224,6 +228,8 @@ export default function App() {
               timelineStats={{
                 skippedByTimeline: derived.skippedByTimeline ?? 0,
               }}
+              mapToolsState={mapToolsApi.state}
+              onMapToolsPatch={mapToolsApi.patch}
             />
           </div>
 

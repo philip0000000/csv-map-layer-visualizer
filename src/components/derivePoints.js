@@ -85,6 +85,9 @@ export function derivePointsFromCsv({
     }
 
     points.push({
+      // TODO(stability): Do NOT use index-based IDs.
+      // This causes React to recreate markers when filters change (timeline, etc.).
+      // Replace with a stable per-row ID assigned at import time (e.g. r.__rowId).
       id: `${i}`,
       lat,
       lon,

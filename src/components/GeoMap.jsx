@@ -33,7 +33,9 @@ function buildPopupFields(row, latField, lonField, limit = 8) {
   const keys = Object.keys(row).filter((k) => k !== latField && k !== lonField);
 
   // Keep only the first few fields to keep popup readable
-  return keys.slice(0, limit).map((k) => [k, row[k]]);
+  return keys.slice(0, limit).map(
+    (k) => [k, row[k]]
+  );
 }
 
 /**

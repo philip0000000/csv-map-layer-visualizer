@@ -26,6 +26,8 @@ export default function CsvPanel({
   timelineFields,
   onTimelinePatch,
   timelineStats,
+  mapToolsState,
+  onMapToolsPatch,
 }) {
 
   // Persisted UI tool state for the CSV panel.
@@ -267,6 +269,7 @@ export default function CsvPanel({
           {/* Dropdown overlays below content; */}
           {tools?.map?.open && (
             <div className="csvToolMenuBody" role="menu" aria-label="Map tools menu">
+              {/* Toggle timeline filter on/off */}
               <label
                 className="csvToolToggle"
                 role="menuitemcheckbox"
@@ -281,31 +284,70 @@ export default function CsvPanel({
                 />
                 <span>Timeline</span>
               </label>
-            </div>
-          )}
-        </section>
 
-        {/* Debug tools */}
-        <section className="csvToolMenu">
-          <button
-            type="button"
-            className="csvToolMenuHeader"
-            aria-expanded={!!tools?.debug?.open}
-            onClick={() => setSectionOpen("debug", !tools?.debug?.open)}
-          >
-            <span className="csvToolMenuTitle">Debug tools</span>
-            <span className="csvToolMenuChevron" aria-hidden="true">
-              {tools?.debug?.open ? "▾" : "▸"}
-            </span>
-          </button>
+              {/* Toggle marker clustering on/off */}
+              <label
+                className="csvToolToggle"
+                role="menuitemcheckbox"
+                aria-checked={!!mapToolsState?.clusterMarkersEnabled}
+              >
+                <input
+                  type="checkbox"
+                  checked={!!mapToolsState?.clusterMarkersEnabled}
+                  onChange={(e) =>
+                    onMapToolsPatch?.({ clusterMarkersEnabled: e.target.checked })
+                  }
+                />
+                <span>Cluster markers</span>
+              </label>
 
-          {/* Dropdown overlays below content; it does NOT reflow layout */}
-          {tools?.debug?.open && (
-            <div className="csvToolMenuBody" role="menu" aria-label="Debug tools menu">
-              {/* Intentionally empty for now, per requirements */}
-              <div className="csvToolMenuHint">
-                No debug tools yet. This menu will hold developer options later.
-              </div>
+              {/* 
+                Cluster radius settings:
+                - Only shown when clustering is enabled
+                - User can type a number
+                - The value is applied only when the input loses focus (onBlur)
+                - This avoids recalculating clusters while typing
+              */}
+              {mapToolsState?.clusterMarkersEnabled && (
+                <div style={{ marginTop: 8 }}>
+                  <div className="csvLabel">Cluster radius (pixels)</div>
+
+                  <input
+                    className="csvSelect"
+                    type="number"
+                    min={10}
+                    max={300}
+                    step={1}
+                    // Draft value: can be edited freely without changing the map yet
+                    value={mapToolsState?.clusterRadiusDraft ?? ""}
+                    onChange={(e) =>
+                      onMapToolsPatch?.({ clusterRadiusDraft: e.target.value })
+                    }
+                    onBlur={() => {
+                      // When leaving the input:
+                      // - Parse the number
+                      // - Fix invalid values
+                      // - Clamp to a safe range
+                      // - Commit it as the real cluster radius
+                      const raw = mapToolsState?.clusterRadiusDraft;
+
+                      let n = Number.parseInt(String(raw ?? "").trim(), 10);
+                      if (!Number.isFinite(n)) {
+                        n = mapToolsState?.clusterRadius ?? 80;
+                      }
+
+                      // Clamp to a safe range
+                      n = Math.max(10, Math.min(300, n));
+
+                      // Commit value only on blur (leave box)
+                      onMapToolsPatch?.({
+                        clusterRadius: n,
+                        clusterRadiusDraft: n,
+                      });
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
         </section>

@@ -1,71 +1,41 @@
 import { useEffect, useMemo, useState } from "react";
-import { parseCsvFile } from "./csvParse";
+import { parseCsvFile, parseCsvText } from "./csvParse";
 import { autoDetectLatLon } from "./geoColumns";
 
-// Key used to store CSV state in sessionStorage.
-// sessionStorage survives page refresh, but not a new tab.
-const STORAGE_KEY = "csv-map-layer-visualizer.csvFiles.v1";
-
 /**
- * React hook that manages loaded CSV files.
- * - Loads CSVs from sessionStorage on startup
+ * React hook that manages loaded CSV files (in-memory only).
  * - Allows importing multiple CSV files
  * - Keeps track of the currently selected file
- * - Persists state for the lifetime of the browser tab
+ *
+ * Notes:
+ * - Parsed CSV rows are intentionally NOT persisted to sessionStorage/localStorage.
+ *   Large datasets can exceed browser storage quotas.
+ * - Demo/example loading is handled via importExampleFile() (e.g. ?example=books.csv).
  *
  * - Auto-detect latitude/longitude columns on import (when possible)
- * - Store latField/lonField per file so it can be persisted
  * - Provide updateFileMapping() so UI can change mapping later
  */
 export function useCsvFiles() {
   // List of loaded CSV files.
-  // On first load, try to restore from sessionStorage.
-  const [files, setFiles] = useState(() => {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      // If stored data is corrupted, start fresh.
-      return [];
-    }
-  });
-
+  const [files, setFiles] = useState([]); // Empty defaults
   // ID of the currently selected CSV file.
-  // Default is the first stored file, if any.
-  const [selectedId, setSelectedId] = useState(() => {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-
-    try {
-      const parsed = JSON.parse(raw);
-      return parsed?.[0]?.id ?? null;
-    } catch {
-      return null;
-    }
-  });
+  const [selectedId, setSelectedId] = useState(null);
 
   /**
-   * Persist CSV files to sessionStorage whenever they change.
-   * Also ensures that selectedId always points to a valid file.
+   * Ensure selectedId always points to a valid file.
    */
   useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(files));
-
     // If all files were removed, clear selection.
     if (files.length === 0) {
       setSelectedId(null);
-    }
-    // If selected file no longer exists, select the first file.
-    else if (!files.some((f) => f.id === selectedId)) {
-      setSelectedId(files[0].id);
+      return;
     }
 
-    // selectedId is intentionally NOT a dependency here.
-    // Selection is derived from files, not the other way around.
-  }, [files]);
+    // If selected file no longer exists, select the first file.
+    if (!files.some((f) => f.id === selectedId)) {
+      setSelectedId(files[0].id);
+    }
+  }, [files, selectedId]);
 
   // The currently selected CSV file object.
   // Returns null if nothing is selected.
@@ -129,7 +99,7 @@ export function useCsvFiles() {
         totalRows: parsed.totalRows,
         parseErrors,
 
-        // Stored per file so it persists in sessionStorage.
+        // Stored per file for the current session.
         latField: latField ?? null,
         lonField: lonField ?? null,
       };
@@ -145,6 +115,64 @@ export function useCsvFiles() {
     if (newItems.length > 0) {
       setSelectedId(newItems[0].id);
     }
+  }
+
+  /**
+   * Import one CSV file from /public/examples via URL.
+   * Intended for the GitHub Pages demo via:
+   * ?example=books.csv
+   */
+  async function importExampleFile(exampleFileName) {
+    const name = String(exampleFileName ?? "").trim();
+
+    // Security: allow only simple filenames like "books.csv"
+    // No slashes, no "..", must end with .csv
+    if (!/^[a-zA-Z0-9._-]+\.csv$/.test(name)) return;
+
+    const url = `${import.meta.env.BASE_URL}examples/${name}`;
+
+    const res = await fetch(url, { cache: "no-cache" });
+    if (!res.ok) {
+      // Optional: you could surface this as a UI error later
+      return;
+    }
+
+    const text = await res.text();
+    const parsed = parseCsvText(text);
+
+    const { latField, lonField } = autoDetectLatLon(parsed.headers);
+
+    const parseErrors = Array.isArray(parsed.parseErrors)
+      ? [...parsed.parseErrors]
+      : [];
+
+    if (!latField || !lonField) {
+      parseErrors.push(
+        "Geo: Could not auto-detect latitude/longitude columns. Choose them manually."
+      );
+    }
+
+    const item = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+
+      // Show the filename in the dropdown so it's clear it came from examples/
+      name,
+      // Approximate (characters), good enough for UI
+      size: text.length,
+      lastModified: null,
+
+      headers: parsed.headers,
+      rows: parsed.rows,
+      previewRows: parsed.previewRows,
+      totalRows: parsed.totalRows,
+      parseErrors,
+
+      latField: latField ?? null,
+      lonField: lonField ?? null,
+    };
+
+    setFiles((prev) => [item, ...prev]);
+    setSelectedId(item.id);
   }
 
   /**
@@ -181,6 +209,7 @@ export function useCsvFiles() {
     selected, // selected CSV object (or null)
     setSelectedId, // allow UI to change selection
     importFiles, // import new CSV files
+    importExampleFile, // import one CSV from /public/examples via URL
     unloadSelected, // remove selected CSV
     updateFileMapping, // update lat/lon mapping for a file
   };

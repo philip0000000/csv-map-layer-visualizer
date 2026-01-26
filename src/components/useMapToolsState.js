@@ -1,15 +1,26 @@
-import { useSessionStorageState } from "./useSessionStorageState";
+import { useMemo, useState } from "react";
 
-const STORAGE_KEY = "csv-map-layer-visualizer.mapTools.v1";
+const DEFAULT_CLUSTER_RADIUS = 80;
 
-const DEFAULT_STATE = {
-  clusterMarkersEnabled: false,
-  clusterRadius: 80,      // actual applied value
-  clusterRadiusDraft: 80, // UI editing buffer
-};
+function getInitialStateFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const example = params.get("example");
+
+  // Only enable clustering by default when example is present AND looks like a CSV filename.
+  const isValidExample =
+    typeof example === "string" && /^[a-zA-Z0-9._-]+\.csv$/.test(example.trim());
+
+  return {
+    clusterMarkersEnabled: isValidExample, // true only for ?example=valid.csv
+    clusterRadius: DEFAULT_CLUSTER_RADIUS,
+    clusterRadiusDraft: DEFAULT_CLUSTER_RADIUS,
+  };
+}
 
 export function useMapToolsState() {
-  const [state, setState] = useSessionStorageState(STORAGE_KEY, DEFAULT_STATE);
+  // Initialize ONCE on first render (no persistence)
+  const initial = useMemo(() => getInitialStateFromUrl(), []);
+  const [state, setState] = useState(initial);
 
   function patch(partial) {
     setState((prev) => ({ ...prev, ...partial }));

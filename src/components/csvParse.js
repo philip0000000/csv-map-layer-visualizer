@@ -25,6 +25,20 @@ export async function parseCsvFile(file) {
   // Read file as plain text (client-side only)
   const text = await file.text();
 
+  // Delegate to the shared string parser so we can also parse fetched examples.
+  return parseCsvText(text);
+}
+
+/**
+ * Parse CSV content from a string.
+ * Used for:
+ * - normal file uploads (File.text())
+ * - loading example CSVs via fetch() from /public/examples
+ *
+ * @param {string} text - raw CSV text
+ * @returns {object} Parsed CSV result
+ */
+export function parseCsvText(text) {
   /**
    * Clean input before parsing:
    * - Split into lines
@@ -33,7 +47,7 @@ export async function parseCsvFile(file) {
    *
    * This avoids many common CSV problems early.
    */
-  const cleaned = text
+  const cleaned = String(text ?? "")
     .split(/\r\n|\n|\r/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0)

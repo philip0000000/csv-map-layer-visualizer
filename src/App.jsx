@@ -39,10 +39,41 @@ export default function App() {
     importFiles,
     unloadSelected,
     updateFileMapping,
+    importExampleFile,
   } = useCsvFiles();
 
   const timelineApi = useTimelineFilterState();
   const mapToolsApi = useMapToolsState();
+
+  /**
+   * Optional: auto-load an example CSV from the URL.
+   * Example:
+   *   ?example=books.csv
+   *
+   * Behavior:
+   * - If a valid ?example=*.csv is present:
+   *   - The file is auto-loaded from /public/examples
+   *   - Marker clustering is enabled by default to reduce visual noise
+   * - Otherwise:
+   *   - No file is auto-loaded
+   *   - Clustering remains off by default
+   *
+   * This is intended for the live demo and shareable links.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const exampleRaw = params.get("example");
+    const example = String(exampleRaw ?? "").trim();
+
+    // Only auto-load when ?example= is present AND looks like a safe filename.
+    const isValidExample = /^[a-zA-Z0-9._-]+\.csv$/.test(example);
+
+    if (!isValidExample) return;
+
+    importExampleFile(example);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const timelineFields = useMemo(() => {
     if (!selected?.headers) {
@@ -53,43 +84,43 @@ export default function App() {
 
   // When timeline is enabled, compute year domain from selected file
   useEffect(() => {
-  if (!selected) return;
-  if (!timelineApi.state.timelineEnabled) return;
+    if (!selected) return;
+    if (!timelineApi.state.timelineEnabled) return;
 
-  // New: if user has set a manual year domain, do not overwrite it from data
-  if (timelineApi.state.yearDomainMode === "manual") return;
+    // New: if user has set a manual year domain, do not overwrite it from data
+    if (timelineApi.state.yearDomainMode === "manual") return;
 
-  let min = null;
-  let max = null;
+    let min = null;
+    let max = null;
 
-  for (const r of selected.rows ?? []) {
-    const y = tryGetYear(r, timelineFields);
-    if (y == null) continue;
+    for (const r of selected.rows ?? []) {
+      const y = tryGetYear(r, timelineFields);
+      if (y == null) continue;
 
-    if (min == null || y < min) min = y;
-    if (max == null || y > max) max = y;
-  }
-
-  timelineApi.setYearDomain(min, max);
-
-  const s = timelineApi.state.startYear;
-  const e = timelineApi.state.endYear;
-
-  if (min != null && max != null) {
-    const nextStart = s == null ? min : Math.max(min, Math.min(max, s));
-    const nextEnd = e == null ? max : Math.max(min, Math.min(max, e));
-
-    const finalStart = Math.min(nextStart, nextEnd);
-    const finalEnd = Math.max(nextStart, nextEnd);
-
-    if (finalStart !== s || finalEnd !== e) {
-      timelineApi.setYearRange(finalStart, finalEnd);
+      if (min == null || y < min) min = y;
+      if (max == null || y > max) max = y;
     }
-  }
+
+    timelineApi.setYearDomain(min, max);
+
+    const s = timelineApi.state.startYear;
+    const e = timelineApi.state.endYear;
+
+    if (min != null && max != null) {
+      const nextStart = s == null ? min : Math.max(min, Math.min(max, s));
+      const nextEnd = e == null ? max : Math.max(min, Math.min(max, e));
+
+      const finalStart = Math.min(nextStart, nextEnd);
+      const finalEnd = Math.max(nextStart, nextEnd);
+
+      if (finalStart !== s || finalEnd !== e) {
+        timelineApi.setYearRange(finalStart, finalEnd);
+      }
+    }
   }, [
     selected?.id,
     timelineApi.state.timelineEnabled,
-    timelineApi.state.yearDomainMode,  // New dependency
+    timelineApi.state.yearDomainMode,
     selected?.rows,
     timelineFields,
   ]);

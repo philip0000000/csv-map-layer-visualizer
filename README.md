@@ -7,7 +7,21 @@ Built with **React (client-side)** + **Vite**, using **Leaflet** with **OpenStre
 
 ## Live demo
 
+Empty app (upload your own CSV):
+
 https://philip0000000.github.io/csv-map-layer-visualizer/
+
+Demo with example data (auto-loaded):
+
+https://philip0000000.github.io/csv-map-layer-visualizer/?example=books.csv
+
+## Example data
+
+The repository contains example CSV files in:
+
+public/examples/
+
+`books.csv` is a small example dataset of book-related locations used for demonstration.
 
 ## What it does
 

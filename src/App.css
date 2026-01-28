@@ -5,6 +5,7 @@
   width: 100%;
   overflow: hidden;
   background: #0b1220;
+  position: relative;
 }
 
 /* Map container wrapper */
@@ -13,6 +14,26 @@
   width: 100%;
   position: relative;
   overflow: hidden;
+}
+
+/* Full-screen drop target indicator */
+.dropOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(15, 23, 42, 0.6);
+  border: 2px dashed rgba(226, 232, 240, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.dropOverlayText {
+  color: #e2e8f0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 /* --- Overlay panel on top of map --- */
@@ -478,5 +499,4 @@
   padding-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
-
 

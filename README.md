@@ -28,6 +28,7 @@ public/examples/
 - Import **one or more CSV files** in the browser
 - Auto detect likely **latitude/longitude** columns (with manual override)
 - Plot rows as **map points**
+- Render CSV-defined **regions (polygons)**
 - Click a point to see more detail from it
 - Optional **timeline filtering** (year range when date fields exist)
 
@@ -42,6 +43,13 @@ Minimum required:
   - Latitude in `[-90..90]`
   - Longitude in `[-180..180]`
 
+Feature types:
+- `featureType` column can be used to choose the geometry:
+  - `point` (default)
+  - `region`
+  - `line` (planned)
+- If the `featureType` column is missing, rows are treated as `point` for backward compatibility.
+
 Recommended:
 - A time-related column to enable timeline filtering. The app will try to detect:
   - `year` (e.g. `Year`, `yr`, etc.)
@@ -51,6 +59,41 @@ Recommended:
 Notes:
 - CSV parsing is intentionally tolerant. Bad rows may be skipped and warnings surfaced in the UI.
 - Decimal comma coordinates (e.g. `59,3293`) are supported.
+
+### Regions (polygons)
+
+Each vertex is one row. Rows with `featureType=region` are grouped by `featureId`,
+and optionally `part` for multi-part regions. The vertex order uses the `order` column
+if present (otherwise file order is used). Rings are auto-closed if needed.
+
+Required columns (for region rows):
+- `featureType` = `region`
+- `featureId` = logical region id
+- `order` = vertex order (number; optional but recommended)
+- latitude + longitude columns
+
+Optional columns:
+- `part` = sub-part id for multi-part regions (defaults to `0`)
+- `name` = display name
+- Style columns (first non-empty per part):
+  - `color`, `weight`, `opacity`, `fillColor`, `fillOpacity`
+
+Example (multi-part region):
+
+```csv
+featureType,featureId,part,order,lat,lon,name,color,fillOpacity
+region,russia,main,1,55.7,37.6,Russia,#ff0000,0.15
+region,russia,main,2,56.2,38.1,Russia,#ff0000,0.15
+region,russia,kaliningrad,1,54.7,20.5,Russia,#ff0000,0.15
+region,russia,kaliningrad,2,54.8,21.2,Russia,#ff0000,0.15
+```
+
+Example (points with featureType):
+
+```csv
+featureType,lat,lon,title,year
+point,48.8,2.3,Some Book,1300
+```
 
 ## Getting started (development)
 

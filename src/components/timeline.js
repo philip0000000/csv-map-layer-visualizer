@@ -47,6 +47,31 @@ export function autoDetectTimelineFields(headers) {
   };
 }
 
+export function autoDetectRangeFields(headers) {
+  if (!Array.isArray(headers) || headers.length === 0) {
+    return {
+      yearFromField: null,
+      yearToField: null,
+      dateFromField: null,
+      dateToField: null,
+    };
+  }
+
+  return {
+    yearFromField: findExactKey(headers, "yearfrom"),
+    yearToField: findExactKey(headers, "yearto"),
+    dateFromField: findExactKey(headers, "datefrom"),
+    dateToField: findExactKey(headers, "dateto"),
+  };
+}
+
+function findExactKey(headers, normalizedKey) {
+  for (const h of headers) {
+    if (normalizeKey(h) === normalizedKey) return h;
+  }
+  return null;
+}
+
 /**
  * Try to get a usable year for a row.
  * Order:
@@ -110,7 +135,7 @@ export function tryParseDayOfYear(row, fields) {
   return null;
 }
 
-function parseYearValue(v) {
+export function parseYearValue(v) {
   if (v == null) return null;
 
   if (typeof v === "number" && Number.isFinite(v)) {
@@ -134,7 +159,7 @@ function isReasonableYear(y) {
   return Number.isFinite(y) && y >= -2000 && y <= 3000;
 }
 
-function parseDateValue(v) {
+export function parseDateValue(v) {
   if (v == null) return null;
   if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
 
@@ -172,5 +197,4 @@ function parseIntSafe(v) {
   const n = Number.parseInt(String(v ?? "").trim(), 10);
   return Number.isFinite(n) ? n : null;
 }
-
 

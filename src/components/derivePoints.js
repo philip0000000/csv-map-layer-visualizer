@@ -1,5 +1,6 @@
 import { isValidLat, isValidLon, parseFlexibleFloat } from "./geoColumns";
 import { tryGetYear, tryParseDayOfYear } from "./timeline";
+import { getRowFeatureType } from "./featureTypes";
 
 /**
  * Derive point features from CSV rows using chosen lat/lon fields.
@@ -11,6 +12,7 @@ export function derivePointsFromCsv({
   lonField,
   timeline,
   timelineFields,
+  featureTypeField,
 }) {
   const points = [];
   let skipped = 0;
@@ -39,6 +41,11 @@ export function derivePointsFromCsv({
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
+    const featureType = getRowFeatureType(r, featureTypeField);
+
+    if (featureType && featureType !== "point") {
+      continue;
+    }
 
     const lat = parseFlexibleFloat(r?.[latField]);
     const lon = parseFlexibleFloat(r?.[lonField]);
@@ -97,5 +104,4 @@ export function derivePointsFromCsv({
 
   return { points, skipped, skippedByTimeline, reason: null };
 }
-
 

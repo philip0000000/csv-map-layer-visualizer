@@ -30,7 +30,7 @@ public/examples/
 - Plot rows as **map points**
 - Render CSV-defined **regions (polygons)**
 - Click a point to see more detail from it
-- Optional **timeline filtering** (year range when date fields exist)
+- Optional **timeline filtering** (based on point-in-time or time-range fields)
 
 ## Scope
 
@@ -51,17 +51,22 @@ Feature types:
 - If the `featureType` column is missing, rows are treated as `point` for backward compatibility.
 
 Recommended:
-- A time-related column to enable timeline filtering. The app will try to detect:
-  - `year` (e.g. `Year`, `yr`, etc.)
-  - `date/datetime` (e.g. `date`, `timestamp`, `createdAt`)
-  - `day-of-year` (e.g. `doy`, `dayOfYear`)
+- Time-related columns to enable timeline filtering:
+  - Point-in-time: `year`, `date`
+  - Time range: `yearFrom` / `yearTo`, `dateFrom` / `dateTo`
+  - Optional day-of-year: `doy`, `dayOfYear`
 
 Notes:
 - CSV parsing is intentionally tolerant. Bad rows may be skipped and warnings surfaced in the UI.
 - Decimal comma coordinates (e.g. `59,3293`) are supported.
+- A single CSV file may contain a mix of feature types (`point`, `region`, and later `line`) as long as it uses one shared header row. Columns that do not apply to a given row may be left empty.
+
+Tips:
+- For maintainability, larger datasets are typically easier to manage when split into separate files (e.g. one for points and one for regions), but mixed files are supported.
 
 ### Regions (polygons)
 
+Regions may represent borders, zones, or areas of influence (e.g. political, cultural, linguistic).
 Each vertex is one row. Rows with `featureType=region` are grouped by `featureId`,
 and optionally `part` for multi-part regions. The vertex order uses the `order` column
 if present (otherwise file order is used). Rings are auto-closed if needed.

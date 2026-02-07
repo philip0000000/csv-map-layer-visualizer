@@ -199,7 +199,7 @@ export default function CsvPanel({
     };
   }, [tools?.map?.open, tools?.debug?.open]); // only rebind when open state changes
 
-  // New: local editable inputs for "Year domain" (min/max + Begin)
+  // local editable inputs for "Year domain" (min/max + Begin)
   // These are UI-only text boxes so the user can type without instantly snapping/clamping.
   const yearMinDraft = timelineState?.yearMinDraft ?? "";
   const yearMaxDraft = timelineState?.yearMaxDraft ?? "";
@@ -226,11 +226,13 @@ export default function CsvPanel({
     const nextEnd = Math.max(nextStartRaw, nextEndRaw);
 
     onTimelinePatch({
-      // New: lock the domain so auto-detection does not overwrite it
+      // lock the domain so auto-detection does not overwrite it
       yearDomainMode: "manual",
 
       yearMin: lo,
       yearMax: hi,
+      yearMinDraft: String(lo),
+      yearMaxDraft: String(hi),
       startYear: nextStart,
       endYear: nextEnd,
     });
@@ -444,14 +446,14 @@ export default function CsvPanel({
             />
           </div>
 
-          {/* New: Timeline UI lives inside the panel header (NOT in the dropdown). */}
+          {/* Timeline UI lives inside the panel header (NOT in the dropdown). */}
           {timelineState?.timelineEnabled && (
             <div className="csvTimelineBlock" aria-label="Timeline filter">
               <div className="csvTimelineTitleRow">
                 <div className="csvTimelineTitle">Timeline filter</div>
               </div>
 
-              {/* New: domain controls (Min/Max + Begin) */}
+              {/* domain controls (Min/Max + Begin) */}
               <div className="csvTimelineDomainRow">
                 <label className="csvTimelineField">
                   <span className="csvTimelineLabel">Min</span>
@@ -531,7 +533,7 @@ export default function CsvPanel({
                 </label>
               </div>
 
-              {/* New: inline expander row (arrow chevron like Map tools/Debug tools) */}
+              {/* inline expander row (arrow chevron like Map tools/Debug tools) */}
               <button
                 type="button"
                 className="csvTimelineExpander"

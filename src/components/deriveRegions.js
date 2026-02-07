@@ -17,7 +17,19 @@ const DEFAULT_STYLE = {
 
 /**
  * Derive region polygons from CSV rows using chosen lat/lon fields.
- * Regions are grouped by featureId and part.
+ *
+ * Input model (CSV):
+ * - Each region vertex is one row.
+ * - Rows with featureType=region are grouped into polygons by:
+ *   - featureId (logical region id)
+ *   - part (optional sub-part for multi-part regions; defaults to "0")
+ * - Vertex order:
+ *   - uses numeric `order` when present
+ *   - otherwise preserves file order (row index)
+ *
+ * Output model:
+ * - One polygon per (featureId, part)
+ * - Polygon rings are auto-closed if the first/last coordinate differ
  */
 export function deriveRegionsFromCsv({
   rows,
@@ -57,6 +69,11 @@ export function deriveRegionsFromCsv({
   const startDay = timeline?.startDay ?? 1;
   const endDay = timeline?.endDay ?? 365;
 
+  // Group accumulator:
+  // featureId -> { parts: Map(part -> { rows: [...] }), firstPartKey, popupRow }
+  //
+  // popupRow is used for the region popup fields and is taken from the "first" part
+  // (so multi-part regions show consistent metadata instead of random sub-part metadata).
   const groups = new Map();
 
   for (let i = 0; i < rows.length; i++) {
@@ -65,6 +82,9 @@ export function deriveRegionsFromCsv({
 
     if (featureType !== "region") continue;
 
+    // Timeline filtering:
+    // - Supports both point-in-time rows (year/date) and range rows (yearFrom/yearTo or dateFrom/dateTo).
+    // - Range rows are visible if their range intersects the selected year window.
     if (timelineEnabled) {
       const visible = isRowVisibleForTimeline({
         row,
@@ -131,19 +151,26 @@ export function deriveRegionsFromCsv({
 
   for (const [featureId, group] of groups.entries()) {
     for (const [part, partGroup] of group.parts.entries()) {
+      // Sorting rule:
+      // - Prefer explicit numeric `order`
+      // - Fall back to original file order (index) to keep deterministic behavior
       const sorted = partGroup.rows
         .slice()
         .sort((a, b) => getOrderKey(a) - getOrderKey(b));
 
-      if (sorted.length < 3) continue;
+      if (sorted.length < 3) continue; // A polygon needs at least 3 vertices
 
       const coordinates = sorted.map((r) => [r.lat, r.lon]);
       if (coordinates.length < 3) continue;
 
+      // Auto-close ring if needed (Leaflet expects closed rings)
       if (!isRingClosed(coordinates)) {
         coordinates.push(coordinates[0]);
       }
 
+      // Style resolution:
+      // - First non-empty style values win within a part
+      // - If only color is given, reuse it as fillColor (and vice versa)
       const style = resolveStyle(sorted);
 
       polygons.push({

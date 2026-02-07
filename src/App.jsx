@@ -112,7 +112,7 @@ export default function App() {
     if (!selected) return;
     if (!timelineApi.state.timelineEnabled) return;
 
-    // New: if user has set a manual year domain, do not overwrite it from data
+    // if user has set a manual year domain, do not overwrite it from data
     if (timelineApi.state.yearDomainMode === "manual") return;
 
     let min = null;
@@ -126,7 +126,13 @@ export default function App() {
       if (max == null || extent.max > max) max = extent.max;
     }
 
-    timelineApi.setYearDomain(min, max);
+    timelineApi.patch({
+      yearMin: min,
+      yearMax: max,
+      // Keep the Min/Max input boxes in sync while in auto mode
+      yearMinDraft: String(min ?? ""),
+      yearMaxDraft: String(max ?? ""),
+    });
 
     const s = timelineApi.state.startYear;
     const e = timelineApi.state.endYear;
@@ -160,9 +166,10 @@ export default function App() {
       lonField: selected.lonField,
       timeline: timelineApi.state,
       timelineFields,
+      rangeFields: timelineRangeFields,
       featureTypeField,
     });
-  }, [selected, timelineApi.state, timelineFields, featureTypeField]);
+  }, [selected, timelineApi.state, timelineFields, timelineRangeFields, featureTypeField]);
 
   const derivedRegions = useMemo(() => {
     if (!selected) return { polygons: [], skipped: 0, skippedByTimeline: 0 };
@@ -411,6 +418,15 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+/**
+ * Compute the year extent of a CSV row for timeline domain detection.
+ *
+ * Semantics:
+ * - If a range is present (yearFrom/yearTo or dateFrom/dateTo),
+ *   the row contributes a [min, max] range.
+ * - If only one bound exists, it is treated as a single-year range.
+ * - Otherwise, fall back to a single point-in-time year/date field.
+ */
 function getRowTimelineExtent(row, timelineFields, rangeFields) {
   const yearFrom = getRangeYear(
     row,
@@ -423,6 +439,7 @@ function getRowTimelineExtent(row, timelineFields, rangeFields) {
     rangeFields?.dateToField
   );
 
+  // Prefer range semantics when any range bound is present
   if (yearFrom != null || yearTo != null) {
     const from = yearFrom ?? yearTo;
     const to = yearTo ?? yearFrom;
@@ -434,12 +451,17 @@ function getRowTimelineExtent(row, timelineFields, rangeFields) {
     };
   }
 
+  // Fall back to point-in-time year/date
   const year = tryGetYear(row, timelineFields);
   if (year == null) return null;
 
   return { min: year, max: year };
 }
 
+/**
+ * Extract a year value from either a numeric year field or a date field.
+ * Returns null when no usable value is present.
+ */
 function getRangeYear(row, yearField, dateField) {
   if (!row || typeof row !== "object") return null;
 
@@ -455,3 +477,5 @@ function getRangeYear(row, yearField, dateField) {
 
   return null;
 }
+
+

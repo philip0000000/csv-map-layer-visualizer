@@ -1,3 +1,7 @@
+/**
+ * Normalize a CSV header for tolerant matching.
+ * Treats "Feature Type", "feature_type", "FEATURE-TYPE", etc. as equivalent.
+ */
 function normalizeKey(h) {
   return String(h ?? "")
     .trim()
@@ -25,3 +29,5 @@ export function getRowFeatureType(row, featureTypeField) {
 
   return value.toLowerCase();
 }
+
+

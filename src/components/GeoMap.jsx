@@ -70,6 +70,7 @@ function renderPointPopup(p, latField, lonField) {
 }
 
 function renderRegionPopup(region, latField, lonField) {
+  // Prefer a human-readable name from the CSV row, fall back to featureId, then a generic label
   const title = String(region?.row?.name ?? region?.featureId ?? "Region");
 
   return (

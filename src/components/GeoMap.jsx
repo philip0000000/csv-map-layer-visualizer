@@ -8,6 +8,7 @@ import {
   LayersControl,
   TileLayer,
   Marker,
+  Polygon,
   Popup,
   ZoomControl,
 } from "react-leaflet";
@@ -68,6 +69,25 @@ function renderPointPopup(p, latField, lonField) {
   );
 }
 
+function renderRegionPopup(region, latField, lonField) {
+  // Prefer a human-readable name from the CSV row, fall back to featureId, then a generic label
+  const title = String(region?.row?.name ?? region?.featureId ?? "Region");
+
+  return (
+    <Popup>
+      <div style={{ minWidth: 220 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+
+        {buildPopupFields(region.row, latField, lonField).map(([k, v]) => (
+          <div key={k} style={{ marginBottom: 4 }}>
+            <b>{k}:</b> {String(v ?? "")}
+          </div>
+        ))}
+      </div>
+    </Popup>
+  );
+}
+
 /**
  * Map tile providers.
  * We expose:
@@ -105,6 +125,7 @@ const TILESETS = {
 
 export default function GeoMap({
   points = [],
+  regions = [],
   latField = null,
   lonField = null,
 
@@ -206,8 +227,16 @@ export default function GeoMap({
           </Marker>
         ))
       )}
+
+      {regions.map((region) => (
+        <Polygon
+          key={region.id}
+          positions={region.coordinates}
+          pathOptions={region.style}
+        >
+          {renderRegionPopup(region, latField, lonField)}
+        </Polygon>
+      ))}
     </MapContainer>
   );
 }
-
-

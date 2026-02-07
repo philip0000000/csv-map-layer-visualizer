@@ -5,8 +5,16 @@ import CsvPanel from "./components/CsvPanel";
 import { useCsvFiles } from "./components/useCsvFiles";
 import { derivePointsFromCsv } from "./components/derivePoints";
 import { useTimelineFilterState } from "./components/useTimelineFilterState";
-import { autoDetectTimelineFields, tryGetYear } from "./components/timeline";
+import {
+  autoDetectRangeFields,
+  autoDetectTimelineFields,
+  parseDateValue,
+  parseYearValue,
+  tryGetYear,
+} from "./components/timeline";
 import { useMapToolsState } from "./components/useMapToolsState";
+import { deriveRegionsFromCsv } from "./components/deriveRegions";
+import { detectFeatureTypeField } from "./components/featureTypes";
 
 /**
  * Limits for the CSV panel width.
@@ -82,26 +90,49 @@ export default function App() {
     return autoDetectTimelineFields(selected.headers);
   }, [selected?.headers]);
 
+  const timelineRangeFields = useMemo(() => {
+    if (!selected?.headers) {
+      return {
+        yearFromField: null,
+        yearToField: null,
+        dateFromField: null,
+        dateToField: null,
+      };
+    }
+    return autoDetectRangeFields(selected.headers);
+  }, [selected?.headers]);
+
+  const featureTypeField = useMemo(() => {
+    if (!selected?.headers) return null;
+    return detectFeatureTypeField(selected.headers);
+  }, [selected?.headers]);
+
   // When timeline is enabled, compute year domain from selected file
   useEffect(() => {
     if (!selected) return;
     if (!timelineApi.state.timelineEnabled) return;
 
-    // New: if user has set a manual year domain, do not overwrite it from data
+    // if user has set a manual year domain, do not overwrite it from data
     if (timelineApi.state.yearDomainMode === "manual") return;
 
     let min = null;
     let max = null;
 
     for (const r of selected.rows ?? []) {
-      const y = tryGetYear(r, timelineFields);
-      if (y == null) continue;
+      const extent = getRowTimelineExtent(r, timelineFields, timelineRangeFields);
+      if (!extent) continue;
 
-      if (min == null || y < min) min = y;
-      if (max == null || y > max) max = y;
+      if (min == null || extent.min < min) min = extent.min;
+      if (max == null || extent.max > max) max = extent.max;
     }
 
-    timelineApi.setYearDomain(min, max);
+    timelineApi.patch({
+      yearMin: min,
+      yearMax: max,
+      // Keep the Min/Max input boxes in sync while in auto mode
+      yearMinDraft: String(min ?? ""),
+      yearMaxDraft: String(max ?? ""),
+    });
 
     const s = timelineApi.state.startYear;
     const e = timelineApi.state.endYear;
@@ -123,9 +154,10 @@ export default function App() {
     timelineApi.state.yearDomainMode,
     selected?.rows,
     timelineFields,
+    timelineRangeFields,
   ]);
 
-  const derived = useMemo(() => {
+  const derivedPoints = useMemo(() => {
     if (!selected) return { points: [], skipped: 0, skippedByTimeline: 0 };
 
     return derivePointsFromCsv({
@@ -134,8 +166,24 @@ export default function App() {
       lonField: selected.lonField,
       timeline: timelineApi.state,
       timelineFields,
+      rangeFields: timelineRangeFields,
+      featureTypeField,
     });
-  }, [selected, timelineApi.state, timelineFields]);
+  }, [selected, timelineApi.state, timelineFields, timelineRangeFields, featureTypeField]);
+
+  const derivedRegions = useMemo(() => {
+    if (!selected) return { polygons: [], skipped: 0, skippedByTimeline: 0 };
+
+    return deriveRegionsFromCsv({
+      rows: selected.rows,
+      latField: selected.latField,
+      lonField: selected.lonField,
+      timeline: timelineApi.state,
+      timelineFields,
+      rangeFields: timelineRangeFields,
+      featureTypeField,
+    });
+  }, [selected, timelineApi.state, timelineFields, timelineRangeFields, featureTypeField]);
 
   /** True when the CSV panel is hidden */
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -298,7 +346,8 @@ export default function App() {
       )}
       <div className="rightPane">
         <GeoMap
-          points={derived.points}
+          points={derivedPoints.points}
+          regions={derivedRegions.polygons}
           latField={selected?.latField ?? null}
           lonField={selected?.lonField ?? null}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
@@ -338,7 +387,9 @@ export default function App() {
               timelineFields={timelineFields}
               onTimelinePatch={timelineApi.patch}
               timelineStats={{
-                skippedByTimeline: derived.skippedByTimeline ?? 0,
+                skippedByTimeline:
+                  (derivedPoints.skippedByTimeline ?? 0) +
+                  (derivedRegions.skippedByTimeline ?? 0),
               }}
               mapToolsState={mapToolsApi.state}
               onMapToolsPatch={mapToolsApi.patch}
@@ -366,4 +417,65 @@ export default function App() {
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
+
+/**
+ * Compute the year extent of a CSV row for timeline domain detection.
+ *
+ * Semantics:
+ * - If a range is present (yearFrom/yearTo or dateFrom/dateTo),
+ *   the row contributes a [min, max] range.
+ * - If only one bound exists, it is treated as a single-year range.
+ * - Otherwise, fall back to a single point-in-time year/date field.
+ */
+function getRowTimelineExtent(row, timelineFields, rangeFields) {
+  const yearFrom = getRangeYear(
+    row,
+    rangeFields?.yearFromField,
+    rangeFields?.dateFromField
+  );
+  const yearTo = getRangeYear(
+    row,
+    rangeFields?.yearToField,
+    rangeFields?.dateToField
+  );
+
+  // Prefer range semantics when any range bound is present
+  if (yearFrom != null || yearTo != null) {
+    const from = yearFrom ?? yearTo;
+    const to = yearTo ?? yearFrom;
+    if (from == null || to == null) return null;
+
+    return {
+      min: Math.min(from, to),
+      max: Math.max(from, to),
+    };
+  }
+
+  // Fall back to point-in-time year/date
+  const year = tryGetYear(row, timelineFields);
+  if (year == null) return null;
+
+  return { min: year, max: year };
+}
+
+/**
+ * Extract a year value from either a numeric year field or a date field.
+ * Returns null when no usable value is present.
+ */
+function getRangeYear(row, yearField, dateField) {
+  if (!row || typeof row !== "object") return null;
+
+  if (yearField) {
+    const y = parseYearValue(row[yearField]);
+    if (y != null) return y;
+  }
+
+  if (dateField) {
+    const d = parseDateValue(row[dateField]);
+    if (d) return d.getUTCFullYear();
+  }
+
+  return null;
+}
+
 

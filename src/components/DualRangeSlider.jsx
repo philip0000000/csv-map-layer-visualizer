@@ -55,7 +55,7 @@ export default function DualRangeSlider({
   // Ref to the root slider element. Used to measure pixel width and convert pixels <-> values.
   const sliderRef = useRef(null);
 
-  // New: measured width stored in React state.
+  // measured width stored in React state.
   // This solves a common UI issue where the slider mounts while hidden/collapsing (width=0),
   // then becomes visible later without any React state change to trigger a re-render.
   const [measuredWidth, setMeasuredWidth] = useState(0);
@@ -109,7 +109,7 @@ export default function DualRangeSlider({
   }, [domain, s, e, step]);
 
   /**
-   * New: Keep `measuredWidth` in sync with the actual DOM width.
+   * Keep `measuredWidth` in sync with the actual DOM width.
    * - ResizeObserver triggers when the element becomes visible or changes size.
    * - requestAnimationFrame ensures we measure after layout is committed.
    *

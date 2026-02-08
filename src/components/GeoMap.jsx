@@ -216,14 +216,14 @@ export default function GeoMap({
         >
           {points.map((p) => (
             <Marker key={p.id} position={[p.lat, p.lon]}>
-              {renderPointPopup(p, latField, lonField)}
+              {renderPointPopup(p, p.latField ?? latField, p.lonField ?? lonField)}
             </Marker>
           ))}
         </MarkerClusterGroup>
       ) : (
         points.map((p) => (
           <Marker key={p.id} position={[p.lat, p.lon]}>
-            {renderPointPopup(p, latField, lonField)}
+            {renderPointPopup(p, p.latField ?? latField, p.lonField ?? lonField)}
           </Marker>
         ))
       )}
@@ -234,7 +234,11 @@ export default function GeoMap({
           positions={region.coordinates}
           pathOptions={region.style}
         >
-          {renderRegionPopup(region, latField, lonField)}
+          {renderRegionPopup(
+            region,
+            region.latField ?? latField,
+            region.lonField ?? lonField
+          )}
         </Polygon>
       ))}
     </MapContainer>

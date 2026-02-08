@@ -36,7 +36,8 @@ export default function App() {
    * - selectedId: currently selected CSV file ID
    * - selected: the selected CSV file object (or null)
    * - importFiles: load new CSV files
-   * - unloadSelected: remove the selected CSV file
+   * - unloadFile: remove a CSV file
+   * - setFileEnabled: toggle visibility for a CSV file
    * - updateFileMapping: update lat/lon mapping for a file
    */
   const {
@@ -45,7 +46,8 @@ export default function App() {
     selected,
     setSelectedId,
     importFiles,
-    unloadSelected,
+    unloadFile,
+    setFileEnabled,
     updateFileMapping,
     importExampleFile,
   } = useCsvFiles();
@@ -102,11 +104,6 @@ export default function App() {
     return autoDetectRangeFields(selected.headers);
   }, [selected?.headers]);
 
-  const featureTypeField = useMemo(() => {
-    if (!selected?.headers) return null;
-    return detectFeatureTypeField(selected.headers);
-  }, [selected?.headers]);
-
   // When timeline is enabled, compute year domain from selected file
   useEffect(() => {
     if (!selected) return;
@@ -157,33 +154,68 @@ export default function App() {
     timelineRangeFields,
   ]);
 
-  const derivedPoints = useMemo(() => {
-    if (!selected) return { points: [], skipped: 0, skippedByTimeline: 0 };
+  const enabledFiles = useMemo(
+    () => files.filter((file) => file.enabled !== false),
+    [files]
+  );
 
-    return derivePointsFromCsv({
-      rows: selected.rows,
-      latField: selected.latField,
-      lonField: selected.lonField,
-      timeline: timelineApi.state,
-      timelineFields,
-      rangeFields: timelineRangeFields,
-      featureTypeField,
-    });
-  }, [selected, timelineApi.state, timelineFields, timelineRangeFields, featureTypeField]);
+  const derivedMapData = useMemo(() => {
+    const points = [];
+    const regions = [];
+    let skippedByTimeline = 0;
 
-  const derivedRegions = useMemo(() => {
-    if (!selected) return { polygons: [], skipped: 0, skippedByTimeline: 0 };
+    for (const file of enabledFiles) {
+      const fileTimelineFields = autoDetectTimelineFields(file.headers ?? []);
+      const fileRangeFields = autoDetectRangeFields(file.headers ?? []);
+      const fileFeatureTypeField = detectFeatureTypeField(file.headers ?? []);
 
-    return deriveRegionsFromCsv({
-      rows: selected.rows,
-      latField: selected.latField,
-      lonField: selected.lonField,
-      timeline: timelineApi.state,
-      timelineFields,
-      rangeFields: timelineRangeFields,
-      featureTypeField,
-    });
-  }, [selected, timelineApi.state, timelineFields, timelineRangeFields, featureTypeField]);
+      const pointsResult = derivePointsFromCsv({
+        rows: file.rows,
+        latField: file.latField,
+        lonField: file.lonField,
+        timeline: timelineApi.state,
+        timelineFields: fileTimelineFields,
+        rangeFields: fileRangeFields,
+        featureTypeField: fileFeatureTypeField,
+      });
+
+      const regionsResult = deriveRegionsFromCsv({
+        rows: file.rows,
+        latField: file.latField,
+        lonField: file.lonField,
+        timeline: timelineApi.state,
+        timelineFields: fileTimelineFields,
+        rangeFields: fileRangeFields,
+        featureTypeField: fileFeatureTypeField,
+      });
+
+      for (const point of pointsResult.points) {
+        points.push({
+          ...point,
+          id: `${file.id}:${point.id}`,
+          fileId: file.id,
+          latField: file.latField,
+          lonField: file.lonField,
+        });
+      }
+
+      for (const region of regionsResult.polygons) {
+        regions.push({
+          ...region,
+          id: `${file.id}:${region.id}`,
+          fileId: file.id,
+          latField: file.latField,
+          lonField: file.lonField,
+        });
+      }
+
+      skippedByTimeline +=
+        (pointsResult.skippedByTimeline ?? 0) +
+        (regionsResult.skippedByTimeline ?? 0);
+    }
+
+    return { points, regions, skippedByTimeline };
+  }, [enabledFiles, timelineApi.state]);
 
   /** True when the CSV panel is hidden */
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -346,8 +378,8 @@ export default function App() {
       )}
       <div className="rightPane">
         <GeoMap
-          points={derivedPoints.points}
-          regions={derivedRegions.polygons}
+          points={derivedMapData.points}
+          regions={derivedMapData.regions}
           latField={selected?.latField ?? null}
           lonField={selected?.lonField ?? null}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
@@ -381,15 +413,14 @@ export default function App() {
               selectedId={selectedId}
               onSelect={setSelectedId}
               onImportFiles={importFiles}
-              onUnloadSelected={unloadSelected}
+              onUnloadFile={unloadFile}
+              onToggleEnabled={setFileEnabled}
               onUpdateMapping={updateFileMapping}
               timelineState={timelineApi.state}
               timelineFields={timelineFields}
               onTimelinePatch={timelineApi.patch}
               timelineStats={{
-                skippedByTimeline:
-                  (derivedPoints.skippedByTimeline ?? 0) +
-                  (derivedRegions.skippedByTimeline ?? 0),
+                skippedByTimeline: derivedMapData.skippedByTimeline ?? 0,
               }}
               mapToolsState={mapToolsApi.state}
               onMapToolsPatch={mapToolsApi.patch}
@@ -477,5 +508,3 @@ function getRangeYear(row, yearField, dateField) {
 
   return null;
 }
-
-

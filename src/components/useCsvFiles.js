@@ -92,6 +92,7 @@ export function useCsvFiles() {
         name: file.name,
         size: file.size,
         lastModified: file.lastModified,
+        enabled: true,
 
         headers: parsed.headers,
         rows: parsed.rows,
@@ -160,6 +161,7 @@ export function useCsvFiles() {
       // Approximate (characters), good enough for UI
       size: text.length,
       lastModified: null,
+      enabled: true,
 
       headers: parsed.headers,
       rows: parsed.rows,
@@ -182,6 +184,29 @@ export function useCsvFiles() {
     if (!selectedId) return;
 
     setFiles((prev) => prev.filter((f) => f.id !== selectedId));
+  }
+
+  /**
+   * Remove a specific CSV file by ID.
+   */
+  function unloadFile(fileId) {
+    if (!fileId) return;
+
+    setFiles((prev) => prev.filter((f) => f.id !== fileId));
+  }
+
+  /**
+   * Toggle visibility of a CSV file on the map.
+   */
+  function setFileEnabled(fileId, enabled) {
+    if (!fileId) return;
+
+    setFiles((prev) =>
+      prev.map((f) => {
+        if (f.id !== fileId) return f;
+        return { ...f, enabled: !!enabled };
+      })
+    );
   }
 
   /**
@@ -211,8 +236,9 @@ export function useCsvFiles() {
     importFiles, // import new CSV files
     importExampleFile, // import one CSV from /public/examples via URL
     unloadSelected, // remove selected CSV
+    unloadFile, // remove a specific CSV file
+    setFileEnabled, // toggle visibility for a file
     updateFileMapping, // update lat/lon mapping for a file
   };
 }
-
 

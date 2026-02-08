@@ -19,7 +19,8 @@ export default function CsvPanel({
   selectedId,       // ID of the currently selected CSV file
   onSelect,         // Callback to change selected CSV
   onImportFiles,    // Callback to import new CSV files
-  onUnloadSelected, // Callback to unload the selected CSV
+  onUnloadFile,     // Callback to unload a CSV file
+  onToggleEnabled,  // Callback to toggle CSV visibility
   onUpdateMapping,  // Callback when user changes latitude/longitude fields
 
   timelineState,
@@ -132,11 +133,6 @@ export default function CsvPanel({
     () => files.find((f) => f.id === selectedId) || null,
     [files, selectedId]
   );
-
-  /**
-   * We can only unload if a file is actually selected.
-   */
-  const canUnload = !!selected;
 
   /**
    * Trigger the hidden file input.
@@ -391,30 +387,7 @@ export default function CsvPanel({
             File controls
            ========================= */}
         <div className="csvPanelControls">
-          {/* CSV selection dropdown */}
-          <div className="csvRow">
-            <div className="csvLabel">Loaded file</div>
-
-            <select
-              className="csvSelect"
-              value={selectedId || ""}
-              onChange={(e) => onSelect(e.target.value || null)}
-              disabled={files.length === 0}
-              aria-label="Select loaded CSV file"
-            >
-              {files.length === 0 ? (
-                <option value="">No files loaded</option>
-              ) : (
-                files.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
-
-          {/* Import / Unload buttons */}
+          {/* Import button */}
           <div className="csvButtonsRow">
             <button
               className="csvBtnPrimary"
@@ -422,17 +395,6 @@ export default function CsvPanel({
               aria-label="Import CSV files"
             >
               Import...
-            </button>
-
-            <button
-              className="csvBtnDanger"
-              onClick={onUnloadSelected}
-              disabled={!canUnload}
-              aria-disabled={!canUnload}
-              aria-label="Unload selected CSV"
-              title={canUnload ? "Unload selected CSV" : "No file selected"}
-            >
-              Unload
             </button>
 
             {/* Hidden file input */}
@@ -444,6 +406,84 @@ export default function CsvPanel({
               onChange={handleFileChange}
               style={{ display: "none" }}
             />
+          </div>
+
+          {/* Loaded files list */}
+          <div className="csvFileList">
+            <div className="csvFileListHeader">
+              <div className="csvFileHeaderCell">Show</div>
+              <div className="csvFileHeaderCell">File</div>
+              <div className="csvFileHeaderCell">Rows</div>
+              <div className="csvFileHeaderCell">Unload</div>
+            </div>
+
+            {files.length === 0 ? (
+              <div className="csvEmptyState">No files loaded yet.</div>
+            ) : (
+              files.map((file) => {
+                const isSelected = file.id === selectedId;
+                const isEnabled = file.enabled !== false;
+
+                return (
+                  <div
+                    key={file.id}
+                    className={`csvFileRow ${isSelected ? "csvFileRowSelected" : ""}`}
+                    onClick={() => onSelect?.(file.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelect?.(file.id);
+                      }
+                    }}
+                  >
+                    <label
+                      className="csvFileToggle"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isEnabled}
+                        onChange={(e) =>
+                          onToggleEnabled?.(file.id, e.target.checked)
+                        }
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Toggle ${file.name} visibility`}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      className="csvFileName"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelect?.(file.id);
+                      }}
+                      title={file.name}
+                    >
+                      {file.name}
+                    </button>
+
+                    <div className="csvFileCount">
+                      {file.totalRows}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="csvBtnDanger csvBtnSmall"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUnloadFile?.(file.id);
+                      }}
+                      aria-label={`Unload ${file.name}`}
+                    >
+                      Unload
+                    </button>
+                  </div>
+                );
+              })
+            )}
           </div>
 
           {/* Timeline UI lives inside the panel header (NOT in the dropdown). */}
@@ -654,6 +694,11 @@ export default function CsvPanel({
           </div>
         ) : (
           <>
+            {!selected.enabled && (
+              <div className="csvPreviewNotice">
+                Selected file is not visible on the map
+              </div>
+            )}
             {/* CSV metadata */}
             <div className="csvMeta">
               <div>
@@ -851,5 +896,4 @@ function clampInt(n, min, max) {
   if (!Number.isFinite(n)) return min;
   return Math.max(min, Math.min(max, n));
 }
-
 

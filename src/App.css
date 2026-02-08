@@ -168,6 +168,71 @@
   gap: 8px;
 }
 
+.csvFileList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.csvFileListHeader,
+.csvFileRow {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 60px 72px;
+  align-items: center;
+  gap: 8px;
+}
+
+.csvFileListHeader {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  opacity: 0.7;
+  padding: 4px 6px;
+}
+
+.csvFileRow {
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.csvFileRowSelected {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.csvFileToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.csvFileToggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.csvFileName {
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  text-align: left;
+  padding: 0;
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csvFileCount {
+  font-size: 12px;
+  opacity: 0.85;
+  text-align: right;
+}
+
 .csvBtnPrimary,
 .csvBtnDanger {
   height: 32px;
@@ -196,6 +261,12 @@
   cursor: not-allowed;
 }
 
+.csvBtnSmall {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
 .csvPanelBody {
   padding: 10px;
   overflow: auto;
@@ -215,6 +286,15 @@
   font-size: 12px;
   opacity: 0.95;
   margin-bottom: 10px;
+}
+
+.csvPreviewNotice {
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(248, 250, 252, 0.15);
+  background: rgba(15, 23, 42, 0.6);
 }
 
 .csvMetaLabel {
@@ -499,4 +579,3 @@
   padding-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
-

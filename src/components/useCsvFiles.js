@@ -6,6 +6,7 @@ import { autoDetectLatLon } from "./geoColumns";
  * React hook that manages loaded CSV files (in-memory only).
  * - Allows importing multiple CSV files
  * - Keeps track of the currently selected file
+ * - Lets the user enable or disable file visibility on the map
  *
  * Notes:
  * - Parsed CSV rows are intentionally NOT persisted to sessionStorage/localStorage.
@@ -102,6 +103,9 @@ export function useCsvFiles() {
         // Stored per file for the current session.
         latField: latField ?? null,
         lonField: lonField ?? null,
+
+        // Visibility flag used by the map layer list.
+        enabled: true,
       };
 
       newItems.push(item);
@@ -169,6 +173,7 @@ export function useCsvFiles() {
 
       latField: latField ?? null,
       lonField: lonField ?? null,
+      enabled: true,
     };
 
     setFiles((prev) => [item, ...prev]);
@@ -182,6 +187,24 @@ export function useCsvFiles() {
     if (!selectedId) return;
 
     setFiles((prev) => prev.filter((f) => f.id !== selectedId));
+  }
+
+  /**
+   * Remove a single CSV file by ID.
+   */
+  function unloadFile(fileId) {
+    if (!fileId) return;
+    setFiles((prev) => prev.filter((f) => f.id !== fileId));
+  }
+
+  /**
+   * Update one file's visibility flag.
+   */
+  function updateFileEnabled(fileId, enabled) {
+    if (!fileId) return;
+    setFiles((prev) =>
+      prev.map((f) => (f.id === fileId ? { ...f, enabled: !!enabled } : f))
+    );
   }
 
   /**
@@ -211,8 +234,9 @@ export function useCsvFiles() {
     importFiles, // import new CSV files
     importExampleFile, // import one CSV from /public/examples via URL
     unloadSelected, // remove selected CSV
+    unloadFile, // remove a CSV by ID
+    updateFileEnabled, // set file visibility for the map
     updateFileMapping, // update lat/lon mapping for a file
   };
 }
-
 

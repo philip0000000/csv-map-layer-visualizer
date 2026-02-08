@@ -39,6 +39,7 @@ export function deriveRegionsFromCsv({
   timelineFields,
   rangeFields,
   featureTypeField,
+  idPrefix = "",
 }) {
   const polygons = [];
   let skipped = 0;
@@ -173,8 +174,10 @@ export function deriveRegionsFromCsv({
       // - If only color is given, reuse it as fillColor (and vice versa)
       const style = resolveStyle(sorted);
 
+      const id = idPrefix ? `${idPrefix}:${featureId}:${part}` : `${featureId}:${part}`;
+
       polygons.push({
-        id: `${featureId}:${part}`,
+        id,
         featureId,
         part,
         coordinates,

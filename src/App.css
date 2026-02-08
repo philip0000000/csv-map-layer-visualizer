@@ -142,6 +142,65 @@
   gap: 8px;
 }
 
+.csvImportButton {
+  width: 100%;
+}
+
+.csvFilesList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.csvFilesHeaderRow {
+  display: grid;
+  grid-template-columns: 44px 1fr 60px 70px;
+  align-items: center;
+  font-size: 11px;
+  opacity: 0.7;
+  padding: 0 4px;
+}
+
+.csvFilesRow {
+  display: grid;
+  grid-template-columns: 44px 1fr 60px 70px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.5);
+  cursor: pointer;
+}
+
+.csvFilesRowSelected {
+  background: rgba(56, 189, 248, 0.18);
+}
+
+.csvFileNameButton {
+  background: none;
+  border: none;
+  color: #e2e8f0;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.csvFileRows {
+  font-size: 12px;
+  text-align: right;
+}
+
+.csvBtnTiny {
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.8);
+  color: #e2e8f0;
+  padding: 0 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
 .csvRow {
   display: flex;
   flex-direction: column;
@@ -215,6 +274,12 @@
   font-size: 12px;
   opacity: 0.95;
   margin-bottom: 10px;
+}
+
+.csvPreviewHint {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-bottom: 8px;
 }
 
 .csvMetaLabel {
@@ -499,4 +564,3 @@
   padding-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
-

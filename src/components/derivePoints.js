@@ -14,6 +14,7 @@ export function derivePointsFromCsv({
   timelineFields,
   rangeFields,
   featureTypeField,
+  idPrefix = "",
 }) {
   const points = [];
   let skipped = 0;
@@ -72,8 +73,10 @@ export function derivePointsFromCsv({
       }
     }
 
+    const stableId = idPrefix ? `${idPrefix}:${i}` : `${i}`;
+
     points.push({
-      id: `${i}`, // TODO: make stable
+      id: stableId, // TODO: make stable
       lat,
       lon,
       row: r,
@@ -154,5 +157,4 @@ function getRangeYear(row, yearField, dateField) {
 
   return null;
 }
-
 

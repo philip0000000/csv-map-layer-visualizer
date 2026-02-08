@@ -126,8 +126,6 @@ const TILESETS = {
 export default function GeoMap({
   points = [],
   regions = [],
-  latField = null,
-  lonField = null,
 
   // When true, nearby markers are grouped into clusters (visual-only feature).
   // When false, markers are rendered normally (current behavior).
@@ -197,7 +195,7 @@ export default function GeoMap({
       </LayersControl>
 
       {/*
-        Render markers for each point derived from the selected CSV file.
+        Render markers for each point derived from enabled CSV files.
 
         Optional marker clustering.
         - When clustering is enabled, markers are grouped into clusters (Leaflet.markercluster behavior).
@@ -216,14 +214,14 @@ export default function GeoMap({
         >
           {points.map((p) => (
             <Marker key={p.id} position={[p.lat, p.lon]}>
-              {renderPointPopup(p, latField, lonField)}
+              {renderPointPopup(p, p.latField, p.lonField)}
             </Marker>
           ))}
         </MarkerClusterGroup>
       ) : (
         points.map((p) => (
           <Marker key={p.id} position={[p.lat, p.lon]}>
-            {renderPointPopup(p, latField, lonField)}
+            {renderPointPopup(p, p.latField, p.lonField)}
           </Marker>
         ))
       )}
@@ -234,7 +232,7 @@ export default function GeoMap({
           positions={region.coordinates}
           pathOptions={region.style}
         >
-          {renderRegionPopup(region, latField, lonField)}
+          {renderRegionPopup(region, region.latField, region.lonField)}
         </Polygon>
       ))}
     </MapContainer>

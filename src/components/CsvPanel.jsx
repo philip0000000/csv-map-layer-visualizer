@@ -7,8 +7,9 @@ import DualRangeSlider from "./DualRangeSlider";
  *
  * Left-side (overlay) panel that lets the user:
  * - Import one or more CSV files
- * - Switch between loaded CSV files
- * - Unload the selected CSV
+ * - Select one CSV file for preview
+ * - Enable or disable CSV files for map display
+ * - Unload loaded CSV files
  * - Preview basic metadata and a few rows
  *
  * This component does NOT parse CSV files itself.
@@ -19,7 +20,8 @@ export default function CsvPanel({
   selectedId,       // ID of the currently selected CSV file
   onSelect,         // Callback to change selected CSV
   onImportFiles,    // Callback to import new CSV files
-  onUnloadSelected, // Callback to unload the selected CSV
+  onUnloadFile,     // Callback to unload a CSV by ID
+  onToggleEnabled,  // Callback to toggle file visibility
   onUpdateMapping,  // Callback when user changes latitude/longitude fields
 
   timelineState,
@@ -132,11 +134,6 @@ export default function CsvPanel({
     () => files.find((f) => f.id === selectedId) || null,
     [files, selectedId]
   );
-
-  /**
-   * We can only unload if a file is actually selected.
-   */
-  const canUnload = !!selected;
 
   /**
    * Trigger the hidden file input.
@@ -391,59 +388,72 @@ export default function CsvPanel({
             File controls
            ========================= */}
         <div className="csvPanelControls">
-          {/* CSV selection dropdown */}
-          <div className="csvRow">
-            <div className="csvLabel">Loaded file</div>
+          <button
+            className="csvBtnPrimary csvImportButton"
+            onClick={handleClickImport}
+            aria-label="Import CSV files"
+          >
+            Import...
+          </button>
 
-            <select
-              className="csvSelect"
-              value={selectedId || ""}
-              onChange={(e) => onSelect(e.target.value || null)}
-              disabled={files.length === 0}
-              aria-label="Select loaded CSV file"
-            >
-              {files.length === 0 ? (
-                <option value="">No files loaded</option>
-              ) : (
-                files.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            multiple
+            onChange={handleFileChange}
+            style={{ display: "none" }}
+          />
 
-          {/* Import / Unload buttons */}
-          <div className="csvButtonsRow">
-            <button
-              className="csvBtnPrimary"
-              onClick={handleClickImport}
-              aria-label="Import CSV files"
-            >
-              Import...
-            </button>
+          <div className="csvFilesList" role="list">
+            <div className="csvFilesHeaderRow">
+              <div>Show</div>
+              <div>File</div>
+              <div>Rows</div>
+              <div />
+            </div>
 
-            <button
-              className="csvBtnDanger"
-              onClick={onUnloadSelected}
-              disabled={!canUnload}
-              aria-disabled={!canUnload}
-              aria-label="Unload selected CSV"
-              title={canUnload ? "Unload selected CSV" : "No file selected"}
-            >
-              Unload
-            </button>
-
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv,text/csv"
-              multiple
-              onChange={handleFileChange}
-              style={{ display: "none" }}
-            />
+            {files.length === 0 ? (
+              <div className="csvEmptyState">No CSV files loaded.</div>
+            ) : (
+              files.map((file) => (
+                <div
+                  key={file.id}
+                  role="listitem"
+                  className={`csvFilesRow${
+                    file.id === selectedId ? " csvFilesRowSelected" : ""
+                  }`}
+                  onClick={() => onSelect(file.id)}
+                >
+                  <input
+                    type="checkbox"
+                    aria-label={`Toggle visibility for ${file.name}`}
+                    checked={!!file.enabled}
+                    onChange={(e) => onToggleEnabled?.(file.id, e.target.checked)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <button
+                    type="button"
+                    className="csvFileNameButton"
+                    onClick={() => onSelect(file.id)}
+                  >
+                    {file.name}
+                  </button>
+                  <div className="csvFileRows">{file.rows?.length ?? 0}</div>
+                  <button
+                    type="button"
+                    className="csvBtnTiny"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnloadFile?.(file.id);
+                    }}
+                  >
+                    Unload
+                  </button>
+                </div>
+              ))
+            )}
           </div>
 
           {/* Timeline UI lives inside the panel header (NOT in the dropdown). */}
@@ -654,6 +664,12 @@ export default function CsvPanel({
           </div>
         ) : (
           <>
+            {!selected.enabled && (
+              <div className="csvPreviewHint">
+                Selected file is not visible on the map
+              </div>
+            )}
+
             {/* CSV metadata */}
             <div className="csvMeta">
               <div>
@@ -851,5 +867,3 @@ function clampInt(n, min, max) {
   if (!Number.isFinite(n)) return min;
   return Math.max(min, Math.min(max, n));
 }
-
-

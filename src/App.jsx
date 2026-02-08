@@ -57,14 +57,17 @@ export default function App() {
   const timelineApi = useTimelineFilterState();
   const mapToolsApi = useMapToolsState();
 
+  // Prevent double-loading examples in React StrictMode (dev)
+  const didAutoLoadRef = useRef(false);
+
   /**
-   * Optional: auto-load an example CSV from the URL.
+   * Optional: auto-load example CSV files from the URL.
    * Example:
-   *   ?example=books.csv
+   *   ?example=books.csv&example=authors.csv
    *
    * Behavior:
-   * - If a valid ?example=*.csv is present:
-   *   - The file is auto-loaded from /public/examples
+   * - If one or more valid ?example=*.csv values are present:
+   *   - The files are auto-loaded from /public/examples
    *   - Marker clustering is enabled by default to reduce visual noise
    * - Otherwise:
    *   - No file is auto-loaded
@@ -73,17 +76,30 @@ export default function App() {
    * This is intended for the live demo and shareable links.
    */
   useEffect(() => {
+    // Guard against React 18 StrictMode double-invoking effects in development
+    if (didAutoLoadRef.current) return;
+    didAutoLoadRef.current = true;
+
     const params = new URLSearchParams(window.location.search);
-    const exampleRaw = params.get("example");
-    const example = String(exampleRaw ?? "").trim();
+    const exampleValues = params.getAll("example");
+    const validExamples = [];
 
-    // Only auto-load when ?example= is present AND looks like a safe filename.
-    const isValidExample = /^[a-zA-Z0-9._-]+\.csv$/.test(example);
+    // Only auto-load when the value looks like a safe filename.
+    for (const value of exampleValues) {
+      const trimmed = String(value ?? "").trim();
+      if (!/^[a-zA-Z0-9._-]+\.csv$/.test(trimmed)) continue;
+      validExamples.push(trimmed);
+    }
 
-    if (!isValidExample) return;
+    if (validExamples.length === 0) return;
 
-    importExampleFile(example);
+    const loadExamples = async () => {
+      for (const name of validExamples) {
+        await importExampleFile(name);
+      }
+    };
 
+    void loadExamples();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -4,14 +4,16 @@ const DEFAULT_CLUSTER_RADIUS = 80;
 
 function getInitialStateFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  const example = params.get("example");
+  const exampleValues = params.getAll("example");
 
   // Only enable clustering by default when example is present AND looks like a CSV filename.
-  const isValidExample =
-    typeof example === "string" && /^[a-zA-Z0-9._-]+\.csv$/.test(example.trim());
+  const hasValidExample = exampleValues.some((value) => {
+    const trimmed = String(value ?? "").trim();
+    return /^[a-zA-Z0-9._-]+\.csv$/.test(trimmed);
+  });
 
   return {
-    clusterMarkersEnabled: isValidExample, // true only for ?example=valid.csv
+    clusterMarkersEnabled: hasValidExample, // true only for ?example=valid.csv
     clusterRadius: DEFAULT_CLUSTER_RADIUS,
     clusterRadiusDraft: DEFAULT_CLUSTER_RADIUS,
   };
@@ -28,5 +30,4 @@ export function useMapToolsState() {
 
   return { state, patch };
 }
-
 

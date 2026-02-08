@@ -15,6 +15,8 @@ Demo with example data (auto-loaded):
 
 https://philip0000000.github.io/csv-map-layer-visualizer/?example=books.csv
 
+You can repeat the `example` parameter to load more than one example file.
+
 ## Example data
 
 The repository contains example CSV files in:

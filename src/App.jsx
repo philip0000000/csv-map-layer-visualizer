@@ -524,3 +524,5 @@ function getRangeYear(row, yearField, dateField) {
 
   return null;
 }
+
+

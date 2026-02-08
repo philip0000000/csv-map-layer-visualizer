@@ -57,6 +57,9 @@ export default function App() {
   const timelineApi = useTimelineFilterState();
   const mapToolsApi = useMapToolsState();
 
+  // Prevent double-loading examples in React StrictMode (dev)
+  const didAutoLoadRef = useRef(false);
+
   /**
    * Optional: auto-load example CSV files from the URL.
    * Example:
@@ -73,6 +76,10 @@ export default function App() {
    * This is intended for the live demo and shareable links.
    */
   useEffect(() => {
+    // Guard against React 18 StrictMode double-invoking effects in development
+    if (didAutoLoadRef.current) return;
+    didAutoLoadRef.current = true;
+
     const params = new URLSearchParams(window.location.search);
     const exampleValues = params.getAll("example");
     const validExamples = [];
@@ -92,8 +99,7 @@ export default function App() {
       }
     };
 
-    loadExamples();
-
+    void loadExamples();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -534,4 +540,5 @@ function getRangeYear(row, yearField, dateField) {
 
   return null;
 }
+
 

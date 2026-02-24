@@ -146,8 +146,8 @@ export function parseYearValue(v) {
   const s = String(v).trim();
   if (!s) return null;
 
-  // Accept: "2020", "2020.0", "2020-01-01" (will take first 4 digits)
-  const m = s.match(/-?\d{3,4}/);
+  // Accept: "2020", "2020.0", "2020-01-01" (1-5 digits, optional minus sign)
+  const m = s.match(/-?\d{1,5}/);
   if (!m) return null;
 
   const y = Number.parseInt(m[0], 10);
@@ -155,8 +155,9 @@ export function parseYearValue(v) {
 }
 
 function isReasonableYear(y) {
-  // wide range for historical data (matches your example)
-  return Number.isFinite(y) && y >= -2000 && y <= 3000;
+  // Keep a guard against broken data.
+  // Allow BCE years that are common in history datasets.
+  return Number.isFinite(y) && Math.abs(y) <= 10000;
 }
 
 export function parseDateValue(v) {
@@ -175,12 +176,23 @@ export function parseDateValue(v) {
   const s = String(v).trim();
   if (!s) return null;
 
+  // If the value is a year only string, treat it as a year.
+  // This supports values like "-2100" in a "date" column.
+  if (/^-?\d{1,5}$/.test(s)) {
+    const y = Number.parseInt(s, 10);
+    if (isReasonableYear(y)) {
+      const dt = new Date(Date.UTC(y, 0, 1));
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    }
+    return null;
+  }
+
   // ISO-like should parse reliably
   const d = new Date(s);
   if (!Number.isNaN(d.getTime())) return d;
 
   // Try common "YYYY-MM-DD" or "YYYY/MM/DD"
-  const m = s.match(/^(-?\d{3,4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  const m = s.match(/^(-?\d{1,5})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
   if (m) {
     const y = Number.parseInt(m[1], 10);
     const mo = Number.parseInt(m[2], 10);

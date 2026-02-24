@@ -53,15 +53,25 @@ Feature types:
 - If the `featureType` column is missing, rows are treated as `point` for backward compatibility.
 
 Recommended:
-- Time-related columns to enable timeline filtering:
-  - Point-in-time: `year`, `date`
-  - Time range: `yearFrom` / `yearTo`, `dateFrom` / `dateTo`
-  - Optional day-of-year: `doy`, `dayOfYear`
+- Time related columns to enable timeline filtering:
+  - Point-in-time:
+    - `year` (preferred; fastest and most predictable)
+    - `date` (supports full dates or year only values like `-2100`)
+  - Time range:
+    - `yearFrom` / `yearTo`
+    - `dateFrom` / `dateTo`
+  - Optional day-of-year:
+    - `doy`, `dayOfYear`
 
 Notes:
+- Years may be negative (BCE) and are supported in the range -10000 to 10000.
+- A `date` value that contains only a year (example: `-2100`) is interpreted as January 1 of that year (UTC).
+- When both `year` and `date` exist, `year` is used for timeline filtering.
+- ISO date formats (`YYYY-MM-DD`) are recommended for best compatibility.
 - CSV parsing is intentionally tolerant. Bad rows may be skipped and warnings surfaced in the UI.
 - Decimal comma coordinates (e.g. `59,3293`) are supported.
 - A single CSV file may contain a mix of feature types (`point`, `region`, and later `line`) as long as it uses one shared header row. Columns that do not apply to a given row may be left empty.
+- If no time column is detected, timeline filtering is disabled.
 
 Tips:
 - For maintainability, larger datasets are typically easier to manage when split into separate files (e.g. one for points and one for regions), but mixed files are supported.

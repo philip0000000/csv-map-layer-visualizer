@@ -242,7 +242,22 @@ export default function CsvPanel({
 
 
   function patchTimelineWithStop(partial) {
+    // Stop first, so timer is cleared.
     onTimelinePlaybackStop?.();
+
+    // If we patch playback settings, force isPlaying to false.
+    // This avoids overwriting the stop patch with stale isPlaying=true.
+    if (partial?.playback) {
+      onTimelinePatch?.({
+        ...partial,
+        playback: {
+          ...partial.playback,
+          isPlaying: false,
+        },
+      });
+      return;
+    }
+
     onTimelinePatch?.(partial);
   }
 

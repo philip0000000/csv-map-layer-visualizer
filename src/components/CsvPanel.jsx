@@ -27,6 +27,8 @@ export default function CsvPanel({
   timelineState,
   timelineFields,
   onTimelinePatch,
+  onTimelinePlaybackStart,
+  onTimelinePlaybackStop,
   timelineStats,
   mapToolsState,
   onMapToolsPatch,
@@ -222,7 +224,7 @@ export default function CsvPanel({
     const nextStart = Math.min(nextStartRaw, nextEndRaw);
     const nextEnd = Math.max(nextStartRaw, nextEndRaw);
 
-    onTimelinePatch({
+    patchTimelineWithStop({
       // lock the domain so auto-detection does not overwrite it
       yearDomainMode: "manual",
 
@@ -237,6 +239,17 @@ export default function CsvPanel({
 
   const canBeginYearDomain =
     toIntOrNull(yearMinDraft) != null && toIntOrNull(yearMaxDraft) != null;
+
+
+  function patchTimelineWithStop(partial) {
+    onTimelinePlaybackStop?.();
+    onTimelinePatch?.(partial);
+  }
+
+  const playbackState = timelineState?.playback ?? {};
+  const playbackIntervalSec = Number.isFinite(Number(playbackState.intervalMs))
+    ? Number(playbackState.intervalMs) / 1000
+    : 0;
 
   return (
     <div className="csvPanel" role="region" aria-label="CSV files panel">
@@ -471,7 +484,7 @@ export default function CsvPanel({
                     className="csvSelect"
                     type="number"
                     value={yearMinDraft}
-                    onChange={(e) => onTimelinePatch?.({ yearMinDraft: e.target.value })}
+                    onChange={(e) => patchTimelineWithStop({ yearMinDraft: e.target.value })}
                   />
                 </label>
 
@@ -481,7 +494,7 @@ export default function CsvPanel({
                     className="csvSelect"
                     type="number"
                     value={yearMaxDraft}
-                    onChange={(e) => onTimelinePatch?.({ yearMaxDraft: e.target.value })}
+                    onChange={(e) => patchTimelineWithStop({ yearMaxDraft: e.target.value })}
                   />
                 </label>
 
@@ -507,7 +520,7 @@ export default function CsvPanel({
                 end={timelineState?.endYear ?? timelineState?.yearMax ?? 0}
                 disabled={timelineState?.yearMin == null || timelineState?.yearMax == null}
                 onChange={({ start, end }) =>
-                  onTimelinePatch?.({ startYear: start, endYear: end })
+                  patchTimelineWithStop({ startYear: start, endYear: end })
                 }
               />
 
@@ -522,7 +535,7 @@ export default function CsvPanel({
                     max={timelineState?.yearMax ?? undefined}
                     onChange={(e) => {
                       const v = toIntOrNull(e.target.value);
-                      onTimelinePatch?.({ startYear: v });
+                      patchTimelineWithStop({ startYear: v });
                     }}
                   />
                 </label>
@@ -537,7 +550,7 @@ export default function CsvPanel({
                     max={timelineState?.yearMax ?? undefined}
                     onChange={(e) => {
                       const v = toIntOrNull(e.target.value);
-                      onTimelinePatch?.({ endYear: v });
+                      patchTimelineWithStop({ endYear: v });
                     }}
                   />
                 </label>
@@ -556,7 +569,7 @@ export default function CsvPanel({
                       Number.isFinite(timelineState?.startDay) &&
                       Number.isFinite(timelineState?.endDay);
 
-                    onTimelinePatch?.({
+                    patchTimelineWithStop({
                       moreFiltersOpen: true,
                       dayFilterEnabled: true,
 
@@ -573,7 +586,7 @@ export default function CsvPanel({
 
                   // Closing More filters:
                   // - disable day filter, but KEEP values so we can restore them later
-                  onTimelinePatch?.({
+                  patchTimelineWithStop({
                     moreFiltersOpen: false,
                     dayFilterEnabled: false,
                   });
@@ -599,7 +612,7 @@ export default function CsvPanel({
                     start={timelineState?.startDay ?? 1}
                     end={timelineState?.endDay ?? 365}
                     onChange={({ start, end }) =>
-                      onTimelinePatch?.({ startDay: start, endDay: end })
+                      patchTimelineWithStop({ startDay: start, endDay: end })
                     }
                   />
 
@@ -631,6 +644,83 @@ export default function CsvPanel({
                   </div>
                 </div>
 
+                  <div style={{ marginTop: 10 }}>
+                    <div className="csvTimelineSubLabel">Playback</div>
+
+                    <div className="csvTimelineReadoutRow">
+                      <label className="csvTimelineField">
+                        <span className="csvTimelineLabel">Step (years)</span>
+                        <input
+                          className="csvSelect"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={playbackState.stepYears ?? 1}
+                          onChange={(e) => {
+                            const v = Number.parseInt(String(e.target.value ?? ""), 10);
+                            patchTimelineWithStop({
+                              playback: {
+                                ...playbackState,
+                                stepYears: Number.isInteger(v) && v > 0 ? v : 0,
+                              },
+                            });
+                          }}
+                        />
+                      </label>
+
+                      <label className="csvTimelineField">
+                        <span className="csvTimelineLabel">Interval (sec)</span>
+                        <input
+                          className="csvSelect"
+                          type="number"
+                          min={0.1}
+                          step={0.1}
+                          value={playbackIntervalSec}
+                          onChange={(e) => {
+                            const sec = Number.parseFloat(String(e.target.value ?? ""));
+                            patchTimelineWithStop({
+                              playback: {
+                                ...playbackState,
+                                intervalMs: Number.isFinite(sec) && sec > 0 ? sec * 1000 : 0,
+                              },
+                            });
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    <label className="csvToolToggle" style={{ marginTop: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!playbackState.moveStartWithEnd}
+                        onChange={(e) =>
+                          patchTimelineWithStop({
+                            playback: {
+                              ...playbackState,
+                              moveStartWithEnd: e.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      <span>Move start with end</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      className="csvBtnPrimary"
+                      style={{ marginTop: 8, width: 160 }}
+                      onClick={() => {
+                        if (playbackState.isPlaying) {
+                          onTimelinePlaybackStop?.();
+                          return;
+                        }
+
+                        onTimelinePlaybackStart?.();
+                      }}
+                    >
+                      {playbackState.isPlaying ? "Stop" : "Play timeline"}
+                    </button>
+                  </div>
 
                   <div className="csvToolMenuHint" style={{ marginTop: 10 }}>
                     Detected fields:

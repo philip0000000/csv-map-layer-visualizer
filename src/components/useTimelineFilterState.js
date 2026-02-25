@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useSessionStorageState } from "./useSessionStorageState";
 
 const STORAGE_KEY = "csv-map-layer-visualizer.timeline.v1";
@@ -24,10 +25,42 @@ const DEFAULT_STATE = {
 
   // UI-only: "More filters" expander
   moreFiltersOpen: false,
+
+  // Timeline playback settings
+  playback: {
+    isPlaying: false,
+    stepYears: 1,
+    intervalMs: 1000,
+    moveStartWithEnd: false,
+  },
 };
 
 export function useTimelineFilterState() {
   const [state, setState] = useSessionStorageState(STORAGE_KEY, DEFAULT_STATE);
+
+  useEffect(() => {
+    // Keep old saved state compatible with new playback fields.
+    const nextPlayback = {
+      ...DEFAULT_STATE.playback,
+      ...(state?.playback ?? {}),
+    };
+
+    const samePlayback =
+      state?.playback?.isPlaying === nextPlayback.isPlaying &&
+      state?.playback?.stepYears === nextPlayback.stepYears &&
+      state?.playback?.intervalMs === nextPlayback.intervalMs &&
+      state?.playback?.moveStartWithEnd === nextPlayback.moveStartWithEnd;
+
+    if (samePlayback) return;
+
+    setState((prev) => ({
+      ...prev,
+      playback: {
+        ...DEFAULT_STATE.playback,
+        ...(prev?.playback ?? {}),
+      },
+    }));
+  }, [state?.playback, setState]);
 
   function patch(partial) {
     setState((prev) => ({ ...prev, ...partial }));
@@ -83,5 +116,3 @@ function clampInt(n, min, max) {
   if (!Number.isFinite(x)) return min;
   return Math.max(min, Math.min(max, x));
 }
-
-

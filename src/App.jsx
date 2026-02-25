@@ -15,6 +15,7 @@ import {
 import { useMapToolsState } from "./components/useMapToolsState";
 import { deriveRegionsFromCsv } from "./components/deriveRegions";
 import { detectFeatureTypeField } from "./components/featureTypes";
+import { useTimelinePlayback } from "./components/useTimelinePlayback";
 
 /**
  * Limits for the CSV panel width.
@@ -56,6 +57,10 @@ export default function App() {
 
   const timelineApi = useTimelineFilterState();
   const mapToolsApi = useMapToolsState();
+  const timelinePlaybackApi = useTimelinePlayback({
+    timelineState: timelineApi.state,
+    onTimelinePatch: timelineApi.patch,
+  });
 
   // Prevent double-loading examples in React StrictMode (dev)
   const didAutoLoadRef = useRef(false);
@@ -449,6 +454,8 @@ export default function App() {
               timelineState={timelineApi.state}
               timelineFields={timelineFields}
               onTimelinePatch={timelineApi.patch}
+              onTimelinePlaybackStart={timelinePlaybackApi.startPlayback}
+              onTimelinePlaybackStop={timelinePlaybackApi.stopPlayback}
               timelineStats={{
                 skippedByTimeline:
                   (derivedPoints.skippedByTimeline ?? 0) +

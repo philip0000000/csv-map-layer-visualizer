@@ -1,0 +1,12 @@
+{
+  "files": [
+    "debug/areas_geojson_like.csv",
+    "debug/inconsistent_columns.csv",
+    "debug/missing_values_and_blank_lines.csv",
+    "debug/points_basic.csv",
+    "debug/points_reordered_headers.csv",
+    "debug/weird_extra_columns.csv",
+    "present-day/books.csv",
+    "present-day/filtered_places_pop_ge_9000_filtered_output.csv"
+  ]
+}

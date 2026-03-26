@@ -122,62 +122,98 @@ export function useCsvFiles() {
   }
 
   /**
-   * Import one CSV file from /public/examples via URL.
-   * Intended for the GitHub Pages demo via:
-   * ?example=books.csv
+   * Load an example CSV file from /public/examples.
+   * Supports both direct paths and filename lookup via examples-index.json.
+   * Keeps old URLs working (e.g. ?example=books.csv).
    */
   async function importExampleFile(exampleFileName) {
-    const name = String(exampleFileName ?? "").trim();
+    const requested = String(exampleFileName ?? "").trim();
+    if (!requested) return;
 
-    // Security: allow only simple filenames like "books.csv"
-    // No slashes, no "..", must end with .csv
-    if (!/^[a-zA-Z0-9._-]+\.csv$/.test(name)) return;
+    // Allow:
+    // - books.csv
+    // - present-day/books.csv
+    // - debug/test_case.csv
+    const isSafeExamplePath =
+      /^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.csv$/.test(requested) &&
+      !requested.includes("..");
 
-    const url = `${import.meta.env.BASE_URL}examples/${name}`;
+    if (!isSafeExamplePath) return;
 
-    const res = await fetch(url, { cache: "no-cache" });
-    if (!res.ok) {
-      // Optional: you could surface this as a UI error later
+    const baseUrl = `${import.meta.env.BASE_URL}examples/`;
+
+    let resolvedRelativePath = null;
+
+    // Case 1:
+    // Explicit subfolder path was provided in the URL.
+    // Example: ?example=present-day/books.csv
+    if (requested.includes("/")) {
+      resolvedRelativePath = requested;
+    } else {
+      // Case 2:
+      // Bare filename was provided.
+      // Preserve backward compatibility:
+      // 1) Try old flat examples/<name>
+      // 2) If not found, use examples-index.json and pick first basename match
+
+      const legacyUrl = `${baseUrl}${requested}`;
+      const legacyText = await fetchExampleText(legacyUrl);
+
+      if (legacyText != null) {
+        return addParsedExampleFile({
+          displayName: requested,
+          text: legacyText,
+        });
+      }
+
+      // Fall back to manifest lookup
+      const indexUrl = `${baseUrl}examples-index.json`;
+      const indexRes = await fetch(indexUrl, { cache: "no-cache" });
+      if (!indexRes.ok) {
+        return;
+      }
+
+      // Read examples-index.json and find a file with the same name.
+      // If found, use the first matching file path.
+      let indexJson = null;
+      try {
+        indexJson = await indexRes.json();
+      } catch {
+        return;
+      }
+
+      const indexedFiles = Array.isArray(indexJson?.files) ? indexJson.files : [];
+      const normalizedRequested = requested.toLowerCase();
+
+      // Find the first file in the index that has the same name as requested.
+      // Only allow safe paths and ignore invalid entries.
+      const match = indexedFiles.find((relativePath) => {
+        const s = String(relativePath ?? "").trim();
+        if (!/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.csv$/.test(s)) return false;
+        if (s.includes("..")) return false;
+
+        const basename = s.split("/").pop()?.toLowerCase() ?? "";
+        return basename === normalizedRequested;
+      });
+
+      // If no file was found, stop here.
+      if (!match) {
+        return;
+      }
+
+      resolvedRelativePath = match;
+    }
+
+    const fileUrl = `${baseUrl}${resolvedRelativePath}`;
+    const text = await fetchExampleText(fileUrl);
+    if (text == null) {
       return;
     }
 
-    const text = await res.text();
-    const parsed = parseCsvText(text);
-
-    const { latField, lonField } = autoDetectLatLon(parsed.headers);
-
-    const parseErrors = Array.isArray(parsed.parseErrors)
-      ? [...parsed.parseErrors]
-      : [];
-
-    if (!latField || !lonField) {
-      parseErrors.push(
-        "Geo: Could not auto-detect latitude/longitude columns. Choose them manually."
-      );
-    }
-
-    const item = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-
-      // Show the filename in the dropdown so it's clear it came from examples/
-      name,
-      // Approximate (characters), good enough for UI
-      size: text.length,
-      lastModified: null,
-
-      headers: parsed.headers,
-      rows: parsed.rows,
-      previewRows: parsed.previewRows,
-      totalRows: parsed.totalRows,
-      parseErrors,
-
-      latField: latField ?? null,
-      lonField: lonField ?? null,
-      enabled: true,
-    };
-
-    setFiles((prev) => [item, ...prev]);
-    setSelectedId(item.id);
+    return addParsedExampleFile({
+      displayName: requested,
+      text,
+    });
   }
 
   /**
@@ -223,6 +259,67 @@ export function useCsvFiles() {
         return { ...f, ...patch };
       })
     );
+  }
+
+  /**
+   * Parse CSV text and add it as a new file in state.
+   * Also auto-detects latitude/longitude fields.
+   */
+  function addParsedExampleFile({ displayName, text }) {
+    const parsed = parseCsvText(text);
+
+    const { latField, lonField } = autoDetectLatLon(parsed.headers);
+
+    const parseErrors = Array.isArray(parsed.parseErrors)
+      ? [...parsed.parseErrors]
+      : [];
+
+    if (!latField || !lonField) {
+      parseErrors.push(
+        "Geo: Could not auto-detect latitude/longitude columns. Choose them manually."
+      );
+    }
+
+    const item = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+
+      // Keep what the user requested visible in the UI.
+      name: displayName,
+      size: text.length,
+      lastModified: null,
+
+      headers: parsed.headers,
+      rows: parsed.rows,
+      previewRows: parsed.previewRows,
+      totalRows: parsed.totalRows,
+      parseErrors,
+
+      latField: latField ?? null,
+      lonField: lonField ?? null,
+      enabled: true,
+    };
+
+    setFiles((prev) => [item, ...prev]);
+    setSelectedId(item.id);
+  }
+
+  async function fetchExampleText(url) {
+    const res = await fetch(url, { cache: "no-cache" });
+    if (!res.ok) return null;
+
+    const text = await res.text();
+
+    // Vite dev server may return index.html for missing files.
+    // Reject obvious HTML fallback responses.
+    const trimmed = text.trimStart().toLowerCase();
+    if (
+      trimmed.startsWith("<!doctype html") ||
+      trimmed.startsWith("<html")
+    ) {
+      return null;
+    }
+
+    return text;
   }
 
   // Public API of this hook.

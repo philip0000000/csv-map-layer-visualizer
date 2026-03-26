@@ -571,6 +571,102 @@ export default function CsvPanel({
                 </label>
               </div>
 
+              <button
+                type="button"
+                className="csvTimelineExpander"
+                aria-expanded={!!timelineState?.playbackOpen}
+                onClick={() =>
+                  onTimelinePatch?.({
+                    playbackOpen: !timelineState?.playbackOpen,
+                  })
+                }
+              >
+                <span className="csvTimelineExpanderLeft">
+                  <span className="csvTimelineExpanderChevron" aria-hidden="true">
+                    {timelineState?.playbackOpen ? "▾" : "▸"}
+                  </span>
+                  <span>Playback</span>
+                </span>
+              </button>
+
+              {timelineState?.playbackOpen && (
+                <div className="csvTimelinePlayback">
+                  <div className="csvTimelineReadoutRow">
+                    <label className="csvTimelineField">
+                      <span className="csvTimelineLabel">Step (years)</span>
+                      <input
+                        className="csvSelect"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={playbackState.stepYears ?? 1}
+                        onChange={(e) => {
+                          const v = Number.parseInt(String(e.target.value ?? ""), 10);
+                          patchTimelineWithStop({
+                            playback: {
+                              ...playbackState,
+                              stepYears: Number.isInteger(v) && v > 0 ? v : 0,
+                            },
+                          });
+                        }}
+                      />
+                    </label>
+
+                    <label className="csvTimelineField">
+                      <span className="csvTimelineLabel">Interval (sec)</span>
+                      <input
+                        className="csvSelect"
+                        type="number"
+                        min={0.1}
+                        step={0.1}
+                        value={playbackIntervalSec}
+                        onChange={(e) => {
+                          const sec = Number.parseFloat(String(e.target.value ?? ""));
+                          patchTimelineWithStop({
+                            playback: {
+                              ...playbackState,
+                              intervalMs: Number.isFinite(sec) && sec > 0 ? sec * 1000 : 0,
+                            },
+                          });
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <label className="csvToolToggle" style={{ marginTop: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!playbackState.moveStartWithEnd}
+                      onChange={(e) =>
+                        patchTimelineWithStop({
+                          playback: {
+                            ...playbackState,
+                            moveStartWithEnd: e.target.checked,
+                          },
+                        })
+                      }
+                    />
+                    <span>Move start with end</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    className="csvBtnPrimary"
+                    style={{ marginTop: 8, width: 160 }}
+                    onClick={() => {
+                      if (playbackState.isPlaying) {
+                        onTimelinePlaybackStop?.();
+                        return;
+                      }
+
+                      onTimelinePlaybackStart?.();
+                    }}
+                  >
+                    {playbackState.isPlaying ? "Stop" : "Play timeline"}
+                  </button>
+                </div>
+              )}
+
               {/* inline expander row (arrow chevron like Map tools/Debug tools) */}
               <button
                 type="button"
@@ -658,84 +754,6 @@ export default function CsvPanel({
                     “day ≥ Start OR day ≤ End”.
                   </div>
                 </div>
-
-                  <div style={{ marginTop: 10 }}>
-                    <div className="csvTimelineSubLabel">Playback</div>
-
-                    <div className="csvTimelineReadoutRow">
-                      <label className="csvTimelineField">
-                        <span className="csvTimelineLabel">Step (years)</span>
-                        <input
-                          className="csvSelect"
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={playbackState.stepYears ?? 1}
-                          onChange={(e) => {
-                            const v = Number.parseInt(String(e.target.value ?? ""), 10);
-                            patchTimelineWithStop({
-                              playback: {
-                                ...playbackState,
-                                stepYears: Number.isInteger(v) && v > 0 ? v : 0,
-                              },
-                            });
-                          }}
-                        />
-                      </label>
-
-                      <label className="csvTimelineField">
-                        <span className="csvTimelineLabel">Interval (sec)</span>
-                        <input
-                          className="csvSelect"
-                          type="number"
-                          min={0.1}
-                          step={0.1}
-                          value={playbackIntervalSec}
-                          onChange={(e) => {
-                            const sec = Number.parseFloat(String(e.target.value ?? ""));
-                            patchTimelineWithStop({
-                              playback: {
-                                ...playbackState,
-                                intervalMs: Number.isFinite(sec) && sec > 0 ? sec * 1000 : 0,
-                              },
-                            });
-                          }}
-                        />
-                      </label>
-                    </div>
-
-                    <label className="csvToolToggle" style={{ marginTop: 6 }}>
-                      <input
-                        type="checkbox"
-                        checked={!!playbackState.moveStartWithEnd}
-                        onChange={(e) =>
-                          patchTimelineWithStop({
-                            playback: {
-                              ...playbackState,
-                              moveStartWithEnd: e.target.checked,
-                            },
-                          })
-                        }
-                      />
-                      <span>Move start with end</span>
-                    </label>
-
-                    <button
-                      type="button"
-                      className="csvBtnPrimary"
-                      style={{ marginTop: 8, width: 160 }}
-                      onClick={() => {
-                        if (playbackState.isPlaying) {
-                          onTimelinePlaybackStop?.();
-                          return;
-                        }
-
-                        onTimelinePlaybackStart?.();
-                      }}
-                    >
-                      {playbackState.isPlaying ? "Stop" : "Play timeline"}
-                    </button>
-                  </div>
 
                   <div className="csvToolMenuHint" style={{ marginTop: 10 }}>
                     Detected fields:

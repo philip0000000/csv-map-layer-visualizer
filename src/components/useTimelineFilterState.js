@@ -23,8 +23,9 @@ const DEFAULT_STATE = {
   startDay: 1,
   endDay: 365,
 
-  // UI-only: "More filters" expander
+  // UI-only expanders (panel open/close state)
   moreFiltersOpen: false,
+  playbackOpen: false,
 
   // Timeline playback settings
   playback: {

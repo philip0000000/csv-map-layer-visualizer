@@ -92,7 +92,16 @@ export default function App() {
     // Only auto-load when the value looks like a safe filename.
     for (const value of exampleValues) {
       const trimmed = String(value ?? "").trim();
-      if (!/^[a-zA-Z0-9._-]+\.csv$/.test(trimmed)) continue;
+
+      // Allow:
+      // - books.csv
+      // - present-day/books.csv
+      // - debug/test_case.csv
+      if (!/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.csv$/.test(trimmed)) continue;
+
+      // Reject path traversal defensively
+      if (trimmed.includes("..")) continue;
+
       validExamples.push(trimmed);
     }
 

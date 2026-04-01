@@ -79,6 +79,7 @@ export function derivePointsFromCsv({
       id: stableId, // TODO: make stable
       lat,
       lon,
+      marker: r?.marker,
       row: r,
     });
   }

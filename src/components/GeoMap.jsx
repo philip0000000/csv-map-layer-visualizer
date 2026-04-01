@@ -16,6 +16,7 @@ import {
 // MarkerClusterGroup is a React wrapper around Leaflet's marker clustering plugin.
 // It groups nearby markers into clusters for readability and performance.
 import MarkerClusterGroup from "react-leaflet-cluster";
+import { getMarkerIcon } from "./markerIcons";
 
 /**
  * Build a list of fields to show in the popup.
@@ -213,14 +214,14 @@ export default function GeoMap({
           maxClusterRadius={clusterRadius}
         >
           {points.map((p) => (
-            <Marker key={p.id} position={[p.lat, p.lon]}>
+            <Marker key={p.id} position={[p.lat, p.lon]} icon={getMarkerIcon(p.row?.marker) ?? undefined}>
               {renderPointPopup(p, p.latField, p.lonField)}
             </Marker>
           ))}
         </MarkerClusterGroup>
       ) : (
         points.map((p) => (
-          <Marker key={p.id} position={[p.lat, p.lon]}>
+          <Marker key={p.id} position={[p.lat, p.lon]} icon={getMarkerIcon(p.row?.marker) ?? undefined}>
             {renderPointPopup(p, p.latField, p.lonField)}
           </Marker>
         ))

@@ -72,9 +72,44 @@ Notes:
 - Decimal comma coordinates (e.g. `59,3293`) are supported.
 - A single CSV file may contain a mix of feature types (`point`, `region`, and later `line`) as long as it uses one shared header row. Columns that do not apply to a given row may be left empty.
 - If no time column is detected, timeline filtering is disabled.
+- Optional marker column for point rows:
+  - `marker` renders custom point markers
+  - Text values (emoji or plain text) use a text marker
+  - Image values can use a filename (`castle.png`), absolute path (`/icons/castle.png`), or full URL (`https://...`)
 
 Tips:
 - For maintainability, larger datasets are typically easier to manage when split into separate files (e.g. one for points and one for regions), but mixed files are supported.
+
+### Point marker column (`marker`)
+
+Point rows can define an optional `marker` value.
+If the value is empty, the default Leaflet marker is used.
+
+Detection rules:
+- Image marker when value starts with `/`
+- Image marker when value starts with `http://` or `https://`
+- Image marker when value ends with `.png`, `.jpg`, `.jpeg`, `.svg`, `.webp`, or `.gif`
+- Otherwise the value is rendered as a text marker
+
+Image URL rules:
+- `castle.png` resolves to `/icons/castle.png`
+- `/icons/castle.png` is used as-is
+- `http://...` or `https://...` is used as-is
+
+Recommended folder for local images:
+- `public/icons/`
+
+Fallback behavior:
+- Any invalid or failing marker value falls back to the default Leaflet marker.
+- Rendering stays safe and the map still loads.
+
+Example:
+
+```csv
+featureType,lat,lon,marker,name
+point,59.3,18.0,🏰,Castle
+point,59.4,18.1,castle.png,Castle image
+```
 
 ### Regions (polygons)
 

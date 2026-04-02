@@ -82,7 +82,7 @@ Markers for point rows:
   - ends with `.png`, `.jpg`, `.jpeg`, `.svg`, `.webp`, `.gif`
 - Relative image filenames like `castle.png` resolve to `/icons/castle.png`
 - Recommended local icon folder: `/public/icons/`
-- Missing, blank, or invalid marker values fall back to the default Leaflet marker.
+- Missing, blank, or whitespace-only marker values fall back to the default Leaflet marker.
 - If a custom image fails to load, the marker falls back to the default Leaflet marker.
 
 Tips:
@@ -123,7 +123,6 @@ Example (points with featureType):
 featureType,lat,lon,title,year
 point,48.8,2.3,Some Book,1300
 ```
-
 
 Example (custom point markers):
 

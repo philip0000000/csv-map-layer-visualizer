@@ -3,10 +3,10 @@ import L from "leaflet";
 const IMAGE_EXTENSION_RE = /\.(png|jpe?g|svg|webp|gif)$/i;
 const DEFAULT_IMAGE_SIZE = [32, 32];
 const DEFAULT_IMAGE_ANCHOR = [16, 32];
-const DEFAULT_TEXT_SIZE = [32, 32];
-const DEFAULT_TEXT_ANCHOR = [16, 16];
+const DEFAULT_TEXT_ANCHOR = [0, 16];
 
 const iconCache = new Map();
+const DEFAULT_LEAFLET_ICON = new L.Icon.Default();
 
 function isImageMarkerValue(value) {
   return (
@@ -25,14 +25,18 @@ function resolveImageUrl(value) {
   return `/icons/${value}`;
 }
 
-function createTextMarkerIcon(value) {
-  const span = document.createElement("span");
-  span.textContent = value;
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
+function createTextMarkerIcon(value) {
   return L.divIcon({
     className: "csv-marker-text-icon",
-    html: span.outerHTML,
-    iconSize: DEFAULT_TEXT_SIZE,
+    html: `<span class="csv-marker-text">${escapeHtml(value)}</span>`,
+    iconSize: null,
     iconAnchor: DEFAULT_TEXT_ANCHOR,
     popupAnchor: [0, -16],
   });
@@ -48,7 +52,6 @@ function createImageMarkerIcon(value) {
     popupAnchor: [0, -32],
   });
 
-  const defaultIcon = new L.Icon.Default();
   const originalCreateIcon = icon.createIcon.bind(icon);
 
   // Fall back to default marker image if loading fails.
@@ -57,8 +60,9 @@ function createImageMarkerIcon(value) {
 
     if (img && img.tagName === "IMG") {
       img.onerror = () => {
+        img.onerror = null; // prevent loop
         try {
-          const fallback = defaultIcon.createIcon();
+          const fallback = DEFAULT_LEAFLET_ICON.createIcon();
           img.src = fallback.src;
           img.width = fallback.width || 25;
           img.height = fallback.height || 41;

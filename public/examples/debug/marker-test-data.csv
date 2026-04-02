@@ -1,0 +1,13 @@
+﻿featureType,lat,lon,marker,name,year,notes
+point,59.3293,18.0686,,Default marker (empty),2024,Blank marker should use the normal Leaflet marker
+point,59.3326,18.0649,🏰,Single emoji marker,2024,Should render as one text marker
+point,59.3275,18.0711,⭐⛪,Multi-unicode marker,2024,Should render both unicode characters together as one marker
+point,59.3375,18.0711,🧱ᚱ,Multi-unicode marker,2024,text test 2
+point,59.3475,18.0711,🪨ᚱ,Multi-unicode marker,2024,text test 3
+point,59.3475,18.0811,    ,Multi-unicode marker,2024,text test 4
+point,59.3475,18.0911,"     ",Multi-unicode marker,2024,text test 5
+point,59.3342,18.1098,Castle,Plain text marker,2024,Should render plain text instead of the default marker
+point,59.3261,18.0782,castle.png,Relative local image,2024,Should resolve to /icons/castle.png
+point,59.3314,18.0828,/icons/church.png,Absolute local image,2024,Should use /icons/church.png as-is
+point,59.3248,18.0627,missing-icon.png,Missing local image fallback,2024,Should resolve to /icons/missing-icon.png and fall back to the default marker if the image does not exist
+point,59.1475,18.0711,⭐ 🌟 ✨ ⚡ 💥 🔥 💧 🌈 ☀️ 🌙 🌍 🌎 🌏✔️ ❌ ❗ ❓ ⚠️ 🔔 🎯 🌀 ♻️ 🔒 🔓🔨 🪓 ⛏️ ⚒️ 🛠️ 🗡️ ⚔️ 🔫 🪃 🏹 🛡️🔧 🪛 🔩 ⚙️ 🗜️ ⚖️ 🦯 🔗 ⛓️ 🪝 🧰🪨 🧱 🪵 🪨 💎 🧲 🪙 ⚱️ 🏺🪑 🚪 🪟 🛏️ 🛋️ 🪞 🚽 🚿 🛁🪠 🧴 🧷 🧹 🧺 🧻 🧼 🪥 🪒🛎️ 🧯 🛒⌚ 📱 📲 💻 🖥️ 🖨️ ⌨️ 🖱️ 🖲️ 💽 💾 💿 📀📷 📸 📹 🎥 📞 ☎️ 📟 📠 📺 📻 🎙️ 🎚️ 🎛️🧭 ⏱️ ⏲️ ⏰ 🕰️🔬 🔭 🧪 🧫 🧬 🩺 💊 💉 🩹 🩼 🩻📦 📫 📪 📬 📭 📮 📯 📜 📃 📄 📑 🧾📊 📈 📉 🗒️ 🗓️ 📆 📅 🗂️ 🗃️ 🗄️✂️ 📌 📍 🖇️ 📎 🖊️ 🖋️ ✒️ 🖌️ 🖍️ 📝🎁 🎈 🎀 🎊 🎉 🧧 🪄 🔮 🧿 🪬🔑 🗝️ 🔐 🔒 🔓 🕯️ 💡 🔦 🏮💰 💴 💵 💶 💷 💸 💳 ⚰️ 🪦🗿🏔️🪦🪨,Multi-unicode marker,2024,text test 6

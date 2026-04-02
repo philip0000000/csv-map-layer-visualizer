@@ -1,4 +1,4 @@
-# csv-map-layer-visualizer
+﻿# csv-map-layer-visualizer
 
 A client side web app for visualizing CSV based geodata on an interactive world map.
 It is designed for datasets where entries represent real world things or events that happened at a place and time, and where a timeline helps explore how the data changes over years.
@@ -40,97 +40,20 @@ This project focuses on **visualizing user provided CSV rows as geographic featu
 
 ## CSV expectations
 
+The app works with CSV files that contain geographic data such as points and regions.
+
 Minimum required:
-- Two columns that represent coordinates:
-  - Latitude in `[-90..90]`
-  - Longitude in `[-180..180]`
+- latitude column
+- longitude column
 
-Feature types:
-- `featureType` column can be used to choose the geometry:
-  - `point` (default)
-  - `region`
-  - `line` (planned)
-- If the `featureType` column is missing, rows are treated as `point` for backward compatibility.
+Optional:
+- `featureType` for geometry type
+- timeline-related columns such as `year`, `date`, `yearFrom`, `yearTo`, `dateFrom`, `dateTo`
+- `marker` for custom point markers
+- region-related columns such as `featureId`, `part`, and `order`
 
-Recommended:
-- Time related columns to enable timeline filtering:
-  - Point-in-time:
-    - `year` (preferred; fastest and most predictable)
-    - `date` (supports full dates or year only values like `-2100`)
-  - Time range:
-    - `yearFrom` / `yearTo`
-    - `dateFrom` / `dateTo`
-  - Optional day-of-year:
-    - `doy`, `dayOfYear`
-
-Notes:
-- Years may be negative (BCE) and are supported in the range -10000 to 10000.
-- A `date` value that contains only a year (example: `-2100`) is interpreted as January 1 of that year (UTC).
-- When both `year` and `date` exist, `year` is used for timeline filtering.
-- ISO date formats (`YYYY-MM-DD`) are recommended for best compatibility.
-- CSV parsing is intentionally tolerant. Bad rows may be skipped and warnings surfaced in the UI.
-- Decimal comma coordinates (e.g. `59,3293`) are supported.
-- A single CSV file may contain a mix of feature types (`point`, `region`, and later `line`) as long as it uses one shared header row. Columns that do not apply to a given row may be left empty.
-- If no time column is detected, timeline filtering is disabled.
-
-Markers for point rows:
-- Optional `marker` column customizes point markers.
-- Text marker examples: `🏰`, `⭐⛪`, `A`, `Castle`
-- Image marker is used when value:
-  - starts with `/`
-  - starts with `http://` or `https://`
-  - ends with `.png`, `.jpg`, `.jpeg`, `.svg`, `.webp`, `.gif`
-- Relative image filenames like `castle.png` resolve to `/icons/castle.png`
-- Recommended local icon folder: `/public/icons/`
-- Missing, blank, or whitespace-only marker values fall back to the default Leaflet marker.
-- If a custom image fails to load, the marker falls back to the default Leaflet marker.
-
-Tips:
-- For maintainability, larger datasets are typically easier to manage when split into separate files (e.g. one for points and one for regions), but mixed files are supported.
-
-### Regions (polygons)
-
-Regions may represent borders, zones, or areas of influence (e.g. political, cultural, linguistic).
-Each vertex is one row. Rows with `featureType=region` are grouped by `featureId`,
-and optionally `part` for multi-part regions. The vertex order uses the `order` column
-if present (otherwise file order is used). Rings are auto-closed if needed.
-
-Required columns (for region rows):
-- `featureType` = `region`
-- `featureId` = logical region id
-- `order` = vertex order (number; optional but recommended)
-- latitude + longitude columns
-
-Optional columns:
-- `part` = sub-part id for multi-part regions (defaults to `0`)
-- `name` = display name
-- Style columns (first non-empty per part):
-  - `color`, `weight`, `opacity`, `fillColor`, `fillOpacity`
-
-Example (multi-part region):
-
-```csv
-featureType,featureId,part,order,lat,lon,name,color,fillOpacity
-region,russia,main,1,55.7,37.6,Russia,#ff0000,0.15
-region,russia,main,2,56.2,38.1,Russia,#ff0000,0.15
-region,russia,kaliningrad,1,54.7,20.5,Russia,#ff0000,0.15
-region,russia,kaliningrad,2,54.8,21.2,Russia,#ff0000,0.15
-```
-
-Example (points with featureType):
-
-```csv
-featureType,lat,lon,title,year
-point,48.8,2.3,Some Book,1300
-```
-
-Example (custom point markers):
-
-```csv
-featureType,lat,lon,marker,name
-point,59.3,18.0,🏰,Castle
-point,59.4,18.1,castle.png,Castle image
-```
+For full format details, supported columns, notes, and examples, see:
+- [CSV format documentation](docs/csv-format.md)
 
 ## Getting started (development)
 

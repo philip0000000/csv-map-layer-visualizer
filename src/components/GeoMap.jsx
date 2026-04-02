@@ -17,6 +17,8 @@ import {
 // It groups nearby markers into clusters for readability and performance.
 import MarkerClusterGroup from "react-leaflet-cluster";
 
+import { getMarkerIcon } from "./markerIcons";
+
 /**
  * Build a list of fields to show in the popup.
  *
@@ -212,18 +214,34 @@ export default function GeoMap({
           chunkedLoading
           maxClusterRadius={clusterRadius}
         >
-          {points.map((p) => (
-            <Marker key={p.id} position={[p.lat, p.lon]}>
-              {renderPointPopup(p, p.latField, p.lonField)}
-            </Marker>
-          ))}
+          {points.map((p) => {
+            const icon = getMarkerIcon(p.marker);
+
+            return (
+              <Marker
+                key={p.id}
+                position={[p.lat, p.lon]}
+                {...(icon ? { icon } : {})}
+              >
+                {renderPointPopup(p, p.latField, p.lonField)}
+              </Marker>
+            );
+          })}
         </MarkerClusterGroup>
       ) : (
-        points.map((p) => (
-          <Marker key={p.id} position={[p.lat, p.lon]}>
-            {renderPointPopup(p, p.latField, p.lonField)}
-          </Marker>
-        ))
+        points.map((p) => {
+          const icon = getMarkerIcon(p.marker);
+
+          return (
+            <Marker
+              key={p.id}
+              position={[p.lat, p.lon]}
+              {...(icon ? { icon } : {})}
+            >
+              {renderPointPopup(p, p.latField, p.lonField)}
+            </Marker>
+          );
+        })
       )}
 
       {regions.map((region) => (

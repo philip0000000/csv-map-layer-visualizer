@@ -18,4 +18,20 @@ body {
   overflow: hidden; /* critical for split panes */
 }
 
+/* Style for text-based map markers (emoji or text) */
+.csv-marker-text {
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
+  width: max-content;
+  min-width: 32px;
+  height: 32px;
+  white-space: nowrap;
+  padding: 0 4px;
+
+  /* Shift marker left by half its width to keep it centered on map point */
+  transform: translateX(-50%);
+}

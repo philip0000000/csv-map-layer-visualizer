@@ -73,6 +73,18 @@ Notes:
 - A single CSV file may contain a mix of feature types (`point`, `region`, and later `line`) as long as it uses one shared header row. Columns that do not apply to a given row may be left empty.
 - If no time column is detected, timeline filtering is disabled.
 
+Markers for point rows:
+- Optional `marker` column customizes point markers.
+- Text marker examples: `🏰`, `⭐⛪`, `A`, `Castle`
+- Image marker is used when value:
+  - starts with `/`
+  - starts with `http://` or `https://`
+  - ends with `.png`, `.jpg`, `.jpeg`, `.svg`, `.webp`, `.gif`
+- Relative image filenames like `castle.png` resolve to `/icons/castle.png`
+- Recommended local icon folder: `/public/icons/`
+- Missing, blank, or whitespace-only marker values fall back to the default Leaflet marker.
+- If a custom image fails to load, the marker falls back to the default Leaflet marker.
+
 Tips:
 - For maintainability, larger datasets are typically easier to manage when split into separate files (e.g. one for points and one for regions), but mixed files are supported.
 
@@ -110,6 +122,14 @@ Example (points with featureType):
 ```csv
 featureType,lat,lon,title,year
 point,48.8,2.3,Some Book,1300
+```
+
+Example (custom point markers):
+
+```csv
+featureType,lat,lon,marker,name
+point,59.3,18.0,🏰,Castle
+point,59.4,18.1,castle.png,Castle image
 ```
 
 ## Getting started (development)

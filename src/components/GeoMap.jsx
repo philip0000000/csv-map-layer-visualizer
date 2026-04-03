@@ -29,7 +29,7 @@ import { getMarkerIcon } from "./markerIcons";
  * Latitude and longitude fields are skipped,
  * because they are already shown at the top.
  */
-function buildPopupFields(row, latField, lonField, limit = 8) {
+function buildPopupFields(row, latField, lonField, limit = 30) {
   if (!row || typeof row !== "object") return [];
 
   // Get all column names except lat/lon

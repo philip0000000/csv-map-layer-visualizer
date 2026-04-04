@@ -7,7 +7,7 @@ function normalizeKey(h) {
     .replace(/\d+$/g, "");
 }
 
-const YEAR_SYNONYMS = ["year", "yyyy", "yr", "ar", "år"]; // keep simple
+const YEAR_SYNONYMS = ["year", "yyyy", "yr", "år"]; // keep simple
 const DATE_SYNONYMS = ["date", "datetime", "timestamp", "time", "created", "createdat"];
 const DOY_SYNONYMS = ["dayofyear", "doy", "yearday"];
 

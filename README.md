@@ -25,6 +25,10 @@ public/examples/
 
 `books.csv` is a small example dataset of book-related locations used for demonstration.
 
+## Data sources
+
+Some example datasets (e.g. medieval Swedish cities) are derived from Wikipedia and are licensed under CC BY-SA 4.0.
+
 ## What it does
 
 - Import **one or more CSV files** in the browser

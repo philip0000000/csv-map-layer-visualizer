@@ -8,6 +8,7 @@
     "debug/weird_extra_columns.csv",
     "present-day/books.csv",
     "present-day/filtered_places_pop_ge_9000_filtered_output.csv",
-    "medieval/runes.csv"
+    "medieval/runes.csv",
+    "medieval/swedish_cities.csv"
   ]
 }

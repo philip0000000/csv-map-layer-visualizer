@@ -7,6 +7,7 @@ import {
   MapContainer,
   LayersControl,
   TileLayer,
+  LayerGroup,
   Marker,
   Polygon,
   Popup,
@@ -125,6 +126,8 @@ const TILESETS = {
   },
 };
 
+const BLANK_BASE_LAYER_NAME = "Blank background";
+
 export default function GeoMap({
   points = [],
   regions = [],
@@ -147,11 +150,11 @@ export default function GeoMap({
       // Initial zoom level.
       // Lower value = more zoomed out.
       zoom={5}
-
-      // Make the map fill its parent container.
-      style={{ height: "100%", width: "100%" }}
-
-      // Disable default top-left zoom (it is in conflict with the CvsPanel).
+      style={{
+        height: "100%",
+        width: "100%",
+        backgroundColor: "#ffffff",
+      }}
       zoomControl={false}
     >
       {/* Zoom controls moved away from the CSV overlay */}
@@ -159,10 +162,15 @@ export default function GeoMap({
 
       {/*
         Leaflet built-in "layers" control:
-        - Base layers (radio buttons) for Normal vs Satellite.
+        - Base layers (radio buttons) for Blank, Normal, or Satellite.
         - Overlay (checkbox) for labels/boundaries on top of either base layer.
       */}
       <LayersControl position="topright" collapsed={true}>
+        {/* Base layer: blank white canvas with no tiles */}
+        <BaseLayer name={BLANK_BASE_LAYER_NAME}>
+          <LayerGroup />
+        </BaseLayer>
+
         {/* Base layer: Normal map (default checked) */}
         <BaseLayer checked name={TILESETS.osm.name}>
           <TileLayer

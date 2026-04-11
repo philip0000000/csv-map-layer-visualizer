@@ -9,6 +9,7 @@ import {
   TileLayer,
   LayerGroup,
   Marker,
+  ImageOverlay,
   Polygon,
   Popup,
   ZoomControl,
@@ -138,6 +139,8 @@ export default function GeoMap({
   clusterRadius = 80,   // default strength
 }) {
   const { BaseLayer, Overlay } = LayersControl;
+  const markerPoints = points.filter((p) => !p.image);
+  const imagePoints = points.filter((p) => !!p.image);
 
   return (
     // MapContainer must have a fixed height and width.
@@ -222,7 +225,7 @@ export default function GeoMap({
           chunkedLoading
           maxClusterRadius={clusterRadius}
         >
-          {points.map((p) => {
+          {markerPoints.map((p) => {
             const icon = getMarkerIcon(p.marker);
 
             return (
@@ -237,7 +240,7 @@ export default function GeoMap({
           })}
         </MarkerClusterGroup>
       ) : (
-        points.map((p) => {
+        markerPoints.map((p) => {
           const icon = getMarkerIcon(p.marker);
 
           return (
@@ -252,6 +255,17 @@ export default function GeoMap({
         })
       )}
 
+      {imagePoints.map((p) => (
+        <ImageOverlay
+          key={`image:${p.id}`}
+          url={p.image}
+          bounds={buildPointImageBounds(p)}
+          interactive
+        >
+          {renderPointPopup(p, p.latField, p.lonField)}
+        </ImageOverlay>
+      ))}
+
       {regions.map((region) => (
         <Polygon
           key={region.id}
@@ -263,4 +277,23 @@ export default function GeoMap({
       ))}
     </MapContainer>
   );
+}
+
+function buildPointImageBounds(point) {
+  // Build bounds from point and size.
+  const latMeters = 111320;
+  const lonMeters = 111320 * Math.max(Math.cos((point.lat * Math.PI) / 180), 0.000001);
+
+  const halfWidthDegrees = (point.imageWidthMeters / 2) / lonMeters;
+  const heightDegrees = point.imageHeightMeters / latMeters;
+
+  const south = point.lat;
+  const north = point.lat + heightDegrees;
+  const west = point.lon - halfWidthDegrees;
+  const east = point.lon + halfWidthDegrees;
+
+  return [
+    [south, west],
+    [north, east],
+  ];
 }

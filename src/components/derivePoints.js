@@ -83,6 +83,8 @@ export function derivePointsFromCsv({
       id: stableId, // TODO: make stable
       lat,
       lon,
+      latField,
+      lonField,
       marker: r?.marker,
       image: resolvePointImage(r?.image),
       imageWidthMeters: parseImageSizeMeters(r?.imageWidthMeters),

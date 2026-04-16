@@ -1,0 +1,10 @@
+﻿featureType,lat,lon,name,marker,image,imageWidthMeters,imageHeightMeters,year,description
+point,59.3320,18.0700,Harbor Ship,🚢,/point-images/ship.png,600,220,1720,Absolute path image
+point,59.3285,18.0720,Old Tree,🌳,https://upload.wikimedia.org/wikipedia/commons/thumb/7/71/Tibur%C3%B3n_azul_%28Prionace_glauca%29%2C_canal_Fayal-Pico%2C_islas_Azores%2C_Portugal%2C_2020-07-27%2C_DD_14.jpg/1920px-Tibur%C3%B3n_azul_%28Prionace_glauca%29%2C_canal_Fayal-Pico%2C_islas_Azores%2C_Portugal%2C_2020-07-27%2C_DD_14.jpg,300,300,1800,Full URL image
+point,59.3303,18.0686,Stockholm Castle,🏰,castle.png,400,250,1650,Filename image -> should resolve to /point-images/castle.png
+point,59.3350,18.0600,Default Size Image,⭐,/point-images/tower.png,,,1850,Missing size -> defaults 100m x 100m
+point,59.3380,18.0750,Clamped Small,📍,/point-images/ship.png,0,0,1900,Invalid small size -> clamp to min 1
+point,59.3250,18.0900,Image Wins Over Marker,THIS_SHOULD_BE_IGNORED,/point-images/cabin.jpg,350,180,2000,image present -> marker ignored
+point,59.3400,18.0500,Normal Marker Only,🧭,,120,120,2010,no image -> regular marker behavior
+point,59.3450,18.0400,Blank Image Falls Back Marker,📌,   ,500,300,2020,blank image -> regular marker behavior
+point,5.3450,18.0400,Clamped Large,📍,/point-images/castle.png,999999,500000,1950,Invalid large size -> clamp to max 100000

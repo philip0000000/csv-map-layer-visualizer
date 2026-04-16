@@ -2,6 +2,10 @@ import { isValidLat, isValidLon, parseFlexibleFloat } from "./geoColumns";
 import { parseDateValue, parseYearValue, tryGetYear, tryParseDayOfYear } from "./timeline";
 import { getRowFeatureType } from "./featureTypes";
 
+const DEFAULT_IMAGE_SIZE_METERS = 100;
+const MIN_IMAGE_SIZE_METERS = 1;
+const MAX_IMAGE_SIZE_METERS = 100000;
+
 /**
  * Derive point features from CSV rows using chosen lat/lon fields.
  * Supports both point-in-time and time-range timeline filtering.
@@ -79,12 +83,37 @@ export function derivePointsFromCsv({
       id: stableId, // TODO: make stable
       lat,
       lon,
+      latField,
+      lonField,
       marker: r?.marker,
+      image: resolvePointImage(r?.image),
+      imageWidthMeters: parseImageSizeMeters(r?.imageWidthMeters),
+      imageHeightMeters: parseImageSizeMeters(r?.imageHeightMeters),
       row: r,
     });
   }
 
   return { points, skipped, skippedByTimeline, reason: null };
+}
+
+function resolvePointImage(value) {
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("/") || /^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `/point-images/${trimmed}`;
+}
+
+function parseImageSizeMeters(value) {
+  const parsed = parseFlexibleFloat(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_IMAGE_SIZE_METERS;
+
+  return Math.min(MAX_IMAGE_SIZE_METERS, Math.max(MIN_IMAGE_SIZE_METERS, parsed));
 }
 
 function isPointVisibleForTimeline({
@@ -158,4 +187,3 @@ function getRangeYear(row, yearField, dateField) {
 
   return null;
 }
-

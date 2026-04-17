@@ -11,6 +11,7 @@ import {
   Marker,
   ImageOverlay,
   Polygon,
+  Polyline,
   Popup,
   ZoomControl,
 } from "react-leaflet";
@@ -18,6 +19,7 @@ import {
 // MarkerClusterGroup is a React wrapper around Leaflet's marker clustering plugin.
 // It groups nearby markers into clusters for readability and performance.
 import MarkerClusterGroup from "react-leaflet-cluster";
+import L from "leaflet";
 
 import { getMarkerIcon } from "./markerIcons";
 
@@ -92,6 +94,25 @@ function renderRegionPopup(region, latField, lonField) {
   );
 }
 
+
+function renderLinePopup(line, latField, lonField) {
+  const title = String(line?.row?.name ?? line?.featureId ?? "Line");
+
+  return (
+    <Popup>
+      <div style={{ minWidth: 220 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+
+        {buildPopupFields(line.row, latField, lonField).map(([k, v]) => (
+          <div key={k} style={{ marginBottom: 4 }}>
+            <b>{k}:</b> {String(v ?? "")}
+          </div>
+        ))}
+      </div>
+    </Popup>
+  );
+}
+
 /**
  * Map tile providers.
  * We expose:
@@ -132,6 +153,7 @@ const BLANK_BASE_LAYER_NAME = "Blank background";
 export default function GeoMap({
   points = [],
   regions = [],
+  lines = [],
 
   // When true, nearby markers are grouped into clusters (visual-only feature).
   // When false, markers are rendered normally (current behavior).
@@ -275,8 +297,91 @@ export default function GeoMap({
           {renderRegionPopup(region, region.latField, region.lonField)}
         </Polygon>
       ))}
+
+      {lines.map((line) => (
+        <LayerGroup key={line.id}>
+          <Polyline positions={line.coordinates} pathOptions={line.style}>
+            {renderLinePopup(line, line.latField, line.lonField)}
+          </Polyline>
+
+          {buildLineArrowMarkers(line).map((arrowMarker) => (
+            <Marker
+              key={arrowMarker.id}
+              position={arrowMarker.position}
+              icon={arrowMarker.icon}
+              interactive={false}
+              keyboard={false}
+            />
+          ))}
+        </LayerGroup>
+      ))}
     </MapContainer>
   );
+}
+
+
+function buildLineArrowMarkers(line) {
+  const mode = String(line?.arrow ?? "none").toLowerCase();
+  if (mode === "none") return [];
+
+  const coords = Array.isArray(line?.coordinates) ? line.coordinates : [];
+  if (coords.length < 2) return [];
+
+  const color = line?.style?.color ?? "#3388ff";
+  const weight = Number.isFinite(line?.style?.weight) ? line.style.weight : 3;
+
+  const markers = [];
+
+  if (mode === "start" || mode === "both") {
+    const start = coords[0];
+    const toward = coords[1];
+    markers.push({
+      id: `${line.id}:start`,
+      position: start,
+      icon: buildArrowIcon(getHeadingDegrees(start, toward), color, weight),
+    });
+  }
+
+  if (mode === "end" || mode === "both") {
+    const end = coords[coords.length - 1];
+    const beforeEnd = coords[coords.length - 2];
+    markers.push({
+      id: `${line.id}:end`,
+      position: end,
+      icon: buildArrowIcon(getHeadingDegrees(beforeEnd, end), color, weight),
+    });
+  }
+
+  return markers;
+}
+
+function getHeadingDegrees(from, to) {
+  const lat1 = (from[0] * Math.PI) / 180;
+  const lon1 = (from[1] * Math.PI) / 180;
+  const lat2 = (to[0] * Math.PI) / 180;
+  const lon2 = (to[1] * Math.PI) / 180;
+
+  const dLon = lon2 - lon1;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
+  return (bearing + 360) % 360;
+}
+
+function buildArrowIcon(angleDeg, color, weight) {
+  const safeWeight = Math.max(1, Math.min(20, Number(weight) || 3));
+  const size = Math.round(8 + safeWeight * 1.2);
+  const half = Math.round(size / 2);
+
+  return L.divIcon({
+    className: "lineArrowIcon",
+    iconSize: [size, size],
+    iconAnchor: [half, half],
+    html: `<div style="width:0;height:0;border-top:${half}px solid transparent;border-bottom:${half}px solid transparent;border-left:${size}px solid ${color};transform:rotate(${angleDeg}deg);transform-origin:0 50%;"></div>`,
+  });
 }
 
 function buildPointImageBounds(point) {

@@ -14,6 +14,7 @@ import {
 } from "./components/timeline";
 import { useMapToolsState } from "./components/useMapToolsState";
 import { deriveRegionsFromCsv } from "./components/deriveRegions";
+import { deriveLinesFromCsv } from "./components/deriveLines";
 import { detectFeatureTypeField } from "./components/featureTypes";
 import { useTimelinePlayback } from "./components/useTimelinePlayback";
 
@@ -229,6 +230,39 @@ export default function App() {
     return merged;
   }, [enabledFiles, timelineApi.state]);
 
+  const derivedLines = useMemo(() => {
+    const merged = { lines: [], skipped: 0, skippedByTimeline: 0 };
+
+    for (const file of enabledFiles) {
+      const fileTimelineFields = autoDetectTimelineFields(file.headers ?? []);
+      const fileRangeFields = autoDetectRangeFields(file.headers ?? []);
+      const fileFeatureTypeField = detectFeatureTypeField(file.headers ?? []);
+
+      const result = deriveLinesFromCsv({
+        rows: file.rows,
+        latField: file.latField,
+        lonField: file.lonField,
+        timeline: timelineApi.state,
+        timelineFields: fileTimelineFields,
+        rangeFields: fileRangeFields,
+        featureTypeField: fileFeatureTypeField,
+        idPrefix: file.id,
+      });
+
+      merged.lines.push(
+        ...result.lines.map((line) => ({
+          ...line,
+          latField: file.latField,
+          lonField: file.lonField,
+        }))
+      );
+      merged.skipped += result.skipped;
+      merged.skippedByTimeline += result.skippedByTimeline;
+    }
+
+    return merged;
+  }, [enabledFiles, timelineApi.state]);
+
   const derivedRegions = useMemo(() => {
     const merged = { polygons: [], skipped: 0, skippedByTimeline: 0 };
 
@@ -425,6 +459,7 @@ export default function App() {
         <GeoMap
           points={derivedPoints.points}
           regions={derivedRegions.polygons}
+          lines={derivedLines.lines}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
           clusterRadius={mapToolsApi.state.clusterRadius}
         />
@@ -468,7 +503,8 @@ export default function App() {
               timelineStats={{
                 skippedByTimeline:
                   (derivedPoints.skippedByTimeline ?? 0) +
-                  (derivedRegions.skippedByTimeline ?? 0),
+                  (derivedRegions.skippedByTimeline ?? 0) +
+                  (derivedLines.skippedByTimeline ?? 0),
               }}
               mapToolsState={mapToolsApi.state}
               onMapToolsPatch={mapToolsApi.patch}

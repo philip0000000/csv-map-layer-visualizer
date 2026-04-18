@@ -22,6 +22,7 @@ import {
 // It groups nearby markers into clusters for readability and performance.
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
+import "leaflet-polylinedecorator";
 
 import { getMarkerIcon } from "./markerIcons";
 
@@ -131,7 +132,10 @@ function LineArrowDecorator({ line }) {
 
     const color = line?.style?.color ?? "#3388ff";
     const weight = Number.isFinite(line?.style?.weight) ? line.style.weight : 3;
-    const pixelSize = Math.max(6, Math.min(18, Math.round(weight * 2)));
+    const pixelSize = Math.max(
+      6,
+      Math.min(18, Math.round(weight * 2 * 1.4))
+    );
     const patterns = [];
 
     if (mode === "start" || mode === "both") {
@@ -140,7 +144,13 @@ function LineArrowDecorator({ line }) {
         repeat: 0,
         symbol: L.Symbol.arrowHead({
           pixelSize,
-          pathOptions: { color, weight: 1, fillOpacity: 1, fillColor: color },
+          polygon: true,
+          pathOptions: {
+            color,
+            weight: 1,
+            fillOpacity: 1,
+            fillColor: color,
+          },
         }),
       });
     }
@@ -151,7 +161,13 @@ function LineArrowDecorator({ line }) {
         repeat: 0,
         symbol: L.Symbol.arrowHead({
           pixelSize,
-          pathOptions: { color, weight: 1, fillOpacity: 1, fillColor: color },
+          polygon: true,
+          pathOptions: {
+            color,
+            weight: 1,
+            fillOpacity: 1,
+            fillColor: color,
+          },
         }),
       });
     }
@@ -164,7 +180,13 @@ function LineArrowDecorator({ line }) {
     return () => {
       map.removeLayer(decorator);
     };
-  }, [line, map]);
+  }, [
+    map,
+    line?.arrow,
+    line?.coordinates,
+    line?.style?.color,
+    line?.style?.weight,
+  ]);
 
   return null;
 }

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 // Import core components from react-leaflet.
 // MapContainer is the main map wrapper.
 // TileLayer is used to load map tiles (images).
@@ -14,6 +15,7 @@ import {
   Polyline,
   Popup,
   ZoomControl,
+  useMap,
 } from "react-leaflet";
 
 // MarkerClusterGroup is a React wrapper around Leaflet's marker clustering plugin.
@@ -111,6 +113,60 @@ function renderLinePopup(line, latField, lonField) {
       </div>
     </Popup>
   );
+}
+
+function LineArrowDecorator({ line }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const mode = String(line?.arrow ?? "none").toLowerCase();
+    if (mode === "none") return undefined;
+
+    const coords = Array.isArray(line?.coordinates) ? line.coordinates : [];
+    if (coords.length < 2) return undefined;
+
+    if (typeof L.polylineDecorator !== "function" || !L.Symbol?.arrowHead) {
+      return undefined;
+    }
+
+    const color = line?.style?.color ?? "#3388ff";
+    const weight = Number.isFinite(line?.style?.weight) ? line.style.weight : 3;
+    const pixelSize = Math.max(6, Math.min(18, Math.round(weight * 2)));
+    const patterns = [];
+
+    if (mode === "start" || mode === "both") {
+      patterns.push({
+        offset: "0%",
+        repeat: 0,
+        symbol: L.Symbol.arrowHead({
+          pixelSize,
+          pathOptions: { color, weight: 1, fillOpacity: 1, fillColor: color },
+        }),
+      });
+    }
+
+    if (mode === "end" || mode === "both") {
+      patterns.push({
+        offset: "100%",
+        repeat: 0,
+        symbol: L.Symbol.arrowHead({
+          pixelSize,
+          pathOptions: { color, weight: 1, fillOpacity: 1, fillColor: color },
+        }),
+      });
+    }
+
+    if (patterns.length === 0) return undefined;
+
+    const decorator = L.polylineDecorator(coords, { patterns });
+    decorator.addTo(map);
+
+    return () => {
+      map.removeLayer(decorator);
+    };
+  }, [line, map]);
+
+  return null;
 }
 
 /**
@@ -303,85 +359,11 @@ export default function GeoMap({
           <Polyline positions={line.coordinates} pathOptions={line.style}>
             {renderLinePopup(line, line.latField, line.lonField)}
           </Polyline>
-
-          {buildLineArrowMarkers(line).map((arrowMarker) => (
-            <Marker
-              key={arrowMarker.id}
-              position={arrowMarker.position}
-              icon={arrowMarker.icon}
-              interactive={false}
-              keyboard={false}
-            />
-          ))}
+          <LineArrowDecorator line={line} />
         </LayerGroup>
       ))}
     </MapContainer>
   );
-}
-
-
-function buildLineArrowMarkers(line) {
-  const mode = String(line?.arrow ?? "none").toLowerCase();
-  if (mode === "none") return [];
-
-  const coords = Array.isArray(line?.coordinates) ? line.coordinates : [];
-  if (coords.length < 2) return [];
-
-  const color = line?.style?.color ?? "#3388ff";
-  const weight = Number.isFinite(line?.style?.weight) ? line.style.weight : 3;
-
-  const markers = [];
-
-  if (mode === "start" || mode === "both") {
-    const start = coords[0];
-    const toward = coords[1];
-    markers.push({
-      id: `${line.id}:start`,
-      position: start,
-      icon: buildArrowIcon(getHeadingDegrees(start, toward), color, weight),
-    });
-  }
-
-  if (mode === "end" || mode === "both") {
-    const end = coords[coords.length - 1];
-    const beforeEnd = coords[coords.length - 2];
-    markers.push({
-      id: `${line.id}:end`,
-      position: end,
-      icon: buildArrowIcon(getHeadingDegrees(beforeEnd, end), color, weight),
-    });
-  }
-
-  return markers;
-}
-
-function getHeadingDegrees(from, to) {
-  const lat1 = (from[0] * Math.PI) / 180;
-  const lon1 = (from[1] * Math.PI) / 180;
-  const lat2 = (to[0] * Math.PI) / 180;
-  const lon2 = (to[1] * Math.PI) / 180;
-
-  const dLon = lon2 - lon1;
-  const y = Math.sin(dLon) * Math.cos(lat2);
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-
-  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
-  return (bearing + 360) % 360;
-}
-
-function buildArrowIcon(angleDeg, color, weight) {
-  const safeWeight = Math.max(1, Math.min(20, Number(weight) || 3));
-  const size = Math.round(8 + safeWeight * 1.2);
-  const half = Math.round(size / 2);
-
-  return L.divIcon({
-    className: "lineArrowIcon",
-    iconSize: [size, size],
-    iconAnchor: [half, half],
-    html: `<div style="width:0;height:0;border-top:${half}px solid transparent;border-bottom:${half}px solid transparent;border-left:${size}px solid ${color};transform:rotate(${angleDeg}deg);transform-origin:0 50%;"></div>`,
-  });
 }
 
 function buildPointImageBounds(point) {

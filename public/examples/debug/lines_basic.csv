@@ -1,0 +1,7 @@
+featureType,featureId,order,lat,lon,name,description,color,weight,arrow,year
+line,routeA,1,59.33,18.06,Trade route,Route with end arrow,#ff0000,4,end,1200
+line,routeA,2,59.40,18.20,Trade route,Route with end arrow,#ff0000,4,end,1200
+line,routeA,3,59.52,18.45,Trade route,Route with end arrow,#ff0000,4,end,1200
+line,routeB,1,59.20,18.10,Migration path,Route with arrows on both ends,#1f8f4f,3,both,1300
+line,routeB,2,59.15,18.35,Migration path,Route with arrows on both ends,#1f8f4f,3,both,1300
+line,routeB,3,59.05,18.55,Migration path,Route with arrows on both ends,#1f8f4f,3,both,1300

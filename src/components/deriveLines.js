@@ -10,7 +10,6 @@ import { getRowFeatureType } from "./featureTypes";
 const DEFAULT_LINE_STYLE = {
   color: "#3388ff",
   weight: 3,
-  opacity: 1,
 };
 
 const MIN_WEIGHT = 1;
@@ -140,6 +139,7 @@ export function deriveLinesFromCsv({
       coordinates,
       style,
       arrow,
+      // Use first sorted row for popup metadata.
       row: sorted[0]?.row ?? null,
     });
   }
@@ -159,16 +159,17 @@ function getOrderKey(item) {
 function resolveLineStyle(rows) {
   const style = {};
 
+  // First non-empty style value wins for the full line.
   for (const { row } of rows) {
     applyFirstNonEmpty(style, "color", row?.color, parseColor);
     applyFirstNonEmpty(style, "weight", row?.weight, parseWeight);
-    applyFirstNonEmpty(style, "opacity", row?.opacity, parseNumberInRange01);
   }
 
   return { ...DEFAULT_LINE_STYLE, ...style };
 }
 
 function resolveArrowMode(rows) {
+  // First valid arrow value wins for the full line.
   for (const { row } of rows) {
     const raw = String(row?.arrow ?? "").trim().toLowerCase();
     if (!raw) continue;
@@ -194,14 +195,7 @@ function parseWeight(value) {
   const n = Number.parseFloat(String(value ?? "").trim());
   if (!Number.isFinite(n)) return null;
 
-  return Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, n));
-}
-
-function parseNumberInRange01(value) {
-  const n = Number.parseFloat(String(value ?? "").trim());
-  if (!Number.isFinite(n)) return null;
-
-  return Math.min(1, Math.max(0, n));
+  return Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, Math.round(n)));
 }
 
 function parseColor(value) {

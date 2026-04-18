@@ -2,6 +2,7 @@
   "files": [
     "debug/areas_geojson_like.csv",
     "debug/inconsistent_columns.csv",
+    "debug/lines_basic.csv",
     "debug/missing_values_and_blank_lines.csv",
     "debug/points_basic.csv",
     "debug/points_reordered_headers.csv",

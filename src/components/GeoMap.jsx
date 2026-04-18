@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 // Import core components from react-leaflet.
 // MapContainer is the main map wrapper.
 // TileLayer is used to load map tiles (images).
@@ -11,13 +12,17 @@ import {
   Marker,
   ImageOverlay,
   Polygon,
+  Polyline,
   Popup,
   ZoomControl,
+  useMap,
 } from "react-leaflet";
 
 // MarkerClusterGroup is a React wrapper around Leaflet's marker clustering plugin.
 // It groups nearby markers into clusters for readability and performance.
 import MarkerClusterGroup from "react-leaflet-cluster";
+import L from "leaflet";
+import "leaflet-polylinedecorator";
 
 import { getMarkerIcon } from "./markerIcons";
 
@@ -92,6 +97,100 @@ function renderRegionPopup(region, latField, lonField) {
   );
 }
 
+
+function renderLinePopup(line, latField, lonField) {
+  const title = String(line?.row?.name ?? line?.featureId ?? "Line");
+
+  return (
+    <Popup>
+      <div style={{ minWidth: 220 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+
+        {buildPopupFields(line.row, latField, lonField).map(([k, v]) => (
+          <div key={k} style={{ marginBottom: 4 }}>
+            <b>{k}:</b> {String(v ?? "")}
+          </div>
+        ))}
+      </div>
+    </Popup>
+  );
+}
+
+function LineArrowDecorator({ line }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const mode = String(line?.arrow ?? "none").toLowerCase();
+    if (mode === "none") return undefined;
+
+    const coords = Array.isArray(line?.coordinates) ? line.coordinates : [];
+    if (coords.length < 2) return undefined;
+
+    if (typeof L.polylineDecorator !== "function" || !L.Symbol?.arrowHead) {
+      return undefined;
+    }
+
+    const color = line?.style?.color ?? "#3388ff";
+    const weight = Number.isFinite(line?.style?.weight) ? line.style.weight : 3;
+    const pixelSize = Math.max(
+      6,
+      Math.min(18, Math.round(weight * 2 * 1.4))
+    );
+    const patterns = [];
+
+    if (mode === "start" || mode === "both") {
+      patterns.push({
+        offset: "0%",
+        repeat: 0,
+        symbol: L.Symbol.arrowHead({
+          pixelSize,
+          polygon: true,
+          pathOptions: {
+            color,
+            weight: 1,
+            fillOpacity: 1,
+            fillColor: color,
+          },
+        }),
+      });
+    }
+
+    if (mode === "end" || mode === "both") {
+      patterns.push({
+        offset: "100%",
+        repeat: 0,
+        symbol: L.Symbol.arrowHead({
+          pixelSize,
+          polygon: true,
+          pathOptions: {
+            color,
+            weight: 1,
+            fillOpacity: 1,
+            fillColor: color,
+          },
+        }),
+      });
+    }
+
+    if (patterns.length === 0) return undefined;
+
+    const decorator = L.polylineDecorator(coords, { patterns });
+    decorator.addTo(map);
+
+    return () => {
+      map.removeLayer(decorator);
+    };
+  }, [
+    map,
+    line?.arrow,
+    line?.coordinates,
+    line?.style?.color,
+    line?.style?.weight,
+  ]);
+
+  return null;
+}
+
 /**
  * Map tile providers.
  * We expose:
@@ -132,6 +231,7 @@ const BLANK_BASE_LAYER_NAME = "Blank background";
 export default function GeoMap({
   points = [],
   regions = [],
+  lines = [],
 
   // When true, nearby markers are grouped into clusters (visual-only feature).
   // When false, markers are rendered normally (current behavior).
@@ -274,6 +374,15 @@ export default function GeoMap({
         >
           {renderRegionPopup(region, region.latField, region.lonField)}
         </Polygon>
+      ))}
+
+      {lines.map((line) => (
+        <LayerGroup key={line.id}>
+          <Polyline positions={line.coordinates} pathOptions={line.style}>
+            {renderLinePopup(line, line.latField, line.lonField)}
+          </Polyline>
+          <LineArrowDecorator line={line} />
+        </LayerGroup>
       ))}
     </MapContainer>
   );

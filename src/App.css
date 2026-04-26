@@ -63,6 +63,7 @@
   top: 50%;
   right: 0;
   transform: translate(50%, -50%);
+  z-index: 2;
 
   width: 34px;
   height: 64px;
@@ -100,6 +101,7 @@
   top: 0;
   right: 0;
   bottom: 0;
+  z-index: 1;
 
   width: 6px;
   cursor: col-resize;
@@ -326,12 +328,14 @@ button.csvBtnPrimary.csvImportButton {
 .csvTableWrap {
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.10);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: rgba(2, 6, 23, 0.35);
 }
 
 .csvTable {
-  width: 100%;
+  min-width: 100%;
+  width: max-content;
   border-collapse: collapse;
   font-size: 12px;
 }
@@ -342,18 +346,17 @@ button.csvBtnPrimary.csvImportButton {
   background: rgba(255, 255, 255, 0.05);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 180px;
 }
 
 .csvTable tbody td {
   padding: 7px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 180px;
+}
+
+.csvPreviewMoreButton {
+  width: 100%;
+  margin-top: 8px;
 }
 
 .csvEmptyPreview {
@@ -362,7 +365,7 @@ button.csvBtnPrimary.csvImportButton {
   opacity: 0.85;
 }
 
-/* --- Tool menus (Map tools / Debug tools) --- */
+/* --- Tool menus (Map tools) --- */
 .csvToolMenus {
   /* This row exists in layout, but dropdown bodies are absolute overlays */
   position: relative;

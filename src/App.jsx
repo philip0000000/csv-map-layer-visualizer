@@ -23,7 +23,7 @@ import { useTimelinePlayback } from "./components/useTimelinePlayback";
  * These prevent the panel from becoming too small or too large.
  */
 const MIN_PANEL_WIDTH = 280;
-const MAX_PANEL_WIDTH = 720;
+const MAX_PANEL_WIDTH_RATIO = 0.85;
 
 /**
  * When the panel is collapsed, this many pixels stay visible.
@@ -338,7 +338,7 @@ export default function App() {
       const next = clamp(
         dragRef.current.startW + dx,
         MIN_PANEL_WIDTH,
-        MAX_PANEL_WIDTH
+        getMaxPanelWidth()
       );
 
       setPanelWidth(next);
@@ -531,6 +531,10 @@ export default function App() {
  */
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
+}
+
+function getMaxPanelWidth() {
+  return Math.max(MIN_PANEL_WIDTH, Math.floor(window.innerWidth * MAX_PANEL_WIDTH_RATIO));
 }
 
 /**

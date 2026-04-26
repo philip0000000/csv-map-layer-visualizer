@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStorageState } from "./useSessionStorageState";
 import DualRangeSlider from "./DualRangeSlider";
+
+const PREVIEW_ROWS_INCREMENT = 30;
 
 /**
  * CsvPanel
@@ -35,12 +37,11 @@ export default function CsvPanel({
 }) {
 
   // Persisted UI tool state for the CSV panel.
-  // - open: whether each dropdown is expanded
+  // - open: whether the dropdown is expanded
   // - toggles: boolean feature flags (UI only for now; no feature logic yet)
   const TOOLS_KEY = "csv-map-layer-visualizer.tools.v1";
 
-  // We only keep "showTimelineFilter" for now (as a placeholder toggle),
-  // and Debug tools is intentionally empty (placeholder text only).
+  // We only keep "showTimelineFilter" for now (as a placeholder toggle)
   const DEFAULT_TOOLS_STATE = {
     map: {
       open: false,
@@ -48,47 +49,18 @@ export default function CsvPanel({
         showTimelineFilter: false,
       },
     },
-    debug: {
-      open: false,
-      toggles: {
-        // Future toggles will go here later.
-      },
-    },
   };
 
   const [tools, setTools] = useSessionStorageState(TOOLS_KEY, DEFAULT_TOOLS_STATE);
 
-  function setSectionOpen(section, isOpen) {
-    setTools((prev) => {
-      // Defensive: keep behavior stable even if state gets partially corrupted in storage
-      const next = {
-        ...prev,
-        map: {
-          ...(prev?.map ?? { open: false, toggles: {} }),
-        },
-        debug: {
-          ...(prev?.debug ?? { open: false, toggles: {} }),
-        },
-      };
-
-      // Apply requested open/close change
-      next[section] = {
-        ...next[section],
+  function setMapToolsOpen(isOpen) {
+    setTools((prev) => ({
+      ...prev,
+      map: {
+        ...(prev?.map ?? { open: false, toggles: {} }),
         open: isOpen,
-      };
-
-      // Usability: enforce "only one open at a time" when opening.
-      // Closing a section should not automatically open the other.
-      if (isOpen) {
-        const other = section === "map" ? "debug" : "map";
-        next[other] = {
-          ...next[other],
-          open: false,
-        };
-      }
-
-      return next;
-    });
+      },
+    }));
   }
 
   /**
@@ -99,7 +71,6 @@ export default function CsvPanel({
     setTools((prev) => ({
       ...prev,
       map: { ...(prev?.map ?? { open: false, toggles: {} }), open: false },
-      debug: { ...(prev?.debug ?? { open: false, toggles: {} }), open: false },
     }));
   }
 
@@ -137,6 +108,20 @@ export default function CsvPanel({
     [files, selectedId]
   );
 
+  const [previewRowLimit, setPreviewRowLimit] = useState(PREVIEW_ROWS_INCREMENT);
+
+  useEffect(() => {
+    setPreviewRowLimit(PREVIEW_ROWS_INCREMENT);
+  }, [selectedId]);
+
+  const previewRows = useMemo(() => {
+    const rows = selected?.rows ?? [];
+    return rows.slice(0, previewRowLimit);
+  }, [selected?.rows, previewRowLimit]);
+
+  const previewTotalRows = selected?.rows?.length ?? 0;
+  const canShowMorePreviewRows = previewRows.length < previewTotalRows;
+
   /**
    * Trigger the hidden file input.
    * This opens the system file picker.
@@ -170,7 +155,7 @@ export default function CsvPanel({
    * which sometimes stops propagation on map interactions.
    */
   useEffect(() => {
-    const anyOpen = !!tools?.map?.open || !!tools?.debug?.open;
+    const anyOpen = !!tools?.map?.open;
     if (!anyOpen) return;
 
     function onPointerDownCapture(e) {
@@ -196,7 +181,7 @@ export default function CsvPanel({
       document.removeEventListener("pointerdown", onPointerDownCapture, true);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [tools?.map?.open, tools?.debug?.open]); // only rebind when open state changes
+  }, [tools?.map?.open]); // only rebind when open state changes
 
   // local editable inputs for "Year domain" (min/max + Begin)
   // These are UI-only text boxes so the user can type without instantly snapping/clamping.
@@ -269,7 +254,7 @@ export default function CsvPanel({
   return (
     <div className="csvPanel" role="region" aria-label="CSV files panel">
       {/* =========================
-          Tool menus (Map / Debug)
+          Tool menus (Map)
           - Side-by-side headers
           - Dropdown bodies overlay content below (no layout push)
           - State persisted in sessionStorage
@@ -285,7 +270,7 @@ export default function CsvPanel({
             type="button"
             className="csvToolMenuHeader"
             aria-expanded={!!tools?.map?.open}
-            onClick={() => setSectionOpen("map", !tools?.map?.open)}
+            onClick={() => setMapToolsOpen(!tools?.map?.open)}
           >
             <span className="csvToolMenuTitle">Map tools</span>
             <span className="csvToolMenuChevron" aria-hidden="true">
@@ -342,7 +327,7 @@ export default function CsvPanel({
                   <input
                     className="csvSelect"
                     type="number"
-                    min={10}
+                    min={1}
                     max={300}
                     step={1}
                     // Draft value: can be edited freely without changing the map yet
@@ -364,7 +349,7 @@ export default function CsvPanel({
                       }
 
                       // Clamp to a safe range
-                      n = Math.max(10, Math.min(300, n));
+                      n = Math.max(1, Math.min(300, n));
 
                       // Commit value only on blur (leave box)
                       onMapToolsPatch?.({
@@ -375,30 +360,6 @@ export default function CsvPanel({
                   />
                 </div>
               )}
-            </div>
-          )}
-        </section>
-
-        {/* Debug tools (placeholder for future) */}
-        <section className="csvToolMenu">
-          <button
-            type="button"
-            className="csvToolMenuHeader"
-            aria-expanded={!!tools?.debug?.open}
-            onClick={() => setSectionOpen("debug", !tools?.debug?.open)}
-          >
-            <span className="csvToolMenuTitle">Debug tools</span>
-            <span className="csvToolMenuChevron" aria-hidden="true">
-              {tools?.debug?.open ? "▾" : "▸"}
-            </span>
-          </button>
-
-          {/* Dropdown overlays */}
-          {tools?.debug?.open && (
-            <div className="csvToolMenuBody" role="menu" aria-label="Debug tools menu">
-              <div className="csvToolMenuHint">
-                No debug tools yet. This menu will hold developer options later.
-              </div>
             </div>
           )}
         </section>
@@ -494,7 +455,7 @@ export default function CsvPanel({
               {/* domain controls (Min/Max + Begin) */}
               <div className="csvTimelineDomainRow">
                 <label className="csvTimelineField">
-                  <span className="csvTimelineLabel">Min</span>
+                  <span className="csvTimelineLabel">Timeline start</span>
                   <input
                     className="csvSelect"
                     type="number"
@@ -504,7 +465,7 @@ export default function CsvPanel({
                 </label>
 
                 <label className="csvTimelineField">
-                  <span className="csvTimelineLabel">Max</span>
+                  <span className="csvTimelineLabel">Timeline end</span>
                   <input
                     className="csvSelect"
                     type="number"
@@ -521,11 +482,11 @@ export default function CsvPanel({
                   disabled={!canBeginYearDomain}
                   aria-disabled={!canBeginYearDomain}
                 >
-                  Begin
+                  Apply
                 </button>
               </div>
 
-              <div className="csvTimelineSubLabel">Year range</div>
+              <div className="csvTimelineSubLabel">Visible year range</div>
 
               <DualRangeSlider
                 min={timelineState?.yearMin ?? 0}
@@ -541,7 +502,7 @@ export default function CsvPanel({
 
               <div className="csvTimelineReadoutRow">
                 <label className="csvTimelineField">
-                  <span className="csvTimelineLabel">Start</span>
+                  <span className="csvTimelineLabel">From</span>
                   <input
                     className="csvSelect"
                     type="number"
@@ -556,7 +517,7 @@ export default function CsvPanel({
                 </label>
 
                 <label className="csvTimelineField">
-                  <span className="csvTimelineLabel">End</span>
+                  <span className="csvTimelineLabel">To</span>
                   <input
                     className="csvSelect"
                     type="number"
@@ -667,7 +628,7 @@ export default function CsvPanel({
                 </div>
               )}
 
-              {/* inline expander row (arrow chevron like Map tools/Debug tools) */}
+              {/* inline expander row with the same chevron style as Map tools */}
               <button
                 type="button"
                 className="csvTimelineExpander"
@@ -924,34 +885,50 @@ export default function CsvPanel({
 
             {selected.headers.length === 0 ? (
               <div className="csvEmptyPreview">No headers detected.</div>
-            ) : selected.previewRows.length === 0 ? (
+            ) : previewTotalRows === 0 ? (
               <div className="csvEmptyPreview">No data rows detected.</div>
             ) : (
-              <div className="csvTableWrap">
-                <table className="csvTable">
-                  <thead>
-                    <tr>
-                      {selected.headers.map((h) => (
-                        <th key={h} title={h}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {selected.previewRows.map((row, i) => (
-                      <tr key={i}>
+              <>
+                <div className="csvTableWrap">
+                  <table className="csvTable">
+                    <thead>
+                      <tr>
                         {selected.headers.map((h) => (
-                          <td key={h} title={String(row[h] ?? "")}>
-                            {String(row[h] ?? "")}
-                          </td>
+                          <th key={h} title={h}>
+                            {h}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+
+                    <tbody>
+                      {previewRows.map((row, i) => (
+                        <tr key={i}>
+                          {selected.headers.map((h) => (
+                            <td key={h} title={String(row[h] ?? "")}>
+                              {String(row[h] ?? "")}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {canShowMorePreviewRows && (
+                  <button
+                    type="button"
+                    className="csvBtnPrimary csvPreviewMoreButton"
+                    onClick={() =>
+                      setPreviewRowLimit((limit) =>
+                        Math.min(limit + PREVIEW_ROWS_INCREMENT, previewTotalRows)
+                      )
+                    }
+                  >
+                    Show 30 more
+                  </button>
+                )}
+              </>
             )}
           </>
         )}

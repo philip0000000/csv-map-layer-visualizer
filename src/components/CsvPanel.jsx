@@ -1,8 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useSessionStorageState } from "./useSessionStorageState";
+import React, { useMemo } from "react";
 import DualRangeSlider from "./DualRangeSlider";
-
-const PREVIEW_ROWS_INCREMENT = 30;
+import CsvPreviewTable from "./csv-panel/CsvPreviewTable";
+import SelectedFileMetadata from "./csv-panel/SelectedFileMetadata";
+import CoordinateMapping from "./csv-panel/CoordinateMapping";
+import CsvParsingWarnings from "./csv-panel/CsvParsingWarnings";
+import CsvFileControls from "./csv-panel/CsvFileControls";
+import MapToolsMenu from "./csv-panel/MapToolsMenu";
 
 /**
  * CsvPanel
@@ -36,69 +39,6 @@ export default function CsvPanel({
   onMapToolsPatch,
 }) {
 
-  // Persisted UI tool state for the CSV panel.
-  // - open: whether the dropdown is expanded
-  // - toggles: boolean feature flags (UI only for now; no feature logic yet)
-  const TOOLS_KEY = "csv-map-layer-visualizer.tools.v1";
-
-  // We only keep "showTimelineFilter" for now (as a placeholder toggle)
-  const DEFAULT_TOOLS_STATE = {
-    map: {
-      open: false,
-      toggles: {
-        showTimelineFilter: false,
-      },
-    },
-  };
-
-  const [tools, setTools] = useSessionStorageState(TOOLS_KEY, DEFAULT_TOOLS_STATE);
-
-  function setMapToolsOpen(isOpen) {
-    setTools((prev) => ({
-      ...prev,
-      map: {
-        ...(prev?.map ?? { open: false, toggles: {} }),
-        open: isOpen,
-      },
-    }));
-  }
-
-  /**
-   * Close all tool dropdowns.
-   * Kept as a helper so outside-click and Esc can share the same logic.
-   */
-  function closeAllToolMenus() {
-    setTools((prev) => ({
-      ...prev,
-      map: { ...(prev?.map ?? { open: false, toggles: {} }), open: false },
-    }));
-  }
-
-  function setToggle(section, toggleKey, isOn) {
-    setTools((prev) => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        toggles: {
-          ...prev[section]?.toggles,
-          [toggleKey]: isOn,
-        },
-      },
-    }));
-  }
-
-  /**
-   * Hidden file input reference.
-   * We trigger this programmatically when user clicks "Import..."
-   */
-  const fileInputRef = useRef(null);
-
-  /**
-   * Ref for the tool menus container.
-   * Used to detect clicks outside the menus (to auto-close dropdowns).
-   */
-  const toolMenusRef = useRef(null);
-
   /**
    * Find the currently selected CSV file object.
    * useMemo avoids recalculating unless files or selectedId changes.
@@ -107,81 +47,6 @@ export default function CsvPanel({
     () => files.find((f) => f.id === selectedId) || null,
     [files, selectedId]
   );
-
-  const [previewRowLimit, setPreviewRowLimit] = useState(PREVIEW_ROWS_INCREMENT);
-
-  useEffect(() => {
-    setPreviewRowLimit(PREVIEW_ROWS_INCREMENT);
-  }, [selectedId]);
-
-  const previewRows = useMemo(() => {
-    const rows = selected?.rows ?? [];
-    return rows.slice(0, previewRowLimit);
-  }, [selected?.rows, previewRowLimit]);
-
-  const previewTotalRows = selected?.rows?.length ?? 0;
-  const canShowMorePreviewRows = previewRows.length < previewTotalRows;
-
-  /**
-   * Trigger the hidden file input.
-   * This opens the system file picker.
-   */
-  function handleClickImport() {
-    fileInputRef.current?.click();
-  }
-
-  /**
-   * Handle files selected by the user.
-   * - Convert FileList to a normal array
-   * - Pass files to the parent logic
-   * - Reset input so the same file can be selected again later
-   */
-  function handleFileChange(e) {
-    const list = e.target.files;
-    if (!list || list.length === 0) return;
-
-    onImportFiles(Array.from(list));
-
-    // Reset input value so same file can be imported again
-    e.target.value = "";
-  }
-
-  /**
-   * Auto-close open tool menus when:
-   * - user clicks anywhere outside the tool menus (including the map)
-   * - user presses Escape
-   *
-   * Using pointerdown + capture phase makes this robust with Leaflet,
-   * which sometimes stops propagation on map interactions.
-   */
-  useEffect(() => {
-    const anyOpen = !!tools?.map?.open;
-    if (!anyOpen) return;
-
-    function onPointerDownCapture(e) {
-      const root = toolMenusRef.current;
-      if (!root) return;
-
-      // If the click is inside the tool menus area, do nothing.
-      if (root.contains(e.target)) return;
-
-      // Otherwise, close any open dropdowns.
-      closeAllToolMenus();
-    }
-
-    function onKeyDown(e) {
-      if (e.key !== "Escape") return;
-      closeAllToolMenus();
-    }
-
-    document.addEventListener("pointerdown", onPointerDownCapture, true);
-    document.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDownCapture, true);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [tools?.map?.open]); // only rebind when open state changes
 
   // local editable inputs for "Year domain" (min/max + Begin)
   // These are UI-only text boxes so the user can type without instantly snapping/clamping.
@@ -259,111 +124,12 @@ export default function CsvPanel({
           - Dropdown bodies overlay content below (no layout push)
           - State persisted in sessionStorage
         ========================= */}
-      <div
-        className="csvToolMenus"
-        aria-label="Tool menus"
-        ref={toolMenusRef}
-      >
-        {/* Map tools */}
-        <section className="csvToolMenu">
-          <button
-            type="button"
-            className="csvToolMenuHeader"
-            aria-expanded={!!tools?.map?.open}
-            onClick={() => setMapToolsOpen(!tools?.map?.open)}
-          >
-            <span className="csvToolMenuTitle">Map tools</span>
-            <span className="csvToolMenuChevron" aria-hidden="true">
-              {tools?.map?.open ? "▾" : "▸"}
-            </span>
-          </button>
-
-          {/* Dropdown overlays */}
-          {tools?.map?.open && (
-            <div className="csvToolMenuBody" role="menu" aria-label="Map tools menu">
-              {/* Toggle timeline filter on/off */}
-              <label
-                className="csvToolToggle"
-                role="menuitemcheckbox"
-                aria-checked={!!timelineState?.timelineEnabled}
-              >
-                <input
-                  type="checkbox"
-                  checked={!!timelineState?.timelineEnabled}
-                  onChange={(e) =>
-                    onTimelinePatch?.({ timelineEnabled: e.target.checked })
-                  }
-                />
-                <span>Timeline</span>
-              </label>
-
-              {/* Toggle marker clustering on/off */}
-              <label
-                className="csvToolToggle"
-                role="menuitemcheckbox"
-                aria-checked={!!mapToolsState?.clusterMarkersEnabled}
-              >
-                <input
-                  type="checkbox"
-                  checked={!!mapToolsState?.clusterMarkersEnabled}
-                  onChange={(e) =>
-                    onMapToolsPatch?.({ clusterMarkersEnabled: e.target.checked })
-                  }
-                />
-                <span>Cluster markers</span>
-              </label>
-
-              {/* 
-                Cluster radius settings:
-                - Only shown when clustering is enabled
-                - User can type a number
-                - The value is applied only when the input loses focus (onBlur)
-                - This avoids recalculating clusters while typing
-              */}
-              {mapToolsState?.clusterMarkersEnabled && (
-                <div style={{ marginTop: 8 }}>
-                  <div className="csvLabel">Cluster radius (pixels)</div>
-
-                  <input
-                    className="csvSelect"
-                    type="number"
-                    min={1}
-                    max={300}
-                    step={1}
-                    // Draft value: can be edited freely without changing the map yet
-                    value={mapToolsState?.clusterRadiusDraft ?? ""}
-                    onChange={(e) =>
-                      onMapToolsPatch?.({ clusterRadiusDraft: e.target.value })
-                    }
-                    onBlur={() => {
-                      // When leaving the input:
-                      // - Parse the number
-                      // - Fix invalid values
-                      // - Clamp to a safe range
-                      // - Commit it as the real cluster radius
-                      const raw = mapToolsState?.clusterRadiusDraft;
-
-                      let n = Number.parseInt(String(raw ?? "").trim(), 10);
-                      if (!Number.isFinite(n)) {
-                        n = mapToolsState?.clusterRadius ?? 80;
-                      }
-
-                      // Clamp to a safe range
-                      n = Math.max(1, Math.min(300, n));
-
-                      // Commit value only on blur (leave box)
-                      onMapToolsPatch?.({
-                        clusterRadius: n,
-                        clusterRadiusDraft: n,
-                      });
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      </div>
+      <MapToolsMenu
+        timelineState={timelineState}
+        onTimelinePatch={onTimelinePatch}
+        mapToolsState={mapToolsState}
+        onMapToolsPatch={onMapToolsPatch}
+      />
 
       {/* =========================
           Panel header
@@ -377,73 +143,14 @@ export default function CsvPanel({
             File controls
            ========================= */}
         <div className="csvPanelControls">
-          <button
-            className="csvBtnPrimary csvImportButton"
-            onClick={handleClickImport}
-            aria-label="Import CSV files"
-          >
-            Import...
-          </button>
-
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            multiple
-            onChange={handleFileChange}
-            style={{ display: "none" }}
+          <CsvFileControls
+            files={files}
+            selectedId={selectedId}
+            onSelect={onSelect}
+            onImportFiles={onImportFiles}
+            onUnloadFile={onUnloadFile}
+            onToggleEnabled={onToggleEnabled}
           />
-
-          <div className="csvFilesList" role="list">
-            <div className="csvFilesHeaderRow">
-              <div>Show</div>
-              <div>File</div>
-              <div>Rows</div>
-              <div />
-            </div>
-
-            {files.length === 0 ? (
-              <div className="csvEmptyState">No CSV files loaded.</div>
-            ) : (
-              files.map((file) => (
-                <div
-                  key={file.id}
-                  role="listitem"
-                  className={`csvFilesRow${
-                    file.id === selectedId ? " csvFilesRowSelected" : ""
-                  }`}
-                  onClick={() => onSelect(file.id)}
-                >
-                  <input
-                    type="checkbox"
-                    aria-label={`Toggle visibility for ${file.name}`}
-                    checked={!!file.enabled}
-                    onChange={(e) => onToggleEnabled?.(file.id, e.target.checked)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <button
-                    type="button"
-                    className="csvFileNameButton"
-                    onClick={() => onSelect(file.id)}
-                  >
-                    {file.name}
-                  </button>
-                  <div className="csvFileRows">{file.rows?.length ?? 0}</div>
-                  <button
-                    type="button"
-                    className="csvBtnTiny"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUnloadFile?.(file.id);
-                    }}
-                  >
-                    Unload
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
 
           {/* Timeline UI lives inside the panel header (NOT in the dropdown). */}
           {timelineState?.timelineEnabled && (
@@ -755,22 +462,12 @@ export default function CsvPanel({
             )}
 
             {/* CSV metadata */}
-            <div className="csvMeta">
-              <div>
-                <span className="csvMetaLabel">Name:</span> {selected.name}
-              </div>
-              <div>
-                <span className="csvMetaLabel">Size:</span>{" "}
-                {formatBytes(selected.size)}
-              </div>
-              <div>
-                <span className="csvMetaLabel">Rows:</span> {selected.totalRows}
-              </div>
-              <div>
-                <span className="csvMetaLabel">Columns:</span>{" "}
-                {selected.headers.length}
-              </div>
-            </div>
+            <SelectedFileMetadata
+              name={selected.name}
+              size={selected.size}
+              totalRows={selected.totalRows}
+              columnCount={selected.headers.length}
+            />
 
             {/* =========================
                 Coordinate mapping
@@ -781,179 +478,29 @@ export default function CsvPanel({
                 The choices are saved per file and used later
                 to create map points.
             */}
-            <div className="csvMeta" style={{ marginTop: 10 }}>
-              {/* Latitude column selector */}
-              <div>
-                <span className="csvMetaLabel">
-                  Latitude field:
-                </span>
-
-                {/* Dropdown with all CSV headers */}
-                <select
-                  className="csvSelect"
-
-                  // Current selected latitude column (or empty)
-                  value={selected.latField || ""}
-
-                  // Update the selected file when user changes the value
-                  onChange={(e) =>
-                    onUpdateMapping?.(
-                      selected.id,
-                      { latField: e.target.value || null }
-                    )
-                  }
-
-                  aria-label="Select latitude field"
-                  style={{ marginTop: 6 }}
-                >
-                  {/* No column selected */}
-                  <option value="">
-                    (not set)
-                  </option>
-
-                  {/* One option for each CSV header */}
-                  {selected.headers.map((h) => (
-                    <option key={h} value={h}>
-                      {h}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Longitude column selector */}
-              <div>
-                <span className="csvMetaLabel">
-                  Longitude field:
-                </span>
-
-                {/* Dropdown with all CSV headers */}
-                <select
-                  className="csvSelect"
-
-                  // Current selected longitude column (or empty)
-                  value={selected.lonField || ""}
-
-                  // Update the selected file when user changes the value
-                  onChange={(e) =>
-                    onUpdateMapping?.(
-                      selected.id,
-                      { lonField: e.target.value || null }
-                    )
-                  }
-
-                  aria-label="Select longitude field"
-                  style={{ marginTop: 6 }}
-                >
-                  {/* No column selected */}
-                  <option value="">
-                    (not set)
-                  </option>
-
-                  {/* One option for each CSV header */}
-                  {selected.headers.map((h) => (
-                    <option key={h} value={h}>
-                      {h}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <CoordinateMapping
+              fileId={selected.id}
+              headers={selected.headers}
+              latField={selected.latField}
+              lonField={selected.lonField}
+              onUpdateMapping={onUpdateMapping}
+            />
 
             {/* CSV parsing warnings (non-fatal) */}
-            {selected.parseErrors?.length > 0 && (
-              <details className="csvErrors">
-                <summary>
-                  Parsing warnings ({selected.parseErrors.length})
-                </summary>
-
-                <ul>
-                  {selected.parseErrors.slice(0, 15).map((err, idx) => (
-                    <li key={idx}>{err}</li>
-                  ))}
-                </ul>
-
-                {selected.parseErrors.length > 15 && (
-                  <div className="csvErrorsMore">
-                    Showing first 15. More warnings exist.
-                  </div>
-                )}
-              </details>
-            )}
+            <CsvParsingWarnings errors={selected.parseErrors} />
 
             {/* Preview table */}
-            <div className="csvPreviewTitle">Preview</div>
+            <CsvPreviewTable
+              key={selected.id}
+              headers={selected.headers}
+              rows={selected.rows}
+            />
 
-            {selected.headers.length === 0 ? (
-              <div className="csvEmptyPreview">No headers detected.</div>
-            ) : previewTotalRows === 0 ? (
-              <div className="csvEmptyPreview">No data rows detected.</div>
-            ) : (
-              <>
-                <div className="csvTableWrap">
-                  <table className="csvTable">
-                    <thead>
-                      <tr>
-                        {selected.headers.map((h) => (
-                          <th key={h} title={h}>
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {previewRows.map((row, i) => (
-                        <tr key={i}>
-                          {selected.headers.map((h) => (
-                            <td key={h} title={String(row[h] ?? "")}>
-                              {String(row[h] ?? "")}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {canShowMorePreviewRows && (
-                  <button
-                    type="button"
-                    className="csvBtnPrimary csvPreviewMoreButton"
-                    onClick={() =>
-                      setPreviewRowLimit((limit) =>
-                        Math.min(limit + PREVIEW_ROWS_INCREMENT, previewTotalRows)
-                      )
-                    }
-                  >
-                    Show 30 more
-                  </button>
-                )}
-              </>
-            )}
           </>
         )}
       </div>
     </div>
   );
-}
-
-/**
- * Convert file size in bytes to a readable string.
- * Example: 15360 -> "15.0 KB"
- */
-function formatBytes(bytes) {
-  if (typeof bytes !== "number" || Number.isNaN(bytes)) return "-";
-
-  const units = ["B", "KB", "MB", "GB"];
-  let n = bytes;
-  let u = 0;
-
-  while (n >= 1024 && u < units.length - 1) {
-    n /= 1024;
-    u += 1;
-  }
-
-  return `${n.toFixed(u === 0 ? 0 : 1)} ${units[u]}`;
 }
 
 function toIntOrNull(v) {

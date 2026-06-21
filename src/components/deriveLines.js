@@ -1,11 +1,6 @@
 import { isValidLat, isValidLon, parseFlexibleFloat } from "./geoColumns";
-import {
-  parseDateValue,
-  parseYearValue,
-  tryGetYear,
-  tryParseDayOfYear,
-} from "./timeline";
 import { getRowFeatureType } from "./featureTypes";
+import { isRowVisibleForTimeline } from "./timelineVisibility";
 
 const DEFAULT_LINE_STYLE = {
   color: "#3388ff",
@@ -207,73 +202,4 @@ function parseColor(value) {
   }
 
   return CSS.supports("color", trimmed) ? trimmed : null;
-}
-
-function isRowVisibleForTimeline({
-  row,
-  timelineFields,
-  rangeFields,
-  startYear,
-  endYear,
-  startDay,
-  endDay,
-  dayEnabled,
-}) {
-  const yearFrom = getRangeYear(row, rangeFields?.yearFromField, rangeFields?.dateFromField);
-  const yearTo = getRangeYear(row, rangeFields?.yearToField, rangeFields?.dateToField);
-
-  const hasRange = yearFrom != null || yearTo != null;
-
-  if (hasRange) {
-    const from = yearFrom ?? yearTo;
-    const to = yearTo ?? yearFrom;
-
-    if (from == null || to == null) {
-      return false;
-    }
-
-    const rangeStart = Math.min(from, to);
-    const rangeEnd = Math.max(from, to);
-
-    if (endYear != null && endYear < rangeStart) return false;
-    if (startYear != null && startYear > rangeEnd) return false;
-
-    return true;
-  }
-
-  const year = tryGetYear(row, timelineFields);
-  if (year == null) return false;
-
-  if (startYear != null && year < startYear) return false;
-  if (endYear != null && year > endYear) return false;
-
-  if (dayEnabled) {
-    const doy = tryParseDayOfYear(row, timelineFields);
-    if (doy == null) return false;
-
-    const inRange =
-      startDay <= endDay
-        ? doy >= startDay && doy <= endDay
-        : doy >= startDay || doy <= endDay;
-
-    if (!inRange) return false;
-  }
-
-  return true;
-}
-
-function getRangeYear(row, yearField, dateField) {
-  if (!row || typeof row !== "object") return null;
-
-  if (yearField) {
-    const y = parseYearValue(row[yearField]);
-    if (y != null) return y;
-  }
-
-  if (dateField) {
-    const d = parseDateValue(row[dateField]);
-    if (d) return d.getUTCFullYear();
-  }
-
-  return null;
 }

@@ -1,6 +1,6 @@
 import { isValidLat, isValidLon, parseFlexibleFloat } from "./geoColumns";
-import { parseDateValue, parseYearValue, tryGetYear, tryParseDayOfYear } from "./timeline";
 import { getRowFeatureType } from "./featureTypes";
+import { isRowVisibleForTimeline } from "./timelineVisibility";
 
 const DEFAULT_IMAGE_SIZE_METERS = 100;
 const MIN_IMAGE_SIZE_METERS = 1;
@@ -60,7 +60,7 @@ export function derivePointsFromCsv({
     }
 
     if (timelineEnabled) {
-      const vis = isPointVisibleForTimeline({
+      const visible = isRowVisibleForTimeline({
         row: r,
         timelineFields,
         rangeFields,
@@ -71,7 +71,7 @@ export function derivePointsFromCsv({
         dayEnabled,
       });
 
-      if (!vis) {
+      if (!visible) {
         skippedByTimeline++;
         continue;
       }
@@ -114,76 +114,4 @@ function parseImageSizeMeters(value) {
   if (!Number.isFinite(parsed)) return DEFAULT_IMAGE_SIZE_METERS;
 
   return Math.min(MAX_IMAGE_SIZE_METERS, Math.max(MIN_IMAGE_SIZE_METERS, parsed));
-}
-
-function isPointVisibleForTimeline({
-  row,
-  timelineFields,
-  rangeFields,
-  startYear,
-  endYear,
-  startDay,
-  endDay,
-  dayEnabled,
-}) {
-  // 1) Prefer range semantics when a range exists
-  const yearFrom = getRangeYear(row, rangeFields?.yearFromField, rangeFields?.dateFromField);
-  const yearTo = getRangeYear(row, rangeFields?.yearToField, rangeFields?.dateToField);
-
-  const hasRange = yearFrom != null || yearTo != null;
-
-  if (hasRange) {
-    const from = yearFrom ?? yearTo;
-    const to = yearTo ?? yearFrom;
-    if (from == null || to == null) return false;
-
-    const rangeStart = Math.min(from, to);
-    const rangeEnd = Math.max(from, to);
-
-    // Visible if the range intersects the selected window
-    if (endYear != null && endYear < rangeStart) return false;
-    if (startYear != null && startYear > rangeEnd) return false;
-
-    // Day-of-year filtering for ranges is undefined in your model;
-    // keep behavior simple: do NOT apply day filter to ranges.
-    return true;
-  }
-
-  // 2) Fall back to point-in-time year/date
-  const year = tryGetYear(row, timelineFields);
-  if (year == null) return false;
-
-  if (startYear != null && year < startYear) return false;
-  if (endYear != null && year > endYear) return false;
-
-  // 3) Optional day-of-year filter only makes sense for point-in-time
-  if (dayEnabled) {
-    const doy = tryParseDayOfYear(row, timelineFields);
-    if (doy == null) return false;
-
-    const inRange =
-      startDay <= endDay
-        ? doy >= startDay && doy <= endDay
-        : doy >= startDay || doy <= endDay;
-
-    if (!inRange) return false;
-  }
-
-  return true;
-}
-
-function getRangeYear(row, yearField, dateField) {
-  if (!row || typeof row !== "object") return null;
-
-  if (yearField) {
-    const y = parseYearValue(row[yearField]);
-    if (y != null) return y;
-  }
-
-  if (dateField) {
-    const d = parseDateValue(row[dateField]);
-    if (d) return d.getUTCFullYear();
-  }
-
-  return null;
 }

@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import "./App.css";
 import GeoMap from "./components/GeoMap";
 import CsvPanel from "./components/CsvPanel";
 import { useCsvFiles } from "./components/useCsvFiles";
-import { derivePointsFromCsv } from "./components/derivePoints";
 import { useTimelineFilterState } from "./components/useTimelineFilterState";
 import {
   autoDetectRangeFields,
@@ -13,23 +12,11 @@ import {
   tryGetYear,
 } from "./components/timeline";
 import { useMapToolsState } from "./components/useMapToolsState";
-import { deriveRegionsFromCsv } from "./components/deriveRegions";
-import { deriveLinesFromCsv } from "./components/deriveLines";
-import { detectFeatureTypeField } from "./components/featureTypes";
+import { useDerivedMapFeatures } from "./components/useDerivedMapFeatures";
+import { CsvPanelOverlay } from "./components/CsvPanelOverlay";
+import { useCsvFileDrop } from "./components/useCsvFileDrop";
+import { useExampleCsvFilesFromUrl } from "./components/useExampleCsvFilesFromUrl";
 import { useTimelinePlayback } from "./components/useTimelinePlayback";
-
-/**
- * Limits for the CSV panel width.
- * These prevent the panel from becoming too small or too large.
- */
-const MIN_PANEL_WIDTH = 280;
-const MAX_PANEL_WIDTH_RATIO = 0.85;
-
-/**
- * When the panel is collapsed, this many pixels stay visible.
- * This is the width of the ">" handle, like in Google Maps.
- */
-const HANDLE_VISIBLE_PX = 34;
 
 export default function App() {
   /**
@@ -63,70 +50,30 @@ export default function App() {
     onTimelinePatch: timelineApi.patch,
   });
 
-  // Prevent double-loading examples in React StrictMode (dev)
-  const didAutoLoadRef = useRef(false);
+  const derivedMapFeatures = useDerivedMapFeatures({
+    files,
+    timeline: timelineApi.state,
+  });
 
-  /**
-   * Optional: auto-load example CSV files from the URL.
-   * Example:
-   *   ?example=books.csv&example=authors.csv
-   *
-   * Behavior:
-   * - If one or more valid ?example=*.csv values are present:
-   *   - The files are auto-loaded from /public/examples
-   *   - Marker clustering is enabled by default to reduce visual noise
-   * - Otherwise:
-   *   - No file is auto-loaded
-   *   - Clustering remains off by default
-   *
-   * This is intended for the live demo and shareable links.
-   */
-  useEffect(() => {
-    // Guard against React 18 StrictMode double-invoking effects in development
-    if (didAutoLoadRef.current) return;
-    didAutoLoadRef.current = true;
+  const csvFileDrop = useCsvFileDrop({
+    onImportFiles: importFiles,
+  });
 
-    const params = new URLSearchParams(window.location.search);
-    const exampleValues = params.getAll("example");
-    const validExamples = [];
+  useExampleCsvFilesFromUrl({
+    importExampleFile,
+  });
 
-    // Only auto-load when the value looks like a safe filename.
-    for (const value of exampleValues) {
-      const trimmed = String(value ?? "").trim();
-
-      // Allow:
-      // - books.csv
-      // - present-day/books.csv
-      // - debug/test_case.csv
-      if (!/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.csv$/.test(trimmed)) continue;
-
-      // Reject path traversal defensively
-      if (trimmed.includes("..")) continue;
-
-      validExamples.push(trimmed);
-    }
-
-    if (validExamples.length === 0) return;
-
-    const loadExamples = async () => {
-      for (const name of validExamples) {
-        await importExampleFile(name);
-      }
-    };
-
-    void loadExamples();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const selectedHeaders = selected?.headers;
 
   const timelineFields = useMemo(() => {
-    if (!selected?.headers) {
+    if (!selectedHeaders) {
       return { yearField: null, dateField: null, dayOfYearField: null };
     }
-    return autoDetectTimelineFields(selected.headers);
-  }, [selected?.headers]);
+    return autoDetectTimelineFields(selectedHeaders);
+  }, [selectedHeaders]);
 
   const timelineRangeFields = useMemo(() => {
-    if (!selected?.headers) {
+    if (!selectedHeaders) {
       return {
         yearFromField: null,
         yearToField: null,
@@ -134,13 +81,8 @@ export default function App() {
         dateToField: null,
       };
     }
-    return autoDetectRangeFields(selected.headers);
-  }, [selected?.headers]);
-
-  const featureTypeField = useMemo(() => {
-    if (!selected?.headers) return null;
-    return detectFeatureTypeField(selected.headers);
-  }, [selected?.headers]);
+    return autoDetectRangeFields(selectedHeaders);
+  }, [selectedHeaders]);
 
   // When timeline is enabled, compute year domain from selected file
   useEffect(() => {
@@ -154,7 +96,11 @@ export default function App() {
     let max = null;
 
     for (const r of selected.rows ?? []) {
-      const extent = getRowTimelineExtent(r, timelineFields, timelineRangeFields);
+      const extent = getRowTimelineExtent(
+        r,
+        timelineFields,
+        timelineRangeFields,
+      );
       if (!extent) continue;
 
       if (min == null || extent.min < min) min = extent.min;
@@ -192,349 +138,56 @@ export default function App() {
     timelineRangeFields,
   ]);
 
-  const enabledFiles = useMemo(
-    () => files.filter((file) => file.enabled),
-    [files]
-  );
-
-  const derivedPoints = useMemo(() => {
-    const merged = { points: [], skipped: 0, skippedByTimeline: 0 };
-
-    for (const file of enabledFiles) {
-      const fileTimelineFields = autoDetectTimelineFields(file.headers ?? []);
-      const fileRangeFields = autoDetectRangeFields(file.headers ?? []);
-      const fileFeatureTypeField = detectFeatureTypeField(file.headers ?? []);
-
-      const result = derivePointsFromCsv({
-        rows: file.rows,
-        latField: file.latField,
-        lonField: file.lonField,
-        timeline: timelineApi.state,
-        timelineFields: fileTimelineFields,
-        rangeFields: fileRangeFields,
-        featureTypeField: fileFeatureTypeField,
-        idPrefix: file.id,
-      });
-
-      merged.points.push(
-        ...result.points.map((point) => ({
-          ...point,
-          latField: file.latField,
-          lonField: file.lonField,
-        }))
-      );
-      merged.skipped += result.skipped;
-      merged.skippedByTimeline += result.skippedByTimeline;
-    }
-
-    return merged;
-  }, [enabledFiles, timelineApi.state]);
-
-  const derivedLines = useMemo(() => {
-    const merged = { lines: [], skipped: 0, skippedByTimeline: 0 };
-
-    for (const file of enabledFiles) {
-      const fileTimelineFields = autoDetectTimelineFields(file.headers ?? []);
-      const fileRangeFields = autoDetectRangeFields(file.headers ?? []);
-      const fileFeatureTypeField = detectFeatureTypeField(file.headers ?? []);
-
-      const result = deriveLinesFromCsv({
-        rows: file.rows,
-        latField: file.latField,
-        lonField: file.lonField,
-        timeline: timelineApi.state,
-        timelineFields: fileTimelineFields,
-        rangeFields: fileRangeFields,
-        featureTypeField: fileFeatureTypeField,
-        idPrefix: file.id,
-      });
-
-      merged.lines.push(
-        ...result.lines.map((line) => ({
-          ...line,
-          latField: file.latField,
-          lonField: file.lonField,
-        }))
-      );
-      merged.skipped += result.skipped;
-      merged.skippedByTimeline += result.skippedByTimeline;
-    }
-
-    return merged;
-  }, [enabledFiles, timelineApi.state]);
-
-  const derivedRegions = useMemo(() => {
-    const merged = { polygons: [], skipped: 0, skippedByTimeline: 0 };
-
-    for (const file of enabledFiles) {
-      const fileTimelineFields = autoDetectTimelineFields(file.headers ?? []);
-      const fileRangeFields = autoDetectRangeFields(file.headers ?? []);
-      const fileFeatureTypeField = detectFeatureTypeField(file.headers ?? []);
-
-      const result = deriveRegionsFromCsv({
-        rows: file.rows,
-        latField: file.latField,
-        lonField: file.lonField,
-        timeline: timelineApi.state,
-        timelineFields: fileTimelineFields,
-        rangeFields: fileRangeFields,
-        featureTypeField: fileFeatureTypeField,
-        idPrefix: file.id,
-      });
-
-      merged.polygons.push(
-        ...result.polygons.map((region) => ({
-          ...region,
-          latField: file.latField,
-          lonField: file.lonField,
-        }))
-      );
-      merged.skipped += result.skipped;
-      merged.skippedByTimeline += result.skippedByTimeline;
-    }
-
-    return merged;
-  }, [enabledFiles, timelineApi.state]);
-
-  /** True when the CSV panel is hidden */
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  /** Current width of the CSV panel (in pixels) */
-  const [panelWidth, setPanelWidth] = useState(420);
-
-  /** True when CSV files are being dragged over the app */
-  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
-
-  /**
-   * Ref used while resizing the panel.
-   * We store values here so mouse move events
-   * do not cause React re-renders.
-   */
-  const dragRef = useRef({
-    dragging: false,
-    startX: 0,
-    startW: 420,
-  });
-
-  /**
-   * Ref used to track drag enter/leave depth.
-   * This prevents flicker when dragging over child elements.
-   */
-  const dragDepthRef = useRef(0);
-
-  /**
-   * Global mouse listeners for resizing.
-   * These listen on the whole window so resizing
-   * still works even if the cursor leaves the divider.
-   */
-  useEffect(() => {
-    function onMove(e) {
-      if (!dragRef.current.dragging) return;
-
-      // Distance the mouse moved since drag start
-      const dx = e.clientX - dragRef.current.startX;
-
-      // New width, clamped to allowed range
-      const next = clamp(
-        dragRef.current.startW + dx,
-        MIN_PANEL_WIDTH,
-        getMaxPanelWidth()
-      );
-
-      setPanelWidth(next);
-    }
-
-    function onUp() {
-      // Stop resizing when mouse button is released
-      dragRef.current.dragging = false;
-    }
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-
-    // Cleanup listeners when component unmounts
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, []);
-
-  /**
-   * Starts the resize action.
-   * Called when the user presses the mouse on the divider.
-   */
-  function startDrag(e) {
-    // Do not allow resizing while the panel is collapsed
-    if (isCollapsed) return;
-
-    dragRef.current.dragging = true;
-    dragRef.current.startX = e.clientX;
-    dragRef.current.startW = panelWidth;
-  }
-
-  /**
-   * Detect when the user drags files over the app.
-   * We only show the overlay for real file drags.
-   */
-  function isFileDrag(e) {
-    const types = Array.from(e.dataTransfer?.types ?? []);
-    return types.includes("Files");
-  }
-
-  function handleDragEnter(e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!isFileDrag(e)) return;
-
-    dragDepthRef.current += 1;
-    setIsDraggingFiles(true);
-  }
-
-  function handleDragOver(e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!isFileDrag(e)) return;
-    if (!isDraggingFiles) setIsDraggingFiles(true);
-
-    e.dataTransfer.dropEffect = "copy";
-  }
-
-  function handleDragLeave(e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!isFileDrag(e)) return;
-
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) {
-      setIsDraggingFiles(false);
-    }
-  }
-
-  function handleDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    dragDepthRef.current = 0;
-    setIsDraggingFiles(false);
-
-    const files = Array.from(e.dataTransfer?.files ?? []);
-    if (files.length === 0) return;
-
-    const csvFiles = files.filter((file) => {
-      const name = String(file?.name ?? "").toLowerCase();
-      return name.endsWith(".csv") || file?.type === "text/csv";
-    });
-
-    if (csvFiles.length === 0) return;
-
-    importFiles(csvFiles);
-  }
-
-  /**
-   * CSS transform for sliding the panel in and out.
-   * When collapsed, most of the panel moves off-screen,
-   * but the handle stays visible.
-   */
-  const overlayTransform = isCollapsed
-    ? `translateX(${-(panelWidth - HANDLE_VISIBLE_PX)}px)`
-    : "translateX(0px)";
-
   return (
     <div
       className="appRoot"
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      onDragEnter={csvFileDrop.handleDragEnter}
+      onDragOver={csvFileDrop.handleDragOver}
+      onDragLeave={csvFileDrop.handleDragLeave}
+      onDrop={csvFileDrop.handleDrop}
     >
-      {isDraggingFiles && (
+      {csvFileDrop.isDraggingFiles && (
         <div className="dropOverlay" aria-hidden="true">
           <div className="dropOverlayText">Drop CSV to import</div>
         </div>
       )}
       <div className="rightPane">
         <GeoMap
-          points={derivedPoints.points}
-          regions={derivedRegions.polygons}
-          lines={derivedLines.lines}
+          points={derivedMapFeatures.points.points}
+          regions={derivedMapFeatures.regions.polygons}
+          lines={derivedMapFeatures.lines.lines}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
           clusterRadius={mapToolsApi.state.clusterRadius}
         />
 
-        <div
-          className="csvOverlay"
-          style={{
-            width: panelWidth,
-            transform: overlayTransform,
-          }}
-          aria-hidden={false}
-        >
-          {/* Collapse / expand handle.
-              Shows "<" when open and ">" when closed. */}
-          <button
-            type="button"
-            className="csvOverlayHandle"
-            onClick={() => setIsCollapsed((v) => !v)}
-            aria-label={isCollapsed ? "Expand CSV panel" : "Collapse CSV panel"}
-            title={isCollapsed ? "Expand" : "Collapse"}
-          >
-            {isCollapsed ? ">" : "<"}
-          </button>
-
-          {/* Actual CSV panel content */}
-          <div className="csvOverlayContent">
-            <CsvPanel
-              files={files}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onImportFiles={importFiles}
-              onUnloadSelected={unloadSelected}
-              onUnloadFile={unloadFile}
-              onToggleEnabled={updateFileEnabled}
-              onUpdateMapping={updateFileMapping}
-              timelineState={timelineApi.state}
-              timelineFields={timelineFields}
-              onTimelinePatch={timelineApi.patch}
-              onTimelinePlaybackStart={timelinePlaybackApi.startPlayback}
-              onTimelinePlaybackStop={timelinePlaybackApi.stopPlayback}
-              timelineStats={{
-                skippedByTimeline:
-                  (derivedPoints.skippedByTimeline ?? 0) +
-                  (derivedRegions.skippedByTimeline ?? 0) +
-                  (derivedLines.skippedByTimeline ?? 0),
-              }}
-              mapToolsState={mapToolsApi.state}
-              onMapToolsPatch={mapToolsApi.patch}
-            />
-          </div>
-
-          {/* Resize divider on the right edge of the panel */}
-          <div
-            className="csvOverlayDivider"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize CSV panel"
-            onMouseDown={startDrag}
+        <CsvPanelOverlay>
+          <CsvPanel
+            files={files}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onImportFiles={importFiles}
+            onUnloadSelected={unloadSelected}
+            onUnloadFile={unloadFile}
+            onToggleEnabled={updateFileEnabled}
+            onUpdateMapping={updateFileMapping}
+            timelineState={timelineApi.state}
+            timelineFields={timelineFields}
+            onTimelinePatch={timelineApi.patch}
+            onTimelinePlaybackStart={timelinePlaybackApi.startPlayback}
+            onTimelinePlaybackStop={timelinePlaybackApi.stopPlayback}
+            timelineStats={{
+              skippedByTimeline:
+                (derivedMapFeatures.points.skippedByTimeline ?? 0) +
+                (derivedMapFeatures.regions.skippedByTimeline ?? 0) +
+                (derivedMapFeatures.lines.skippedByTimeline ?? 0),
+            }}
+            mapToolsState={mapToolsApi.state}
+            onMapToolsPatch={mapToolsApi.patch}
           />
-        </div>
+        </CsvPanelOverlay>
       </div>
     </div>
   );
-}
-
-/**
- * Limits a number between a minimum and maximum value.
- * Used to keep the panel width within safe bounds.
- */
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function getMaxPanelWidth() {
-  return Math.max(MIN_PANEL_WIDTH, Math.floor(window.innerWidth * MAX_PANEL_WIDTH_RATIO));
 }
 
 /**
@@ -550,12 +203,12 @@ function getRowTimelineExtent(row, timelineFields, rangeFields) {
   const yearFrom = getRangeYear(
     row,
     rangeFields?.yearFromField,
-    rangeFields?.dateFromField
+    rangeFields?.dateFromField,
   );
   const yearTo = getRangeYear(
     row,
     rangeFields?.yearToField,
-    rangeFields?.dateToField
+    rangeFields?.dateToField,
   );
 
   // Prefer range semantics when any range bound is present
@@ -596,5 +249,3 @@ function getRangeYear(row, yearField, dateField) {
 
   return null;
 }
-
-

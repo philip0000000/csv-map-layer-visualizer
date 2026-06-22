@@ -192,7 +192,7 @@ export function parseDateValue(v) {
   if (!Number.isNaN(d.getTime())) return d;
 
   // Try common "YYYY-MM-DD" or "YYYY/MM/DD"
-  const m = s.match(/^(-?\d{1,5})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  const m = s.match(/^(-?\d{1,5})[/-](\d{1,2})[/-](\d{1,2})/);
   if (m) {
     const y = Number.parseInt(m[1], 10);
     const mo = Number.parseInt(m[2], 10);

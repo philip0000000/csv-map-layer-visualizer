@@ -43,16 +43,20 @@ export default function App() {
     updateFileEnabled,
   } = useCsvFiles();
 
-  const timelineApi = useTimelineFilterState();
+  const {
+    state: timelineState,
+    patch: patchTimeline,
+    setYearRange,
+  } = useTimelineFilterState();
   const mapToolsApi = useMapToolsState();
   const timelinePlaybackApi = useTimelinePlayback({
-    timelineState: timelineApi.state,
-    onTimelinePatch: timelineApi.patch,
+    timelineState,
+    onTimelinePatch: patchTimeline,
   });
 
   const derivedMapFeatures = useDerivedMapFeatures({
     files,
-    timeline: timelineApi.state,
+    timeline: timelineState,
   });
 
   const csvFileDrop = useCsvFileDrop({
@@ -64,6 +68,7 @@ export default function App() {
   });
 
   const selectedHeaders = selected?.headers;
+  const selectedRows = selected?.rows;
 
   const timelineFields = useMemo(() => {
     if (!selectedHeaders) {
@@ -86,16 +91,16 @@ export default function App() {
 
   // When timeline is enabled, compute year domain from selected file
   useEffect(() => {
-    if (!selected) return;
-    if (!timelineApi.state.timelineEnabled) return;
+    if (!selectedRows) return;
+    if (!timelineState.timelineEnabled) return;
 
     // if user has set a manual year domain, do not overwrite it from data
-    if (timelineApi.state.yearDomainMode === "manual") return;
+    if (timelineState.yearDomainMode === "manual") return;
 
     let min = null;
     let max = null;
 
-    for (const r of selected.rows ?? []) {
+    for (const r of selectedRows) {
       const extent = getRowTimelineExtent(
         r,
         timelineFields,
@@ -107,7 +112,7 @@ export default function App() {
       if (max == null || extent.max > max) max = extent.max;
     }
 
-    timelineApi.patch({
+    patchTimeline({
       yearMin: min,
       yearMax: max,
       // Keep the Min/Max input boxes in sync while in auto mode
@@ -115,8 +120,8 @@ export default function App() {
       yearMaxDraft: String(max ?? ""),
     });
 
-    const s = timelineApi.state.startYear;
-    const e = timelineApi.state.endYear;
+    const s = timelineState.startYear;
+    const e = timelineState.endYear;
 
     if (min != null && max != null) {
       const nextStart = s == null ? min : Math.max(min, Math.min(max, s));
@@ -126,16 +131,20 @@ export default function App() {
       const finalEnd = Math.max(nextStart, nextEnd);
 
       if (finalStart !== s || finalEnd !== e) {
-        timelineApi.setYearRange(finalStart, finalEnd);
+        setYearRange(finalStart, finalEnd);
       }
     }
   }, [
     selected?.id,
-    timelineApi.state.timelineEnabled,
-    timelineApi.state.yearDomainMode,
-    selected?.rows,
+    selectedRows,
+    timelineState.timelineEnabled,
+    timelineState.yearDomainMode,
+    timelineState.startYear,
+    timelineState.endYear,
     timelineFields,
     timelineRangeFields,
+    patchTimeline,
+    setYearRange,
   ]);
 
   return (
@@ -170,9 +179,9 @@ export default function App() {
             onUnloadFile={unloadFile}
             onToggleEnabled={updateFileEnabled}
             onUpdateMapping={updateFileMapping}
-            timelineState={timelineApi.state}
+            timelineState={timelineState}
             timelineFields={timelineFields}
-            onTimelinePatch={timelineApi.patch}
+            onTimelinePatch={patchTimeline}
             onTimelinePlaybackStart={timelinePlaybackApi.startPlayback}
             onTimelinePlaybackStop={timelinePlaybackApi.stopPlayback}
             timelineStats={{

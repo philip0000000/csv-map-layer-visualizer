@@ -150,24 +150,15 @@ export default function DualRangeSlider({
 
   /**
    * Convert a value in [domain.min, domain.max] to a pixel offset from the left edge.
-   * Prefers measuredWidth (reactive), with a DOM-width fallback for first paint timing.
+   * Uses measuredWidth state so render never reads from a ref.
    */
   function pxFromValue(v) {
     if (!domain) return 0;
-
-    // Prefer measuredWidth (reactive), but fall back to DOM width if it’s not ready yet.
-    const el = sliderRef.current;
-    const w =
-      (Number.isFinite(measuredWidth) && measuredWidth > 0
-        ? measuredWidth
-        : el?.getBoundingClientRect().width) || 0;
-
-    if (w <= 0) return 0;
+    if (measuredWidth <= 0) return 0;
 
     const t = (v - domain.min) / (domain.max - domain.min);
-    return t * w;
+    return t * measuredWidth;
   }
-
   /**
    * Convert a pointer clientX coordinate to a value in the slider domain.
    * - Computes relative x-position inside the slider element

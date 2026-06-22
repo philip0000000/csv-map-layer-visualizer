@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { parseCsvFile, parseCsvText } from "./csvParse";
 import { autoDetectLatLon } from "./geoColumns";
 
@@ -19,32 +19,18 @@ import { autoDetectLatLon } from "./geoColumns";
 export function useCsvFiles() {
   // List of loaded CSV files.
   const [files, setFiles] = useState([]); // Empty defaults
-  // ID of the currently selected CSV file.
-  const [selectedId, setSelectedId] = useState(null);
-
-  /**
-   * Ensure selectedId always points to a valid file.
-   */
-  useEffect(() => {
-    // If all files were removed, clear selection.
-    if (files.length === 0) {
-      setSelectedId(null);
-      return;
-    }
-
-    // If selected file no longer exists, select the first file.
-    if (!files.some((f) => f.id === selectedId)) {
-      setSelectedId(files[0].id);
-    }
-  }, [files, selectedId]);
+  // ID requested by the UI. The public selectedId below is derived from files
+  // so removed files cannot leave the app with an invalid selection.
+  const [requestedSelectedId, setSelectedId] = useState(null);
 
   // The currently selected CSV file object.
   // Returns null if nothing is selected.
   const selected = useMemo(
-    () => files.find((f) => f.id === selectedId) || null,
-    [files, selectedId]
+    () => files.find((f) => f.id === requestedSelectedId) || files[0] || null,
+    [files, requestedSelectedId]
   );
 
+  const selectedId = selected?.id ?? null;
   /**
    * Import one or more CSV files.
    * Files are parsed client-side only.

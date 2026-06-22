@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useSessionStorageState } from "./useSessionStorageState";
 
 const STORAGE_KEY = "csv-map-layer-visualizer.timeline.v1";
@@ -63,9 +63,9 @@ export function useTimelineFilterState() {
     }));
   }, [state?.playback, setState]);
 
-  function patch(partial) {
+  const patch = useCallback((partial) => {
     setState((prev) => ({ ...prev, ...partial }));
-  }
+  }, [setState]);
 
   /*
    * Sets the computed year domain (data-derived bounds).
@@ -79,29 +79,29 @@ export function useTimelineFilterState() {
    * For auto-domain updates, prefer a single `patch()` call that
    * updates domain + draft fields together (see App.jsx).
    */
-  function setYearDomain(yearMin, yearMax) {
+  const setYearDomain = useCallback((yearMin, yearMax) => {
     setState((prev) => ({
       ...prev,
       yearMin: yearMin ?? null,
       yearMax: yearMax ?? null,
     }));
-  }
+  }, [setState]);
 
-  function setYearRange(startYear, endYear) {
+  const setYearRange = useCallback((startYear, endYear) => {
     setState((prev) => ({
       ...prev,
       startYear: startYear ?? null,
       endYear: endYear ?? null,
     }));
-  }
+  }, [setState]);
 
-  function setDayRange(startDay, endDay) {
+  const setDayRange = useCallback((startDay, endDay) => {
     setState((prev) => ({
       ...prev,
       startDay: clampInt(startDay, 1, 365),
       endDay: clampInt(endDay, 1, 365),
     }));
-  }
+  }, [setState]);
 
   return {
     state,

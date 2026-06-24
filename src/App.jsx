@@ -7,10 +7,9 @@ import { useTimelineFilterState } from "./components/useTimelineFilterState";
 import {
   autoDetectRangeFields,
   autoDetectTimelineFields,
-  parseDateValue,
-  parseYearValue,
   tryGetYear,
 } from "./components/timeline";
+import { getRangeYear } from "./components/csvFeatureValueHelpers";
 import { useMapToolsState } from "./components/useMapToolsState";
 import { useDerivedMapFeatures } from "./components/useDerivedMapFeatures";
 import { CsvPanelOverlay } from "./components/CsvPanelOverlay";
@@ -237,24 +236,4 @@ function getRowTimelineExtent(row, timelineFields, rangeFields) {
   if (year == null) return null;
 
   return { min: year, max: year };
-}
-
-/**
- * Extract a year value from either a numeric year field or a date field.
- * Returns null when no usable value is present.
- */
-function getRangeYear(row, yearField, dateField) {
-  if (!row || typeof row !== "object") return null;
-
-  if (yearField) {
-    const y = parseYearValue(row[yearField]);
-    if (y != null) return y;
-  }
-
-  if (dateField) {
-    const d = parseDateValue(row[dateField]);
-    if (d) return d.getUTCFullYear();
-  }
-
-  return null;
 }

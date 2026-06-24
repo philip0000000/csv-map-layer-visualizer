@@ -1,4 +1,5 @@
-import { parseDateValue, parseYearValue, tryGetYear, tryParseDayOfYear } from "./timeline";
+import { tryGetYear, tryParseDayOfYear } from "./timeline";
+import { getRangeYear } from "./csvFeatureValueHelpers";
 
 export function isRowVisibleForTimeline({
   row,
@@ -57,20 +58,4 @@ export function isRowVisibleForTimeline({
   }
 
   return true;
-}
-
-export function getRangeYear(row, yearField, dateField) {
-  if (!row || typeof row !== "object") return null;
-
-  if (yearField) {
-    const y = parseYearValue(row[yearField]);
-    if (y != null) return y;
-  }
-
-  if (dateField) {
-    const d = parseDateValue(row[dateField]);
-    if (d) return d.getUTCFullYear();
-  }
-
-  return null;
 }

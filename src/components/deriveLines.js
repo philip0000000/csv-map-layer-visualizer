@@ -1,6 +1,7 @@
 import { isValidLat, isValidLon, parseFlexibleFloat } from "./geoColumns";
 import { getRowFeatureType } from "./featureTypes";
 import { isRowVisibleForTimeline } from "./timelineVisibility";
+import { applyFirstNonEmpty, parseOrderValue } from "./csvFeatureValueHelpers";
 
 const DEFAULT_LINE_STYLE = {
   color: "#3388ff",
@@ -142,11 +143,6 @@ export function deriveLinesFromCsv({
   return { lines, skipped, skippedByTimeline, reason: null };
 }
 
-function parseOrderValue(value) {
-  const n = Number.parseFloat(String(value ?? "").trim());
-  return Number.isFinite(n) ? n : null;
-}
-
 function getOrderKey(item) {
   return item.orderValue ?? item.index;
 }
@@ -172,18 +168,6 @@ function resolveArrowMode(rows) {
   }
 
   return "none";
-}
-
-function applyFirstNonEmpty(target, key, value, parser) {
-  if (target[key] != null && target[key] !== "") return;
-
-  const raw = String(value ?? "").trim();
-  if (!raw) return;
-
-  const parsed = parser ? parser(raw) : raw;
-  if (parsed == null || parsed === "") return;
-
-  target[key] = parsed;
 }
 
 function parseWeight(value) {

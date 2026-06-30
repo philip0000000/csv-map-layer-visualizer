@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 // Import core components from react-leaflet.
 // MapContainer is the main map wrapper.
 // TileLayer is used to load map tiles (images).
@@ -24,7 +24,7 @@ import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import "leaflet-polylinedecorator";
 
-import { getMarkerIcon } from "./markerIcons";
+import { getClusterMarkerIcon, getMarkerIcon } from "./markerIcons";
 
 /**
  * Build a list of fields to show in the popup.
@@ -76,6 +76,47 @@ function renderPointPopup(p, latField, lonField) {
       </div>
     </Popup>
   );
+}
+
+/**
+ * Attach the CSV marker value to the Leaflet marker instance.
+ * MarkerClusterGroup only sees Leaflet markers, so the cluster icon code reads this later.
+ */
+function setCsvMarkerValue(marker, markerValue) {
+  if (marker) {
+    marker.options.csvMarkerValue = markerValue;
+  }
+}
+
+/**
+ * Build a custom cluster icon from the first marker in the cluster.
+ * This preserves the first row marker style and adds the cluster count badge.
+ */
+function createMarkerClusterIcon(cluster) {
+  const childMarkers = typeof cluster?.getAllChildMarkers === "function"
+    ? cluster.getAllChildMarkers()
+    : [];
+  const firstMarkerValue = childMarkers[0]?.options?.csvMarkerValue;
+  const count = typeof cluster?.getChildCount === "function"
+    ? cluster.getChildCount()
+    : childMarkers.length;
+
+  return getClusterMarkerIcon(firstMarkerValue, count);
+}
+
+/**
+ * Hide the original cluster icon while spiderfied markers are spread out.
+ * The spread markers remain visible; the center marker would just add visual noise.
+ */
+function setClusterIconVisibility(cluster, isVisible) {
+  const iconElement =
+    typeof cluster?.getElement === "function"
+      ? cluster.getElement()
+      : cluster?._icon;
+
+  if (iconElement) {
+    iconElement.style.visibility = isVisible ? "" : "hidden";
+  }
 }
 
 function renderRegionPopup(region, latField, lonField) {
@@ -239,8 +280,31 @@ export default function GeoMap({
   clusterRadius = 80,   // default strength
 }) {
   const { BaseLayer, Overlay } = LayersControl;
+  const markerClusterGroupRef = useRef(null);
   const markerPoints = points.filter((p) => !p.image);
   const imagePoints = points.filter((p) => !!p.image);
+
+  // Hide the original cluster icon while MarkerClusterGroup spiderfies exact-overlap markers.
+  useEffect(() => {
+    const group = markerClusterGroupRef.current;
+    if (!group) return undefined;
+
+    const handleSpiderfied = (event) => {
+      setClusterIconVisibility(event?.cluster, false);
+    };
+
+    const handleUnspiderfied = (event) => {
+      setClusterIconVisibility(event?.cluster, true);
+    };
+
+    group.on("spiderfied", handleSpiderfied);
+    group.on("unspiderfied", handleUnspiderfied);
+
+    return () => {
+      group.off("spiderfied", handleSpiderfied);
+      group.off("unspiderfied", handleUnspiderfied);
+    };
+  }, [clusterMarkersEnabled, clusterRadius]);
 
   return (
     // MapContainer must have a fixed height and width.
@@ -317,12 +381,14 @@ export default function GeoMap({
       */}
       {clusterMarkersEnabled ? (
         <MarkerClusterGroup
+          ref={markerClusterGroupRef}
           // Force a re-init when clustering settings change.
           // Leaflet.markercluster does not always apply maxClusterRadius updates dynamically.
           key={`cluster:${clusterMarkersEnabled ? 1 : 0}:${clusterRadius}`}
           // chunkedLoading improves responsiveness when there are many markers.
           // It progressively adds markers to the map instead of blocking the UI.
           chunkedLoading
+          iconCreateFunction={createMarkerClusterIcon}
           maxClusterRadius={clusterRadius}
         >
           {markerPoints.map((p) => {
@@ -331,6 +397,7 @@ export default function GeoMap({
             return (
               <Marker
                 key={p.id}
+                ref={(marker) => setCsvMarkerValue(marker, p.marker)}
                 position={[p.lat, p.lon]}
                 {...(icon ? { icon } : {})}
               >

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import "./App.css";
 import GeoMap from "./components/GeoMap";
 import CsvPanel from "./components/CsvPanel";
@@ -16,6 +16,8 @@ import { CsvPanelOverlay } from "./components/CsvPanelOverlay";
 import { useCsvFileDrop } from "./components/useCsvFileDrop";
 import { useExampleCsvFilesFromUrl } from "./components/useExampleCsvFilesFromUrl";
 import { useTimelinePlayback } from "./components/useTimelinePlayback";
+
+const LARGE_RAW_MARKER_WARNING_THRESHOLD = 3000;
 
 export default function App() {
   /**
@@ -68,6 +70,33 @@ export default function App() {
 
   const selectedHeaders = selected?.headers;
   const selectedRows = selected?.rows;
+  const visibleMarkerPointCount = useMemo(
+    () => derivedMapFeatures.points.points.filter((point) => !point.image).length,
+    [derivedMapFeatures.points.points],
+  );
+
+  // Warn before disabling clustering when raw marker rendering is likely to be expensive.
+  const patchMapToolsWithSafeguards = useCallback((partial) => {
+    const disablingClusterMarkers =
+      partial?.clusterMarkersEnabled === false &&
+      !!mapToolsApi.state.clusterMarkersEnabled;
+
+    if (
+      disablingClusterMarkers &&
+      visibleMarkerPointCount > LARGE_RAW_MARKER_WARNING_THRESHOLD
+    ) {
+      const confirmed = window.confirm(
+        `This will render ${visibleMarkerPointCount.toLocaleString()} individual markers and may slow down the browser. Continue?`,
+      );
+
+      if (!confirmed) return;
+    }
+
+    mapToolsApi.patch(partial);
+  }, [
+    mapToolsApi,
+    visibleMarkerPointCount,
+  ]);
 
   const timelineFields = useMemo(() => {
     if (!selectedHeaders) {
@@ -190,7 +219,7 @@ export default function App() {
                 (derivedMapFeatures.lines.skippedByTimeline ?? 0),
             }}
             mapToolsState={mapToolsApi.state}
-            onMapToolsPatch={mapToolsApi.patch}
+            onMapToolsPatch={patchMapToolsWithSafeguards}
           />
         </CsvPanelOverlay>
       </div>

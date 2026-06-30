@@ -35,3 +35,62 @@ body {
   /* Shift marker left by half its width to keep it centered on map point */
   transform: translateX(-50%);
 }
+
+/* Cluster icons reuse the marker body and add a count badge. */
+.csv-marker-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+/* Body can be text, emoji, an image marker, or a neutral fallback. */
+.csv-marker-group-body {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 3px;
+  font-size: 20px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Keep image-based marker values inside the same cluster icon footprint. */
+.csv-marker-group-image {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+/* Used when the first marker in a cluster has no marker value. */
+.csv-marker-group-body-neutral {
+  width: 28px;
+  min-width: 28px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #334155;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+}
+
+/* Small count bubble layered over the chosen marker style. */
+.csv-marker-group-count {
+  position: absolute;
+  right: -7px;
+  top: -7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+}

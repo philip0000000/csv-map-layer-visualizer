@@ -1,6 +1,5 @@
 import { isValidLat, isValidLon, parseFlexibleFloat } from "./geoColumns";
 import { getRowFeatureType } from "./featureTypes";
-import { isRowVisibleForTimeline } from "./timelineVisibility";
 import { applyFirstNonEmpty, parseOrderValue } from "./csvFeatureValueHelpers";
 
 const DEFAULT_LINE_STYLE = {
@@ -25,40 +24,23 @@ export function deriveLinesFromCsv({
   rows,
   latField,
   lonField,
-  timeline,
-  timelineFields,
-  rangeFields,
   featureTypeField,
   idPrefix = "",
 }) {
   const lines = [];
   let skipped = 0;
-  let skippedByTimeline = 0;
 
   if (!Array.isArray(rows) || !latField || !lonField) {
     return {
       lines,
       skipped,
-      skippedByTimeline,
       reason: "Missing rows or lat/lon mapping.",
     };
   }
 
   if (!featureTypeField) {
-    return { lines, skipped, skippedByTimeline, reason: null };
+    return { lines, skipped, reason: null };
   }
-
-  const timelineEnabled = !!timeline?.timelineEnabled;
-  const dayEnabled = !!timeline?.dayFilterEnabled;
-
-  const yearMin = timeline?.yearMin ?? null;
-  const yearMax = timeline?.yearMax ?? null;
-
-  const startYear = timeline?.startYear ?? yearMin;
-  const endYear = timeline?.endYear ?? yearMax;
-
-  const startDay = timeline?.startDay ?? 1;
-  const endDay = timeline?.endDay ?? 365;
 
   const groups = new Map();
 
@@ -68,23 +50,6 @@ export function deriveLinesFromCsv({
 
     if (featureType !== "line") continue;
 
-    if (timelineEnabled) {
-      const visible = isRowVisibleForTimeline({
-        row,
-        timelineFields,
-        rangeFields,
-        startYear,
-        endYear,
-        startDay,
-        endDay,
-        dayEnabled,
-      });
-
-      if (!visible) {
-        skippedByTimeline++;
-        continue;
-      }
-    }
 
     const featureId = String(row?.featureId ?? "").trim();
     if (!featureId) {
@@ -132,15 +97,14 @@ export function deriveLinesFromCsv({
     lines.push({
       id,
       featureId,
+      sourceRowIndex: sorted[0]?.index ?? null,
       coordinates,
       style,
       arrow,
-      // Use first sorted row for popup metadata.
-      row: sorted[0]?.row ?? null,
     });
   }
 
-  return { lines, skipped, skippedByTimeline, reason: null };
+  return { lines, skipped, reason: null };
 }
 
 function getOrderKey(item) {

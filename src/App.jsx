@@ -193,6 +193,7 @@ export default function App() {
           points={derivedMapFeatures.points.points}
           regions={derivedMapFeatures.regions.polygons}
           lines={derivedMapFeatures.lines.lines}
+          getSourceRow={derivedMapFeatures.getSourceRow}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
           clusterRadius={mapToolsApi.state.clusterRadius}
         />

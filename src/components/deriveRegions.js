@@ -1,6 +1,5 @@
 import { isValidLat, isValidLon, parseFlexibleFloat } from "./geoColumns";
 import { getRowFeatureType } from "./featureTypes";
-import { isRowVisibleForTimeline } from "./timelineVisibility";
 import { applyFirstNonEmpty, parseOrderValue } from "./csvFeatureValueHelpers";
 
 const DEFAULT_STYLE = {
@@ -31,43 +30,26 @@ export function deriveRegionsFromCsv({
   rows,
   latField,
   lonField,
-  timeline,
-  timelineFields,
-  rangeFields,
   featureTypeField,
   idPrefix = "",
 }) {
   const polygons = [];
   let skipped = 0;
-  let skippedByTimeline = 0;
 
   if (!Array.isArray(rows) || !latField || !lonField) {
     return {
       polygons,
       skipped,
-      skippedByTimeline,
       reason: "Missing rows or lat/lon mapping.",
     };
   }
 
   if (!featureTypeField) {
-    return { polygons, skipped, skippedByTimeline, reason: null };
+    return { polygons, skipped, reason: null };
   }
 
-  const timelineEnabled = !!timeline?.timelineEnabled;
-  const dayEnabled = !!timeline?.dayFilterEnabled;
-
-  const yearMin = timeline?.yearMin ?? null;
-  const yearMax = timeline?.yearMax ?? null;
-
-  const startYear = timeline?.startYear ?? yearMin;
-  const endYear = timeline?.endYear ?? yearMax;
-
-  const startDay = timeline?.startDay ?? 1;
-  const endDay = timeline?.endDay ?? 365;
-
   // Group accumulator:
-  // featureId -> { parts: Map(part -> { rows: [...] }), firstPartKey, popupRow }
+  // featureId -> { parts: Map(part -> { rows: [...] }), firstPartKey, popupRow, popupRowIndex }
   //
   // popupRow is used for the region popup fields and is taken from the "first" part
   // (so multi-part regions show consistent metadata instead of random sub-part metadata).
@@ -78,27 +60,6 @@ export function deriveRegionsFromCsv({
     const featureType = getRowFeatureType(row, featureTypeField);
 
     if (featureType !== "region") continue;
-
-    // Timeline filtering:
-    // - Supports both point-in-time rows (year/date) and range rows (yearFrom/yearTo or dateFrom/dateTo).
-    // - Range rows are visible if their range intersects the selected year window.
-    if (timelineEnabled) {
-      const visible = isRowVisibleForTimeline({
-        row,
-        timelineFields,
-        rangeFields,
-        startYear,
-        endYear,
-        startDay,
-        endDay,
-        dayEnabled,
-      });
-
-      if (!visible) {
-        skippedByTimeline++;
-        continue;
-      }
-    }
 
     const featureId = String(row?.featureId ?? "").trim();
     if (!featureId) {
@@ -124,6 +85,7 @@ export function deriveRegionsFromCsv({
         parts: new Map(),
         firstPartKey: part,
         popupRow: null,
+        popupRowIndex: null,
       });
     }
 
@@ -135,6 +97,7 @@ export function deriveRegionsFromCsv({
 
     if (!group.popupRow && group.firstPartKey === part) {
       group.popupRow = row;
+      group.popupRowIndex = i;
     }
 
     group.parts.get(part).rows.push({
@@ -176,14 +139,14 @@ export function deriveRegionsFromCsv({
         id,
         featureId,
         part,
+        sourceRowIndex: group.popupRowIndex ?? sorted[0]?.index ?? null,
         coordinates,
-        row: group.popupRow ?? sorted[0]?.row ?? null,
         style,
       });
     }
   }
 
-  return { polygons, skipped, skippedByTimeline, reason: null };
+  return { polygons, skipped, reason: null };
 }
 
 function getOrderKey(item) {

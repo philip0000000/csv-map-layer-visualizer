@@ -52,7 +52,13 @@ function buildPopupFields(row, latField, lonField, limit = 30) {
  * Build the popup content for one point.
  * Kept in a helper so the Marker and Clustered Marker render paths stay identical.
  */
-function renderPointPopup(p, latField, lonField) {
+function getFeaturePopupRow(feature, getSourceRow) {
+  return feature?.row ?? getSourceRow?.(feature?.sourceFileId, feature?.sourceRowIndex) ?? null;
+}
+
+function renderPointPopup(p, latField, lonField, getSourceRow) {
+  const row = getFeaturePopupRow(p, getSourceRow);
+
   return (
     <Popup>
       <div style={{ minWidth: 220 }}>
@@ -68,7 +74,7 @@ function renderPointPopup(p, latField, lonField) {
 
         <hr style={{ opacity: 0.25 }} />
 
-        {buildPopupFields(p.row, latField, lonField).map(([k, v]) => (
+        {buildPopupFields(row, latField, lonField).map(([k, v]) => (
           <div key={k} style={{ marginBottom: 4 }}>
             <b>{k}:</b> {String(v ?? "")}
           </div>
@@ -119,16 +125,17 @@ function setClusterIconVisibility(cluster, isVisible) {
   }
 }
 
-function renderRegionPopup(region, latField, lonField) {
+function renderRegionPopup(region, latField, lonField, getSourceRow) {
+  const row = getFeaturePopupRow(region, getSourceRow);
   // Prefer a human-readable name from the CSV row, fall back to featureId, then a generic label
-  const title = String(region?.row?.name ?? region?.featureId ?? "Region");
+  const title = String(row?.name ?? region?.featureId ?? "Region");
 
   return (
     <Popup>
       <div style={{ minWidth: 220 }}>
         <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
 
-        {buildPopupFields(region.row, latField, lonField).map(([k, v]) => (
+        {buildPopupFields(row, latField, lonField).map(([k, v]) => (
           <div key={k} style={{ marginBottom: 4 }}>
             <b>{k}:</b> {String(v ?? "")}
           </div>
@@ -139,15 +146,16 @@ function renderRegionPopup(region, latField, lonField) {
 }
 
 
-function renderLinePopup(line, latField, lonField) {
-  const title = String(line?.row?.name ?? line?.featureId ?? "Line");
+function renderLinePopup(line, latField, lonField, getSourceRow) {
+  const row = getFeaturePopupRow(line, getSourceRow);
+  const title = String(row?.name ?? line?.featureId ?? "Line");
 
   return (
     <Popup>
       <div style={{ minWidth: 220 }}>
         <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
 
-        {buildPopupFields(line.row, latField, lonField).map(([k, v]) => (
+        {buildPopupFields(row, latField, lonField).map(([k, v]) => (
           <div key={k} style={{ marginBottom: 4 }}>
             <b>{k}:</b> {String(v ?? "")}
           </div>
@@ -276,6 +284,7 @@ export default function GeoMap({
 
   // When true, nearby markers are grouped into clusters (visual-only feature).
   // When false, markers are rendered normally (current behavior).
+  getSourceRow,
   clusterMarkersEnabled = false,
   clusterRadius = 80,   // default strength
 }) {
@@ -401,7 +410,7 @@ export default function GeoMap({
                 position={[p.lat, p.lon]}
                 {...(icon ? { icon } : {})}
               >
-                {renderPointPopup(p, p.latField, p.lonField)}
+                {renderPointPopup(p, p.latField, p.lonField, getSourceRow)}
               </Marker>
             );
           })}
@@ -416,7 +425,7 @@ export default function GeoMap({
               position={[p.lat, p.lon]}
               {...(icon ? { icon } : {})}
             >
-              {renderPointPopup(p, p.latField, p.lonField)}
+              {renderPointPopup(p, p.latField, p.lonField, getSourceRow)}
             </Marker>
           );
         })
@@ -429,7 +438,7 @@ export default function GeoMap({
           bounds={buildPointImageBounds(p)}
           interactive
         >
-          {renderPointPopup(p, p.latField, p.lonField)}
+          {renderPointPopup(p, p.latField, p.lonField, getSourceRow)}
         </ImageOverlay>
       ))}
 
@@ -439,14 +448,14 @@ export default function GeoMap({
           positions={region.coordinates}
           pathOptions={region.style}
         >
-          {renderRegionPopup(region, region.latField, region.lonField)}
+          {renderRegionPopup(region, region.latField, region.lonField, getSourceRow)}
         </Polygon>
       ))}
 
       {lines.map((line) => (
         <LayerGroup key={line.id}>
           <Polyline positions={line.coordinates} pathOptions={line.style}>
-            {renderLinePopup(line, line.latField, line.lonField)}
+            {renderLinePopup(line, line.latField, line.lonField, getSourceRow)}
           </Polyline>
           <LineArrowDecorator line={line} />
         </LayerGroup>

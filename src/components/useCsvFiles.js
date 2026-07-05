@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { parseCsvFile, parseCsvText } from "./csvParse";
+import { parseCsvBlob, parseCsvFile } from "./csvParse";
 import { autoDetectLatLon } from "./geoColumns";
 
 /**
@@ -143,12 +143,12 @@ export function useCsvFiles() {
       // 2) If not found, use examples-index.json and pick first basename match
 
       const legacyUrl = `${baseUrl}${requested}`;
-      const legacyText = await fetchExampleText(legacyUrl);
+      const legacyBlob = await fetchExampleCsvBlob(legacyUrl);
 
-      if (legacyText != null) {
+      if (legacyBlob != null) {
         return addParsedExampleFile({
           displayName: requested,
-          text: legacyText,
+          blob: legacyBlob,
         });
       }
 
@@ -191,14 +191,14 @@ export function useCsvFiles() {
     }
 
     const fileUrl = `${baseUrl}${resolvedRelativePath}`;
-    const text = await fetchExampleText(fileUrl);
-    if (text == null) {
+    const blob = await fetchExampleCsvBlob(fileUrl);
+    if (blob == null) {
       return;
     }
 
     return addParsedExampleFile({
       displayName: requested,
-      text,
+      blob,
     });
   }
 
@@ -248,11 +248,11 @@ export function useCsvFiles() {
   }
 
   /**
-   * Parse CSV text and add it as a new file in state.
+   * Parse a fetched example CSV and add it as a new file in state.
    * Also auto-detects latitude/longitude fields.
    */
-  function addParsedExampleFile({ displayName, text }) {
-    const parsed = parseCsvText(text);
+  async function addParsedExampleFile({ displayName, blob }) {
+    const parsed = await parseCsvBlob(blob);
 
     const { latField, lonField } = autoDetectLatLon(parsed.headers);
 
@@ -271,7 +271,7 @@ export function useCsvFiles() {
 
       // Keep what the user requested visible in the UI.
       name: displayName,
-      size: text.length,
+      size: blob.size,
       lastModified: null,
 
       headers: parsed.headers,
@@ -289,23 +289,25 @@ export function useCsvFiles() {
     setSelectedId(item.id);
   }
 
-  async function fetchExampleText(url) {
+  async function fetchExampleCsvBlob(url) {
     const res = await fetch(url, { cache: "no-cache" });
     if (!res.ok) return null;
 
-    const text = await res.text();
-
-    // Vite dev server may return index.html for missing files.
-    // Reject obvious HTML fallback responses.
-    const trimmed = text.trimStart().toLowerCase();
-    if (
-      trimmed.startsWith("<!doctype html") ||
-      trimmed.startsWith("<html")
-    ) {
+    // Vite/GitHub Pages may return index.html for missing files.
+    // Reject HTML before handing the response to the chunked CSV parser.
+    const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
+    if (contentType.includes("text/html")) {
       return null;
     }
 
-    return text;
+    const blob = await res.blob();
+    const prefix = await blob.slice(0, 512).text();
+    const trimmed = prefix.trimStart().toLowerCase();
+    if (trimmed.startsWith("<!doctype html") || trimmed.startsWith("<html")) {
+      return null;
+    }
+
+    return blob;
   }
 
   // Public API of this hook.

@@ -13,7 +13,7 @@ const MAX_PREVIEW_ROWS = 25;
 const MAX_ERRORS = 200;
 
 /**
- * Size of each uploaded file chunk PapaParse reads at a time.
+ * Size of each CSV chunk PapaParse reads at a time.
  * Keeping this explicit makes import tuning easier later.
  */
 const CSV_UPLOAD_CHUNK_SIZE_BYTES = 1 * 1024 * 1024; // 1 MB
@@ -35,12 +35,27 @@ const MOBILE_LARGE_FILE_BYTES = 1 * 1024 * 1024;
  * @returns {Promise<object>} Parsed CSV result
  */
 export async function parseCsvFile(file) {
+  return parseCsvBlob(file, {
+    rowCap: shouldApplyMobileRowCap(file) ? MOBILE_ROW_CAP : null,
+  });
+}
+
+/**
+ * Parse CSV content from a Blob/File using PapaParse chunk loading.
+ * Shared by uploaded files and fetched example CSVs.
+ *
+ * @param {Blob|File} blob - CSV data source
+ * @param {object} options - parser options
+ * @param {number|null} options.rowCap - optional cap for stored usable rows
+ * @returns {Promise<object>} Parsed CSV result
+ */
+export async function parseCsvBlob(blob, { rowCap = null } = {}) {
   return new Promise((resolve) => {
     const state = createChunkParserState({
-      rowCap: shouldApplyMobileRowCap(file) ? MOBILE_ROW_CAP : null,
+      rowCap,
     });
 
-    Papa.parse(file, {
+    Papa.parse(blob, {
       delimiter: "", // auto-detect delimiter
       skipEmptyLines: true,
       quoteChar: '"',
@@ -60,72 +75,6 @@ export async function parseCsvFile(file) {
   });
 }
 
-/**
- * Parse CSV content from a string.
- * Used for loading example CSVs via fetch() from /public/examples.
- *
- * @param {string} text - raw CSV text
- * @returns {object} Parsed CSV result
- */
-export function parseCsvText(text) {
-  const cleaned = prepareCsvText(text);
-
-  // If nothing remains after cleaning, file is empty
-  if (!cleaned) {
-    return createEmptyResult(["File is empty (or only blank lines)."]);
-  }
-
-  // Collect human-readable warnings and errors
-  const parseErrors = [];
-
-  /**
-   * Parse CSV using PapaParse.
-   * We do NOT use `header: true` because:
-   * - We want full control over broken rows
-   * - We want to allow truncation and repair
-   */
-  const result = parseTextToArrays(cleaned);
-
-  // Convert PapaParse errors into user-friendly messages
-  collectParserErrors(parseErrors, result.errors);
-
-  // Ensure parsed data is an array
-  const data = Array.isArray(result.data) ? result.data : [];
-  if (data.length === 0) {
-    return createEmptyResult([...parseErrors, "No rows detected."]);
-  }
-
-  return buildParsedCsvResult(data, parseErrors);
-}
-
-/**
- * Clean input before parsing:
- * - Split into lines
- * - Trim whitespace
- * - Remove empty lines
- *
- * This avoids many common CSV problems early.
- */
-function prepareCsvText(text) {
-  return String(text ?? "")
-    .split(/\r\n|\n|\r/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-    .join("\n");
-}
-
-/**
- * Parse cleaned CSV text into arrays.
- * This path is used by example CSV files, not uploaded files.
- */
-function parseTextToArrays(text) {
-  return Papa.parse(text, {
-    delimiter: "", // auto-detect delimiter
-    skipEmptyLines: true,
-    quoteChar: '"',
-    escapeChar: '"',
-  });
-}
 
 /**
  * Add PapaParse errors to our user-facing warning list.
@@ -141,7 +90,7 @@ function collectParserErrors(parseErrors, errors) {
 
 /**
  * Create the shared state used while PapaParse sends file chunks.
- * This keeps upload parsing incremental without changing React state per row.
+ * This keeps parsing incremental without changing React state per row.
  */
 function createChunkParserState({ rowCap = null } = {}) {
   return {
@@ -172,7 +121,7 @@ function processParsedChunk(state, result) {
 }
 
 /**
- * Process one parsed CSV row from an uploaded file.
+ * Process one parsed CSV row from a chunked CSV input.
  * The first non-empty row becomes the header; later rows become data objects.
  */
 function processParsedChunkRow(state, rowArr, lineNumber) {
@@ -188,7 +137,7 @@ function processParsedChunkRow(state, rowArr, lineNumber) {
     return;
   }
 
-  // The first non-empty row in the upload becomes the header row.
+  // The first non-empty row becomes the header row.
   if (!state.headers) {
     const rawHeaders = rowArr.map((h) => String(h ?? "").trim());
     const headers = normalizeHeaders(rawHeaders);
@@ -257,80 +206,6 @@ function finalizeChunkedCsvResult(state) {
 }
 
 /**
- * Build a parsed result from already-loaded CSV array data.
- * This is the string/example CSV path, so it keeps the old behavior.
- */
-function buildParsedCsvResult(data, parseErrors) {
-  /**
-   * Find the first non-empty row.
-   * This row is treated as the header row.
-   */
-  const headerRow = firstNonEmptyArrayRow(data);
-  if (!headerRow) {
-    return createEmptyResult([...parseErrors, "No header row detected."]);
-  }
-
-  // Normalize header names (trim, remove empty, ensure uniqueness)
-  const rawHeaders = headerRow.map((h) => String(h ?? "").trim());
-  const headers = normalizeHeaders(rawHeaders);
-
-  if (headers.length === 0) {
-    return createEmptyResult([...parseErrors, "Header row is empty."]);
-  }
-
-  // All rows after the header are treated as data rows
-  const headerIndex = data.indexOf(headerRow);
-  const rows = [];
-  let skipped = 0;
-
-  /**
-   * Process each data row:
-   * - Skip invalid rows
-   * - Trim values
-   * - Truncate extra columns
-   * - Fill missing values with empty strings
-   */
-  for (let i = headerIndex + 1; i < data.length; i++) {
-    const rowArr = data[i];
-    const lineNumber = i + 1;
-
-    // Skip rows that are not arrays
-    if (!Array.isArray(rowArr)) {
-      skipped++;
-      pushErr(parseErrors, `Skipped non-row at line ${lineNumber}.`);
-      continue;
-    }
-
-    // Skip fully empty rows
-    if (isEmptyRow(rowArr)) {
-      continue;
-    }
-
-    // Warn if row had too many values
-    if (rowArr.length > headers.length) {
-      pushErr(
-        parseErrors,
-        `Line ${lineNumber}: had ${rowArr.length} values; truncated to ${headers.length}.`
-      );
-    }
-
-    rows.push(rowArrayToObject(rowArr, headers));
-  }
-
-  // If no usable rows were parsed, report it
-  if (rows.length === 0) {
-    pushErr(parseErrors, "No usable data rows were parsed.");
-  }
-
-  // Report skipped malformed rows
-  if (skipped > 0) {
-    pushErr(parseErrors, `Skipped ${skipped} malformed row(s).`);
-  }
-
-  return createParsedResult(headers, rows, parseErrors);
-}
-
-/**
  * Create the object shape that the CSV panel and map already expect.
  * totalRows can be larger than rows.length when mobile safety caps stored rows.
  */
@@ -378,18 +253,6 @@ function shouldApplyMobileRowCap(file) {
   return hasCoarsePointer || narrowScreen || lowMemory;
 }
 
-/**
- * Returns the first row that:
- * - Is an array
- * - Contains at least one non-empty value
- */
-function firstNonEmptyArrayRow(data) {
-  for (const row of data) {
-    if (!Array.isArray(row)) continue;
-    if (!isEmptyRow(row)) return row;
-  }
-  return null;
-}
 
 /**
  * True when every cell in a parsed row is blank after trimming.

@@ -72,6 +72,15 @@ npm run dev
 
 Then open the URL printed in the terminal (usually http://localhost:5173).
 
+### Desktop run
+```bash
+npm run desktop:start
+```
+
+This launches the current app in the Electron desktop shell. It does not create a standalone executable or installer yet.
+
+For more details, see [Desktop runtime decision](docs/desktop-runtime.md).
+
 ## Embedding
 
 The long term goal is for the app to be embeddable in other web pages.

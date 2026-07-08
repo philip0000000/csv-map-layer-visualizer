@@ -5,7 +5,5 @@ import react from "@vitejs/plugin-react";
 // https://philip0000000.github.io/csv-map-layer-visualizer/
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  base: mode === "production" ? "/csv-map-layer-visualizer/" : "/",
+  base: mode === "desktop" ? "./" : mode === "production" ? "/csv-map-layer-visualizer/" : "/",
 }));
-
-

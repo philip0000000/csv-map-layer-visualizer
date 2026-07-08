@@ -3,9 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:desktop": "vite build --mode desktop",
+    "desktop:dev": "concurrently -k \"npm run dev -- --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && node desktop/run-electron.cjs . --dev-server=http://127.0.0.1:5173\"",
+    "desktop:start": "npm run build:desktop && node desktop/run-electron.cjs .",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -24,10 +28,13 @@
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^10.0.3",
+    "electron": "^43.1.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "wait-on": "^9.0.10"
   }
 }

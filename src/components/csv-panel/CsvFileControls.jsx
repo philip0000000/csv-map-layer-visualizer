@@ -5,6 +5,7 @@ export default function CsvFileControls({
   selectedId,
   onSelect,
   onImportFiles,
+  desktopImport,
   onUnloadFile,
   onToggleEnabled,
 }) {
@@ -13,6 +14,8 @@ export default function CsvFileControls({
    * We trigger this programmatically when user clicks "Import..."
    */
   const fileInputRef = useRef(null);
+  const isDesktopImporting = desktopImport?.status === "importing";
+  const desktopSummary = desktopImport?.summary ?? null;
 
   /**
    * Trigger the hidden file input.
@@ -47,6 +50,45 @@ export default function CsvFileControls({
       >
         Import...
       </button>
+
+      {/* Desktop-only SQLite import. This is separate from the normal map import above. */}
+      {desktopImport?.isAvailable && (
+        <div className="csvDesktopImportBlock">
+          <button
+            type="button"
+            className="csvBtnPrimary csvDesktopImportButton"
+            onClick={desktopImport.onImport}
+            disabled={isDesktopImporting}
+          >
+            {isDesktopImporting ? "Importing to SQLite..." : "Import to local SQLite"}
+          </button>
+
+          {desktopImport.status === "imported" && desktopSummary && (
+            <div className="csvDesktopImportStatus" role="status">
+              <div className="csvDesktopImportTitle">{desktopSummary.fileName}</div>
+              <div>
+                Stored {desktopSummary.importedFeatureCount} of {desktopSummary.rowCount} rows
+                {desktopSummary.skippedRowCount ? `, skipped ${desktopSummary.skippedRowCount}` : ""}.
+              </div>
+              <div>
+                Fields: {formatFieldList(desktopSummary.detectedFields)}
+              </div>
+            </div>
+          )}
+
+          {desktopImport.status === "canceled" && (
+            <div className="csvDesktopImportStatus" role="status">
+              Import canceled.
+            </div>
+          )}
+
+          {desktopImport.status === "error" && (
+            <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+              {desktopImport.error ?? "Import failed."}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Hidden file input */}
       <input
@@ -109,4 +151,20 @@ export default function CsvFileControls({
       </div>
     </>
   );
+}
+
+/**
+ * Show the detected import fields in one short status line.
+ */
+function formatFieldList(fields) {
+  if (!fields) return "none";
+
+  return [
+    fields.latField,
+    fields.lonField,
+    fields.yearField,
+    fields.dateField,
+  ]
+    .filter(Boolean)
+    .join(" / ") || "none";
 }

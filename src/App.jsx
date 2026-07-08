@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 import GeoMap from "./components/GeoMap";
 import CsvPanel from "./components/CsvPanel";
@@ -67,6 +67,65 @@ export default function App() {
   useExampleCsvFilesFromUrl({
     importExampleFile,
   });
+  // Electron exposes this object in desktop mode only. Browser builds will not have it.
+  const desktopApi = useMemo(() => globalThis.csvMapDesktop ?? null, []);
+  const desktopImportAvailable =
+    !!desktopApi?.isDesktop && typeof desktopApi.importCsvToSqlite === "function";
+  const [desktopImportState, setDesktopImportState] = useState({
+    status: "idle",
+    summary: null,
+    error: null,
+  });
+
+  /**
+   * Start the desktop-only SQLite import flow.
+   * The imported rows are stored in SQLite, but they are not rendered on the map yet.
+   */
+  const importCsvToSqlite = useCallback(async () => {
+    if (!desktopImportAvailable) return;
+
+    setDesktopImportState({ status: "importing", summary: null, error: null });
+
+    try {
+      const result = await desktopApi.importCsvToSqlite();
+
+      if (result?.canceled) {
+        setDesktopImportState({ status: "canceled", summary: null, error: null });
+        return;
+      }
+
+      if (result?.ok) {
+        setDesktopImportState({ status: "imported", summary: result, error: null });
+        return;
+      }
+
+      setDesktopImportState({
+        status: "error",
+        summary: null,
+        error: "Import failed.",
+      });
+    } catch (error) {
+      setDesktopImportState({
+        status: "error",
+        summary: null,
+        error: error?.message ? String(error.message) : "Import failed.",
+      });
+    }
+  }, [desktopApi, desktopImportAvailable]);
+
+  const desktopImport = useMemo(() => ({
+    isAvailable: desktopImportAvailable,
+    status: desktopImportState.status,
+    summary: desktopImportState.summary,
+    error: desktopImportState.error,
+    onImport: importCsvToSqlite,
+  }), [
+    desktopImportAvailable,
+    desktopImportState.error,
+    desktopImportState.status,
+    desktopImportState.summary,
+    importCsvToSqlite,
+  ]);
 
   const selectedHeaders = selected?.headers;
   const selectedRows = selected?.rows;
@@ -204,6 +263,7 @@ export default function App() {
             selectedId={selectedId}
             onSelect={setSelectedId}
             onImportFiles={importFiles}
+            desktopImport={desktopImport}
             onUnloadSelected={unloadSelected}
             onUnloadFile={unloadFile}
             onToggleEnabled={updateFileEnabled}

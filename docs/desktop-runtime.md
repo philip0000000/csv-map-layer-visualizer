@@ -39,3 +39,7 @@ npm run desktop:dev
 ```
 
 Installer or packaged executable output should be handled by a separate packaging issue.
+
+## Related Desktop Data Work
+
+- [SQLite import prototype](./sqlite-import-prototype.md)

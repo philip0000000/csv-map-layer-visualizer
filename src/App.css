@@ -150,6 +150,39 @@ button.csvBtnPrimary.csvImportButton {
   width: 100%;
 }
 
+.csvDesktopImportBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+button.csvBtnPrimary.csvDesktopImportButton {
+  height: 32px;
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.csvDesktopImportStatus {
+  border-radius: 8px;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.10);
+  color: #dcfce7;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 8px;
+}
+
+.csvDesktopImportStatusError {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.10);
+  color: #fee2e2;
+}
+
+.csvDesktopImportTitle {
+  font-weight: 700;
+  margin-bottom: 3px;
+  overflow-wrap: anywhere;
+}
 .csvFilesList {
   display: flex;
   flex-direction: column;

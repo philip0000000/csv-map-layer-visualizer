@@ -6,6 +6,7 @@ export default function CsvFileControls({
   onSelect,
   onImportFiles,
   desktopImport,
+  viewportQueryStats,
   onUnloadFile,
   onToggleEnabled,
 }) {
@@ -16,6 +17,7 @@ export default function CsvFileControls({
   const fileInputRef = useRef(null);
   const isDesktopImporting = desktopImport?.status === "importing";
   const desktopSummary = desktopImport?.summary ?? null;
+  const hiddenByRenderBudget = normalizeCount(viewportQueryStats?.hiddenByRenderBudget);
 
   /**
    * Trigger the hidden file input.
@@ -82,6 +84,12 @@ export default function CsvFileControls({
             </div>
           )}
 
+
+          {hiddenByRenderBudget > 0 && (
+            <div className="csvDesktopImportStatus" role="status">
+              {hiddenByRenderBudget.toLocaleString()} datapoints are not being displayed
+            </div>
+          )}
           {desktopImport.status === "error" && (
             <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
               {desktopImport.error ?? "Import failed."}
@@ -167,4 +175,10 @@ function formatFieldList(fields) {
   ]
     .filter(Boolean)
     .join(" / ") || "none";
+}
+
+function normalizeCount(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.trunc(number));
 }

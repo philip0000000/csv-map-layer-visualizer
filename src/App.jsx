@@ -16,8 +16,10 @@ import { CsvPanelOverlay } from "./components/CsvPanelOverlay";
 import { useCsvFileDrop } from "./components/useCsvFileDrop";
 import { useExampleCsvFilesFromUrl } from "./components/useExampleCsvFilesFromUrl";
 import { useTimelinePlayback } from "./components/useTimelinePlayback";
+import { createDesktopSqliteDataSource } from "./data/desktopSqliteDataSource";
 
 const LARGE_RAW_MARKER_WARNING_THRESHOLD = 3000;
+const SQLITE_RENDER_BUDGET = 1000;
 
 export default function App() {
   /**
@@ -76,6 +78,20 @@ export default function App() {
     summary: null,
     error: null,
   });
+  const [mapViewport, setMapViewport] = useState(null);
+  const [desktopMapViewState, setDesktopMapViewState] = useState({
+    status: "idle",
+    result: null,
+    error: null,
+  });
+  const desktopSqliteMapAvailable =
+    desktopImportAvailable && typeof desktopApi?.queryMapView === "function";
+  const desktopSqliteMapActive =
+    desktopSqliteMapAvailable && desktopImportState.status === "imported";
+  const desktopSqliteDataSource = useMemo(
+    () => createDesktopSqliteDataSource({ desktopApi }),
+    [desktopApi],
+  );
 
   /**
    * Start the desktop-only SQLite import flow.
@@ -127,11 +143,57 @@ export default function App() {
     importCsvToSqlite,
   ]);
 
+  useEffect(() => {
+    if (!desktopSqliteMapActive || !mapViewport?.bounds) {
+      return undefined;
+    }
+
+    let canceled = false;
+
+    desktopSqliteDataSource.queryMapView({
+      bounds: mapViewport.bounds,
+      zoom: mapViewport.zoom ?? null,
+      timeline: timelineState,
+      renderBudget: SQLITE_RENDER_BUDGET,
+    }).then((result) => {
+      if (!canceled) {
+        setDesktopMapViewState({ status: "loaded", result, error: null });
+      }
+    }).catch((error) => {
+      if (!canceled) {
+        setDesktopMapViewState({
+          status: "error",
+          result: null,
+          error: error?.message ? String(error.message) : "Map query failed.",
+        });
+      }
+    });
+
+    return () => {
+      canceled = true;
+    };
+  }, [
+    desktopSqliteDataSource,
+    desktopSqliteMapActive,
+    mapViewport,
+    timelineState,
+  ]);
+
+  const desktopMapFeatures = useMemo(
+    () => toLegacyMapFeatures(desktopMapViewState.result),
+    [desktopMapViewState.result],
+  );
+  const activeMapFeatures = desktopSqliteMapActive && desktopMapViewState.result
+    ? desktopMapFeatures
+    : derivedMapFeatures;
+  const viewportQueryStats = desktopSqliteMapActive
+    ? desktopMapViewState.result?.stats ?? null
+    : null;
   const selectedHeaders = selected?.headers;
   const selectedRows = selected?.rows;
   const visibleMarkerPointCount = useMemo(
-    () => derivedMapFeatures.points.points.filter((point) => !point.image).length,
-    [derivedMapFeatures.points.points],
+    () => activeMapFeatures.points.points.filter((point) => !point.image).length,
+    [activeMapFeatures.points.points],
   );
 
   // Warn before disabling clustering when raw marker rendering is likely to be expensive.
@@ -249,12 +311,13 @@ export default function App() {
       )}
       <div className="rightPane">
         <GeoMap
-          points={derivedMapFeatures.points.points}
-          regions={derivedMapFeatures.regions.polygons}
-          lines={derivedMapFeatures.lines.lines}
-          getSourceRow={derivedMapFeatures.getSourceRow}
+          points={activeMapFeatures.points.points}
+          regions={activeMapFeatures.regions.polygons}
+          lines={activeMapFeatures.lines.lines}
+          getSourceRow={activeMapFeatures.getSourceRow}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
           clusterRadius={mapToolsApi.state.clusterRadius}
+          onViewportChange={setMapViewport}
         />
 
         <CsvPanelOverlay>
@@ -264,6 +327,7 @@ export default function App() {
             onSelect={setSelectedId}
             onImportFiles={importFiles}
             desktopImport={desktopImport}
+            viewportQueryStats={viewportQueryStats}
             onUnloadSelected={unloadSelected}
             onUnloadFile={unloadFile}
             onToggleEnabled={updateFileEnabled}
@@ -275,9 +339,9 @@ export default function App() {
             onTimelinePlaybackStop={timelinePlaybackApi.stopPlayback}
             timelineStats={{
               skippedByTimeline:
-                (derivedMapFeatures.points.skippedByTimeline ?? 0) +
-                (derivedMapFeatures.regions.skippedByTimeline ?? 0) +
-                (derivedMapFeatures.lines.skippedByTimeline ?? 0),
+                (activeMapFeatures.points.skippedByTimeline ?? 0) +
+                (activeMapFeatures.regions.skippedByTimeline ?? 0) +
+                (activeMapFeatures.lines.skippedByTimeline ?? 0),
             }}
             mapToolsState={mapToolsApi.state}
             onMapToolsPatch={patchMapToolsWithSafeguards}
@@ -288,6 +352,28 @@ export default function App() {
   );
 }
 
+function toLegacyMapFeatures(mapView) {
+  return {
+    points: {
+      points: mapView?.points ?? [],
+      skipped: mapView?.stats?.skippedPoints ?? 0,
+      skippedByTimeline: mapView?.stats?.skippedPointsByTimeline ?? 0,
+    },
+    lines: {
+      lines: mapView?.lines ?? [],
+      skipped: mapView?.stats?.skippedLines ?? 0,
+      skippedByTimeline: mapView?.stats?.skippedLinesByTimeline ?? 0,
+    },
+    regions: {
+      polygons: mapView?.regions ?? [],
+      skipped: mapView?.stats?.skippedRegions ?? 0,
+      skippedByTimeline: mapView?.stats?.skippedRegionsByTimeline ?? 0,
+    },
+    getSourceRow: () => null,
+    timelineIndex: mapView?.timelineIndex ?? { entries: [] },
+    stats: mapView?.stats ?? null,
+  };
+}
 /**
  * Compute the year extent of a CSV row for timeline domain detection.
  *

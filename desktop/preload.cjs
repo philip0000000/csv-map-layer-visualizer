@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld("csvMapDesktop", {
   isDesktop: true,
   getStatus: () => ipcRenderer.invoke("desktop:getStatus"),
   importCsvToSqlite: () => ipcRenderer.invoke("desktop:importCsvToSqlite"),
+  queryMapView: (query) => ipcRenderer.invoke("desktop:queryMapView", query),
 });

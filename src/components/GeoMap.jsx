@@ -239,7 +239,37 @@ function LineArrowDecorator({ line }) {
 
   return null;
 }
+function ViewportChangeReporter({ onViewportChange }) {
+  const map = useMap();
 
+  useEffect(() => {
+    if (typeof onViewportChange !== "function") return undefined;
+
+    const reportViewport = () => {
+      const bounds = map.getBounds();
+
+      onViewportChange({
+        bounds: {
+          north: bounds.getNorth(),
+          south: bounds.getSouth(),
+          east: bounds.getEast(),
+          west: bounds.getWest(),
+        },
+        zoom: map.getZoom(),
+      });
+    };
+
+    reportViewport();
+
+    map.on("moveend zoomend", reportViewport);
+
+    return () => {
+      map.off("moveend zoomend", reportViewport);
+    };
+  }, [map, onViewportChange]);
+
+  return null;
+}
 /**
  * Map tile providers.
  * We expose:
@@ -287,6 +317,7 @@ export default function GeoMap({
   getSourceRow,
   clusterMarkersEnabled = false,
   clusterRadius = 80,   // default strength
+  onViewportChange,
 }) {
   const { BaseLayer, Overlay } = LayersControl;
   const markerClusterGroupRef = useRef(null);
@@ -333,6 +364,8 @@ export default function GeoMap({
       }}
       zoomControl={false}
     >
+      <ViewportChangeReporter onViewportChange={onViewportChange} />
+
       {/* Zoom controls moved away from the CSV overlay */}
       <ZoomControl position="bottomright" />
 

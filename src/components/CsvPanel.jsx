@@ -26,6 +26,7 @@ export default function CsvPanel({
   onSelect,         // Callback to change selected CSV
   onImportFiles,    // Callback to import new CSV files
   desktopImport,
+  viewportQueryStats,
   onUnloadFile,     // Callback to unload a CSV by ID
   onToggleEnabled,  // Callback to toggle file visibility
   onUpdateMapping,  // Callback when user changes latitude/longitude fields
@@ -150,6 +151,7 @@ export default function CsvPanel({
             onSelect={onSelect}
             onImportFiles={onImportFiles}
             desktopImport={desktopImport}
+            viewportQueryStats={viewportQueryStats}
             onUnloadFile={onUnloadFile}
             onToggleEnabled={onToggleEnabled}
           />

@@ -4,6 +4,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const { importCsvFileToSqlite } = require("./csvImportService.cjs");
 const { closeSqliteStore, openSqliteStore } = require("./sqliteStore.cjs");
+const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
 
 // The prototype DB lives in Electron userData, not inside the repository.
 const SQLITE_DB_FILE_NAME = "csv-map-layer-visualizer.sqlite";
@@ -44,6 +45,20 @@ function registerDesktopBridgeHandlers() {
       return importCsvFileToSqlite({
         db,
         filePath: fileResult.filePaths[0],
+      });
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
+  ipcMain.handle("desktop:queryMapView", async (_event, query = {}) => {
+    const db = openSqliteStore(getDesktopDatabasePath());
+
+    try {
+      return querySqliteMapView({
+        db,
+        bounds: query?.bounds,
+        timeline: query?.timeline,
+        renderBudget: query?.renderBudget,
       });
     } finally {
       closeSqliteStore(db);

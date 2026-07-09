@@ -1,6 +1,6 @@
 # SQLite Import Prototype
 
-Issue #81 adds the first desktop-only path for importing local CSV files into a SQLite-backed prototype store.
+Issue #81 adds the first desktop-only path for importing local CSV files into a SQLite-backed prototype store. Issue #82 adds the first SQLite-backed viewport query for rendering compact desktop map results.
 
 ## Runtime Boundary
 
@@ -11,8 +11,9 @@ The renderer talks to the desktop runtime through the narrow preload bridge:
 - `window.csvMapDesktop.isDesktop`
 - `window.csvMapDesktop.getStatus()`
 - `window.csvMapDesktop.importCsvToSqlite()`
+- `window.csvMapDesktop.queryMapView(query)`
 
-The renderer does not pass arbitrary IPC channel names, local file paths, or database paths. The Electron main process owns the file picker, database path, and SQLite import work.
+The renderer does not pass arbitrary IPC channel names, local file paths, SQL, or database paths. The Electron main process owns the file picker, database path, SQLite import work, and viewport query execution.
 
 ## Database Location
 
@@ -23,6 +24,7 @@ app.getPath("userData") / csv-map-layer-visualizer.sqlite
 ```
 
 This keeps imported local data outside the repository and outside the browser build output.
+
 ## Native Module Rebuild
 
 `better-sqlite3` is a native Node module. If Electron shows a `NODE_MODULE_VERSION` mismatch when importing, rebuild the module for the Electron runtime and restart the desktop app:
@@ -75,16 +77,37 @@ The prototype creates indexes for later issues:
 - `features(dataset_id, timeline_start_year, timeline_end_year)` for future timeline filtering
 - unique `features(dataset_id, source_row_index)` for stable row/detail lookup
 
-These indexes are not yet used for Leaflet rendering. They document and prove the storage direction needed by follow-up query work.
+These indexes support the desktop viewport query path.
+
+## Viewport Query
+
+Issue #82 adds a desktop-only SQLite viewport query that runs through the fixed Electron preload bridge. The browser and GitHub Pages path still use the in-memory CSV flow.
+
+The query uses the current map bounds, zoom, timeline state, and a render budget. It queries all imported SQLite datasets for now. Dataset selection, enable/disable controls, and delete/manage UI are future work.
+
+The first render budget is `1000`. If more datapoints match the current viewport/filter, the query returns the first `1000` compact point records and reports how many matching datapoints are hidden. The panel displays that as a status message, for example:
+
+```text
+9,500 datapoints are not being displayed
+```
+
+Viewport query results include compact marker/render data only:
+
+- stable id
+- latitude
+- longitude
+- source reference
+- marker/image fields when present in `compact_json`
+- coordinate field names when present in `compact_json`
+
+The viewport query does not read or return `row_json`. Full row details remain a separate lookup concern for later work.
 
 ## Non-Goals
 
 This prototype does not:
 
-- render SQLite-backed markers in Leaflet
-- implement viewport queries
 - add grouped or representative markers
-- add marker detail UI
+- add full marker detail lookup UI
 - add paged group rows
 - replace the browser/GitHub Pages CSV flow
 - support DuckDB, remote data sources, or unlimited CSV sizes

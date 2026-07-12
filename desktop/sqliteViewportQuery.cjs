@@ -30,13 +30,21 @@ function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAUL
   // Count first so the UI can explain how many matching datapoints are hidden by the render budget.
   const totalMatchingCount = countMatchingFeatures(db, filter);
   const boundsOnlyCount = filter.usesTimeline ? countMatchingFeatures(db, filter.boundsOnly) : totalMatchingCount;
-  const rows = selectMatchingFeatures(db, filter, budget);
-  const returnedCount = rows.length;
-  const hiddenByRenderBudget = Math.max(0, totalMatchingCount - returnedCount);
   const skippedPointsByTimeline = Math.max(0, boundsOnlyCount - totalMatchingCount);
+  const overBudget = totalMatchingCount > budget;
+  // Under budget stays exact; over budget switches to compact render summaries.
+  const rows = overBudget
+    ? selectGroupedFeatures(db, filter, normalizedBounds, budget)
+    : selectMatchingFeatures(db, filter, budget);
+  const points = rows.map(overBudget ? rowToGroupedPointFeature : rowToPointFeature);
+  const returnedCount = points.length;
+  const representedCount = overBudget
+    ? points.reduce((sum, point) => sum + normalizeCount(point.count), 0)
+    : returnedCount;
+  const hiddenByRenderBudget = Math.max(0, totalMatchingCount - representedCount);
 
   return {
-    points: rows.map(rowToPointFeature),
+    points,
     lines: [],
     regions: [],
     stats: {
@@ -47,11 +55,11 @@ function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAUL
       skippedLinesByTimeline: 0,
       skippedRegionsByTimeline: 0,
       skippedByTimeline: skippedPointsByTimeline,
-      limitedToRenderBudget: hiddenByRenderBudget > 0 ? budget : null,
+      limitedToRenderBudget: overBudget ? budget : null,
       totalMatchingCount,
       returnedCount,
       hiddenByRenderBudget,
-      overBudget: hiddenByRenderBudget > 0,
+      overBudget,
     },
     timelineIndex: {
       entries: [],
@@ -84,6 +92,91 @@ function selectMatchingFeatures(db, filter, renderBudget) {
     ...filter.params,
     limit: renderBudget,
   });
+}
+
+/**
+ * Return one compact render item per occupied grid cell for dense viewport results.
+ * Reuses the already-built bounds/timeline filter so grouping happens after filtering.
+ */
+function selectGroupedFeatures(db, filter, bounds, renderBudget) {
+  const grid = getGridSpec(bounds, renderBudget);
+
+  return db.prepare(`
+    WITH matching AS (
+      SELECT
+        id,
+        dataset_id,
+        source_row_index,
+        lat,
+        lon,
+        compact_json,
+        -- b1-b2: Shift coordinates into positive space so cell ids stay stable and sortable.
+        CAST((lat + 90.0) / @cellHeight AS INTEGER) AS cell_lat,
+        CAST((lon + 180.0) / @cellWidth AS INTEGER) AS cell_lon
+      FROM features
+      ${filter.sql}
+    ),
+    ranked AS (
+      SELECT
+        id,
+        dataset_id,
+        source_row_index,
+        compact_json,
+        cell_lat,
+        cell_lon,
+        COUNT(*) OVER (PARTITION BY cell_lat, cell_lon) AS group_count,
+        AVG(lat) OVER (PARTITION BY cell_lat, cell_lon) AS group_lat,
+        AVG(lon) OVER (PARTITION BY cell_lat, cell_lon) AS group_lon,
+        -- b1-b2: Pick a deterministic representative for marker styling, never random sampling.
+        ROW_NUMBER() OVER (
+          PARTITION BY cell_lat, cell_lon
+          ORDER BY dataset_id, source_row_index
+        ) AS group_rank
+      FROM matching
+    )
+    SELECT
+      id,
+      dataset_id,
+      source_row_index,
+      compact_json,
+      cell_lat,
+      cell_lon,
+      group_count,
+      group_lat,
+      group_lon
+    FROM ranked
+    WHERE group_rank = 1
+    ORDER BY cell_lat, cell_lon
+    LIMIT @limit
+  `).all({
+    ...filter.params,
+    cellHeight: grid.cellHeight,
+    cellWidth: grid.cellWidth,
+    limit: renderBudget,
+  });
+}
+
+/**
+ * Choose a simple viewport-sized grid that aims for no more cells than the render budget.
+ * The current bounds already reflect zoom, so zoom affects grouping through viewport span.
+ */
+function getGridSpec(bounds, renderBudget) {
+  const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
+  const lonSpan = Math.max(
+    bounds.crossesAntimeridian
+      ? 360 - bounds.west + bounds.east
+      : bounds.east - bounds.west,
+    0.000001,
+  );
+  const targetCells = Math.max(1, renderBudget);
+  const ratio = Math.max(lonSpan / latSpan, 0.000001);
+  const columns = Math.max(1, Math.ceil(Math.sqrt(targetCells * ratio)));
+  const rows = Math.max(1, Math.ceil(targetCells / columns));
+
+  return {
+    cellHeight: Math.max(latSpan / rows, 0.000001),
+    cellWidth: Math.max(lonSpan / columns, 0.000001),
+  };
 }
 
 function buildWhereClause({ bounds, timeline }) {
@@ -159,8 +252,11 @@ function rowToPointFeature(row) {
 
   return {
     id: String(row.id),
+    renderType: "exact",
     lat: Number(row.lat),
     lon: Number(row.lon),
+    count: 1,
+    groupId: null,
     sourceRef: {
       datasetId: String(row.dataset_id),
       rowIndex: normalizeCount(row.source_row_index),
@@ -175,6 +271,32 @@ function rowToPointFeature(row) {
     latField: getNullableString(compactFields.latField),
     lonField: getNullableString(compactFields.lonField),
     compactFields,
+  };
+}
+
+/**
+ * Convert one grouped SQL row into compact map render data only.
+ * Full row/details stay out of grouped results until the later detail/group-row work.
+ */
+function rowToGroupedPointFeature(row) {
+  const compactFields = parseCompactFields(row.compact_json);
+  const count = Math.max(1, normalizeCount(row.group_count));
+  const groupId = `grid:${row.cell_lat}:${row.cell_lon}`;
+
+  return {
+    id: groupId,
+    renderType: count > 1 ? "grouped" : "representative",
+    lat: Number(row.group_lat),
+    lon: Number(row.group_lon),
+    count,
+    groupId,
+    sourceRef: null,
+    marker: getNullableString(compactFields.marker),
+    image: null,
+    imageWidthMeters: null,
+    imageHeightMeters: null,
+    latField: null,
+    lonField: null,
   };
 }
 
@@ -230,6 +352,7 @@ function normalizeImageSizeMeters(value) {
   if (!Number.isFinite(number)) return DEFAULT_IMAGE_SIZE_METERS;
   return Math.min(MAX_IMAGE_SIZE_METERS, Math.max(MIN_IMAGE_SIZE_METERS, number));
 }
+
 function normalizeRenderBudget(value) {
   const number = Number.parseInt(value, 10);
   if (!Number.isFinite(number) || number <= 0) return DEFAULT_RENDER_BUDGET;

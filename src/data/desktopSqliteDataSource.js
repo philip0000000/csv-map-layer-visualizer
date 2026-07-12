@@ -56,7 +56,9 @@ function normalizeMapViewResult(result) {
     return createEmptyMapViewResult();
   }
 
-  const points = Array.isArray(result.points) ? result.points : [];
+  const points = Array.isArray(result.points)
+    ? result.points.map(normalizePointFeature)
+    : [];
   const lines = Array.isArray(result.lines) ? result.lines : [];
   const regions = Array.isArray(result.regions) ? result.regions : [];
   const stats = normalizeStats(result.stats, points.length);
@@ -73,6 +75,34 @@ function normalizeMapViewResult(result) {
       entries: Array.isArray(timelineIndex.entries) ? timelineIndex.entries : [],
     },
   };
+}
+
+/**
+ * Normalize point render metadata crossing the Electron IPC boundary.
+ */
+function normalizePointFeature(point) {
+  if (!point || typeof point !== "object") {
+    return {
+      renderType: "exact",
+      count: 1,
+      groupId: null,
+    };
+  }
+
+  return {
+    ...point,
+    renderType: normalizePointRenderType(point.renderType),
+    count: normalizePositiveInteger(point.count, 1),
+    groupId: normalizeNullableString(point.groupId),
+  };
+}
+
+function normalizePointRenderType(value) {
+  if (value === "grouped" || value === "representative") {
+    return value;
+  }
+
+  return "exact";
 }
 
 function normalizeStats(stats, returnedCount) {
@@ -146,8 +176,21 @@ function createEmptyMapViewResult() {
   };
 }
 
+function normalizePositiveInteger(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(1, Math.trunc(number));
+}
+
 function normalizeNonNegativeInteger(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.max(0, Math.trunc(number));
+}
+
+function normalizeNullableString(value) {
+  if (value === null || value === undefined) return null;
+
+  const stringValue = String(value);
+  return stringValue.trim() ? stringValue : null;
 }

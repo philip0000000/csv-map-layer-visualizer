@@ -66,10 +66,21 @@ export const DATA_SOURCE_METHODS = Object.freeze({
  */
 
 /**
+ * @typedef {"exact"|"grouped"|"representative"} PointRenderType
+ */
+
+/**
  * @typedef {object} PointFeature
  * @property {string} id
+ * @property {PointRenderType} [renderType]
+ *   `exact` is backed by one source row. `grouped` and `representative`
+ *   are compact render results and should not include full row data.
  * @property {number} lat
  * @property {number} lon
+ * @property {number} [count]
+ *   Number of source rows represented by this render result.
+ * @property {string|null} [groupId]
+ *   Stable group key for grouped or representative render results.
  * @property {FeatureSourceRef|null} [sourceRef]
  * @property {string|null} [marker]
  * @property {string|null} [image]

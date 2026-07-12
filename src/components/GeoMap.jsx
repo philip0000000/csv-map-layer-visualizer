@@ -85,6 +85,36 @@ function renderPointPopup(p, latField, lonField, getSourceRow) {
 }
 
 /**
+ * Grouped SQLite results are render summaries, so their popup stays summary-only.
+ */
+function renderGroupedPointPopup(p) {
+  const title = p.renderType === "representative"
+    ? "Representative marker"
+    : "Grouped markers";
+
+  return (
+    <Popup>
+      <div style={{ minWidth: 220 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+        <div>
+          <b>count:</b> {p.count ?? 1}
+        </div>
+        <div>
+          <b>lat:</b> {p.lat}
+        </div>
+        <div>
+          <b>lon:</b> {p.lon}
+        </div>
+      </div>
+    </Popup>
+  );
+}
+
+function isGroupedPointFeature(point) {
+  return point?.renderType === "grouped" || point?.renderType === "representative";
+}
+
+/**
  * Attach the CSV marker value to the Leaflet marker instance.
  * MarkerClusterGroup only sees Leaflet markers, so the cluster icon code reads this later.
  */
@@ -322,6 +352,9 @@ export default function GeoMap({
   const { BaseLayer, Overlay } = LayersControl;
   const markerClusterGroupRef = useRef(null);
   const markerPoints = points.filter((p) => !p.image);
+  // Data-source groups are already summarized, so keep them out of client clustering.
+  const exactMarkerPoints = markerPoints.filter((p) => !isGroupedPointFeature(p));
+  const groupedMarkerPoints = markerPoints.filter(isGroupedPointFeature);
   const imagePoints = points.filter((p) => !!p.image);
 
   // Hide the original cluster icon while MarkerClusterGroup spiderfies exact-overlap markers.
@@ -433,7 +466,7 @@ export default function GeoMap({
           iconCreateFunction={createMarkerClusterIcon}
           maxClusterRadius={clusterRadius}
         >
-          {markerPoints.map((p) => {
+          {exactMarkerPoints.map((p) => {
             const icon = getMarkerIcon(p.marker);
 
             return (
@@ -449,7 +482,7 @@ export default function GeoMap({
           })}
         </MarkerClusterGroup>
       ) : (
-        markerPoints.map((p) => {
+        exactMarkerPoints.map((p) => {
           const icon = getMarkerIcon(p.marker);
 
           return (
@@ -463,6 +496,21 @@ export default function GeoMap({
           );
         })
       )}
+
+      {/* Render grouped SQLite summaries as count markers, separate from exact marker clustering. */}
+      {groupedMarkerPoints.map((p) => {
+        const icon = getClusterMarkerIcon(p.marker, p.count);
+
+        return (
+          <Marker
+            key={p.id}
+            position={[p.lat, p.lon]}
+            {...(icon ? { icon } : {})}
+          >
+            {renderGroupedPointPopup(p)}
+          </Marker>
+        );
+      })}
 
       {imagePoints.map((p) => (
         <ImageOverlay

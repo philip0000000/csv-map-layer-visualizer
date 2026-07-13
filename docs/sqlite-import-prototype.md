@@ -102,6 +102,28 @@ Viewport query results include compact marker/render data only:
 
 The viewport query does not read or return `row_json`. Full row details remain a separate lookup concern for later work.
 
+## SQLite Viewport Smoke Check
+
+Issue #90 adds a repeatable check for the SQLite viewport query path:
+
+```bash
+npm run smoke:sqlite-viewport
+```
+
+The smoke script creates isolated in-memory SQLite databases and calls `querySqliteMapView(...)` directly. It does not open the Electron UI or read from or modify the app database under `userData`.
+
+The current scenarios cover:
+
+- exact viewport results when the matching rows stay under the render budget
+- grouped and representative results when matching rows exceed the render budget
+- grouped counts and deterministic representative marker selection
+- timeline filtering before grouped result generation
+- compact render results that do not expose `row_json` or full row/detail fields
+
+The npm command starts with the local Node runtime, then the script relaunches itself in Electron's Node mode before loading `better-sqlite3`. This keeps the native module on the same ABI as the desktop app. If the native module has an ABI mismatch, use the Electron rebuild command in [Native Module Rebuild](#native-module-rebuild).
+
+To extend the smoke coverage, add another isolated fixture and assertion function in `desktop/sqliteViewportQuery.smoke.cjs`. Keep the full-row sentinel assertion for new viewport result shapes so detail data does not enter the render query by accident.
+
 ## Non-Goals
 
 This prototype does not:

@@ -1,3 +1,5 @@
+import { DEFAULT_GROUP_ROWS_LIMIT } from './dataSource';
+
 const DEFAULT_SQLITE_RENDER_BUDGET = 1000;
 
 /**
@@ -21,25 +23,38 @@ export function createDesktopSqliteDataSource({ desktopApi }) {
       return normalizeMapViewResult(result);
     },
 
-    getFeatureDetails(query = {}) {
-      return {
-        featureId: query.featureId ?? null,
-        row: null,
-        latField: null,
-        lonField: null,
-      };
+    async getFeatureDetails(query = {}) {
+      const sourceRef = normalizeFeatureSourceRef(query.sourceRef);
+      if (
+        typeof desktopApi?.getFeatureDetails !== 'function' ||
+        !sourceRef
+      ) {
+        return createEmptyFeatureDetailsResult();
+      }
+
+      const result = await desktopApi.getFeatureDetails({ sourceRef });
+      return normalizeFeatureDetailsResult(result);
     },
 
-    getGroupRows(query = {}) {
+    async getGroupRows(query = {}) {
       const offset = normalizeNonNegativeInteger(query.offset, 0);
-      const limit = normalizeNonNegativeInteger(query.limit, 0);
+      const limit = normalizePositiveInteger(
+        query.limit ?? DEFAULT_GROUP_ROWS_LIMIT,
+        DEFAULT_GROUP_ROWS_LIMIT,
+      );
+      const groupRef = normalizeGroupRef(query.groupRef);
 
-      return {
-        rows: [],
+      if (typeof desktopApi?.getGroupRows !== 'function' || !groupRef) {
+        return createEmptyGroupRowsResult(offset, limit);
+      }
+
+      const result = await desktopApi.getGroupRows({
+        groupRef,
         offset,
         limit,
-        totalRows: null,
-      };
+      });
+
+      return normalizeGroupRowsResult(result, offset, limit);
     },
 
     getDatasetSummary() {
@@ -86,6 +101,7 @@ function normalizePointFeature(point) {
       renderType: "exact",
       count: 1,
       groupId: null,
+      groupRef: null,
     };
   }
 
@@ -94,6 +110,7 @@ function normalizePointFeature(point) {
     renderType: normalizePointRenderType(point.renderType),
     count: normalizePositiveInteger(point.count, 1),
     groupId: normalizeNullableString(point.groupId),
+    groupRef: normalizeGroupRef(point.groupRef),
   };
 }
 
@@ -103,6 +120,140 @@ function normalizePointRenderType(value) {
   }
 
   return "exact";
+}
+
+function normalizeFeatureDetailsResult(result) {
+  if (!result || typeof result !== 'object') {
+    return createEmptyFeatureDetailsResult();
+  }
+
+  return {
+    featureId: normalizeNullableString(result.featureId),
+    row: normalizeRecord(result.row),
+    latField: normalizeNullableString(result.latField),
+    lonField: normalizeNullableString(result.lonField),
+  };
+}
+
+// Validate detail IPC results before they reach React components.
+function normalizeGroupRowsResult(result, requestedOffset, requestedLimit) {
+  if (!result || typeof result !== 'object') {
+    return createEmptyGroupRowsResult(requestedOffset, requestedLimit);
+  }
+
+  const rows = Array.isArray(result.rows)
+    ? result.rows.map(normalizeRecord).filter(Boolean)
+    : [];
+
+  return {
+    rows,
+    offset: normalizeNonNegativeInteger(
+      result.offset ?? requestedOffset,
+      requestedOffset,
+    ),
+    limit: normalizePositiveInteger(
+      result.limit ?? requestedLimit,
+      requestedLimit,
+    ),
+    totalRows: normalizeNonNegativeInteger(
+      result.totalRows ?? rows.length,
+      rows.length,
+    ),
+  };
+}
+
+function normalizeFeatureSourceRef(sourceRef) {
+  if (!sourceRef || typeof sourceRef !== 'object') return null;
+
+  const datasetId = normalizeNullableString(sourceRef.datasetId);
+  const rowIndex = normalizeOptionalNonNegativeInteger(sourceRef.rowIndex);
+  if (!datasetId || rowIndex == null) return null;
+
+  return { datasetId, rowIndex };
+}
+
+function normalizeGroupRef(groupRef) {
+  if (!groupRef || typeof groupRef !== 'object') return null;
+
+  const groupId = normalizeNullableString(groupRef.groupId);
+  const bounds = normalizeGroupBounds(groupRef.bounds);
+  const timeline = normalizeGroupTimeline(groupRef.timeline);
+  const grid = normalizeGroupGrid(groupRef.grid);
+
+  if (
+    !groupId ||
+    !bounds ||
+    timeline === undefined ||
+    !grid ||
+    groupRef.sortOrder !== 'dataset-source-row'
+  ) {
+    return null;
+  }
+
+  // A mismatched group ID is unsafe because it could broaden the requested rows.
+  if (groupId !== ['grid', grid.cellLat, grid.cellLon].join(':')) {
+    return null;
+  }
+
+  return {
+    groupId,
+    bounds,
+    timeline,
+    grid,
+    sortOrder: 'dataset-source-row',
+  };
+}
+
+function normalizeGroupBounds(bounds) {
+  if (!bounds || typeof bounds !== 'object') return null;
+
+  const north = normalizeFiniteNumber(bounds.north);
+  const south = normalizeFiniteNumber(bounds.south);
+  const east = normalizeFiniteNumber(bounds.east);
+  const west = normalizeFiniteNumber(bounds.west);
+  if (north == null || south == null || east == null || west == null) {
+    return null;
+  }
+
+  return { north, south, east, west };
+}
+
+function normalizeGroupTimeline(timeline) {
+  if (!timeline?.timelineEnabled) return null;
+
+  const startYear = normalizeOptionalInteger(timeline.startYear);
+  const endYear = normalizeOptionalInteger(timeline.endYear);
+  if (startYear == null || endYear == null) return undefined;
+
+  return {
+    timelineEnabled: true,
+    startYear: Math.min(startYear, endYear),
+    endYear: Math.max(startYear, endYear),
+  };
+}
+
+function normalizeGroupGrid(grid) {
+  if (!grid || typeof grid !== 'object') return null;
+
+  const cellLat = normalizeOptionalInteger(grid.cellLat);
+  const cellLon = normalizeOptionalInteger(grid.cellLon);
+  const cellHeight = normalizePositiveNumber(grid.cellHeight);
+  const cellWidth = normalizePositiveNumber(grid.cellWidth);
+  if (
+    cellLat == null ||
+    cellLon == null ||
+    cellHeight == null ||
+    cellWidth == null
+  ) {
+    return null;
+  }
+
+  return { cellLat, cellLon, cellHeight, cellWidth };
+}
+
+function normalizeRecord(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value;
 }
 
 function normalizeStats(stats, returnedCount) {
@@ -151,6 +302,24 @@ function normalizeStats(stats, returnedCount) {
   };
 }
 
+function createEmptyFeatureDetailsResult() {
+  return {
+    featureId: null,
+    row: null,
+    latField: null,
+    lonField: null,
+  };
+}
+
+function createEmptyGroupRowsResult(offset, limit) {
+  return {
+    rows: [],
+    offset,
+    limit,
+    totalRows: 0,
+  };
+}
+
 function createEmptyMapViewResult() {
   return {
     points: [],
@@ -176,10 +345,37 @@ function createEmptyMapViewResult() {
   };
 }
 
+function normalizeOptionalNonNegativeInteger(value) {
+  const number = normalizeFiniteNumber(value);
+  if (number == null || number < 0) return null;
+  return Math.trunc(number);
+}
+
+function normalizeOptionalInteger(value) {
+  const number = normalizeFiniteNumber(value);
+  if (number == null) return null;
+  return Math.trunc(number);
+}
+
+function normalizePositiveNumber(value) {
+  const number = normalizeFiniteNumber(value);
+  if (number == null || number <= 0) return null;
+  return number;
+}
+
+function normalizeFiniteNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function normalizePositiveInteger(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
-  return Math.max(1, Math.trunc(number));
+
+  const integer = Math.trunc(number);
+  return integer > 0 ? integer : fallback;
 }
 
 function normalizeNonNegativeInteger(value, fallback) {

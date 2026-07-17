@@ -8,7 +8,7 @@ const MAX_IMAGE_SIZE_METERS = 100000;
 
 /**
  * Query compact point render data from the desktop SQLite store.
- * This intentionally avoids row_json; full detail lookup belongs to a later issue.
+ * This intentionally avoids row_json; full details use a separate lookup path.
  */
 function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAULT_RENDER_BUDGET }) {
   if (!db?.open) {
@@ -32,11 +32,19 @@ function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAUL
   const boundsOnlyCount = filter.usesTimeline ? countMatchingFeatures(db, filter.boundsOnly) : totalMatchingCount;
   const skippedPointsByTimeline = Math.max(0, boundsOnlyCount - totalMatchingCount);
   const overBudget = totalMatchingCount > budget;
+  // Save the same grid used for rendering so detail paging can reproduce each group.
+  const groupGrid = overBudget ? getGridSpec(normalizedBounds, budget) : null;
   // Under budget stays exact; over budget switches to compact render summaries.
   const rows = overBudget
-    ? selectGroupedFeatures(db, filter, normalizedBounds, budget)
+    ? selectGroupedFeatures(db, filter, groupGrid, budget)
     : selectMatchingFeatures(db, filter, budget);
-  const points = rows.map(overBudget ? rowToGroupedPointFeature : rowToPointFeature);
+  const points = overBudget
+    ? rows.map((row) => rowToGroupedPointFeature(row, {
+      bounds: normalizedBounds,
+      timeline: filter.timeline,
+      grid: groupGrid,
+    }))
+    : rows.map(rowToPointFeature);
   const returnedCount = points.length;
   const representedCount = overBudget
     ? points.reduce((sum, point) => sum + normalizeCount(point.count), 0)
@@ -98,9 +106,7 @@ function selectMatchingFeatures(db, filter, renderBudget) {
  * Return one compact render item per occupied grid cell for dense viewport results.
  * Reuses the already-built bounds/timeline filter so grouping happens after filtering.
  */
-function selectGroupedFeatures(db, filter, bounds, renderBudget) {
-  const grid = getGridSpec(bounds, renderBudget);
-
+function selectGroupedFeatures(db, filter, grid, renderBudget) {
   return db.prepare(`
     WITH matching AS (
       SELECT
@@ -192,6 +198,7 @@ function buildWhereClause({ bounds, timeline }) {
     sql: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "",
     params,
     usesTimeline: timelineFilter.usesTimeline,
+    timeline: timelineFilter.timeline,
     // Build the bounds-only filter once so skipped-by-timeline can stay cheap and consistent.
     boundsOnly: {
       sql: boundsFilter.clauses.length > 0 ? `WHERE ${boundsFilter.clauses.join(" AND ")}` : "",
@@ -221,14 +228,14 @@ function buildBoundsFilter(bounds) {
 
 function buildTimelineFilter(timeline) {
   if (!timeline?.timelineEnabled) {
-    return { clauses: [], params: {}, usesTimeline: false };
+    return { clauses: [], params: {}, usesTimeline: false, timeline: null };
   }
 
   const startYear = normalizeYear(timeline.startYear);
   const endYear = normalizeYear(timeline.endYear);
 
   if (startYear == null || endYear == null) {
-    return { clauses: [], params: {}, usesTimeline: false };
+    return { clauses: [], params: {}, usesTimeline: false, timeline: null };
   }
 
   return {
@@ -244,6 +251,11 @@ function buildTimelineFilter(timeline) {
       timelineEndYear: Math.max(startYear, endYear),
     },
     usesTimeline: true,
+    timeline: {
+      timelineEnabled: true,
+      startYear: Math.min(startYear, endYear),
+      endYear: Math.max(startYear, endYear),
+    },
   };
 }
 
@@ -276,9 +288,9 @@ function rowToPointFeature(row) {
 
 /**
  * Convert one grouped SQL row into compact map render data only.
- * Full row/details stay out of grouped results until the later detail/group-row work.
+ * Full rows stay out of render results; groupRef supports separate paged lookup.
  */
-function rowToGroupedPointFeature(row) {
+function rowToGroupedPointFeature(row, { bounds, timeline, grid }) {
   const compactFields = parseCompactFields(row.compact_json);
   const count = Math.max(1, normalizeCount(row.group_count));
   const groupId = `grid:${row.cell_lat}:${row.cell_lon}`;
@@ -290,6 +302,24 @@ function rowToGroupedPointFeature(row) {
     lon: Number(row.group_lon),
     count,
     groupId,
+    // Capture the originating query so later paging cannot drift with current UI state.
+    groupRef: {
+      groupId,
+      bounds: {
+        north: bounds.north,
+        south: bounds.south,
+        east: bounds.east,
+        west: bounds.west,
+      },
+      timeline,
+      grid: {
+        cellLat: normalizeCount(row.cell_lat),
+        cellLon: normalizeCount(row.cell_lon),
+        cellHeight: grid.cellHeight,
+        cellWidth: grid.cellWidth,
+      },
+      sortOrder: 'dataset-source-row',
+    },
     sourceRef: null,
     marker: getNullableString(compactFields.marker),
     image: null,

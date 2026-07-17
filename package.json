@@ -11,6 +11,7 @@
     "desktop:dev": "concurrently -k \"npm run dev -- --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && node desktop/run-electron.cjs . --dev-server=http://127.0.0.1:5173\"",
     "desktop:start": "npm run build:desktop && node desktop/run-electron.cjs .",
     "smoke:sqlite-viewport": "node desktop/sqliteViewportQuery.smoke.cjs",
+    "smoke:sqlite-detail": "node desktop/sqliteDetailQuery.smoke.cjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

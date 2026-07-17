@@ -14,6 +14,8 @@ export const DATA_SOURCE_METHODS = Object.freeze({
   getDatasetSummary: "getDatasetSummary",
 });
 
+export const DEFAULT_GROUP_ROWS_LIMIT = 30;
+
 /**
  * @typedef {object} DataSource
  * @property {(query: MapViewQuery) => MapViewResult | Promise<MapViewResult>} queryMapView
@@ -81,6 +83,9 @@ export const DATA_SOURCE_METHODS = Object.freeze({
  *   Number of source rows represented by this render result.
  * @property {string|null} [groupId]
  *   Stable group key for grouped or representative render results.
+ * @property {GroupRef|null} [groupRef]
+ *   Compact lookup context captured when a grouped render result is created.
+ *   It must not contain full source rows or other detail payloads.
  * @property {FeatureSourceRef|null} [sourceRef]
  * @property {string|null} [marker]
  * @property {string|null} [image]
@@ -118,6 +123,31 @@ export const DATA_SOURCE_METHODS = Object.freeze({
  * @typedef {object} FeatureSourceRef
  * @property {string} datasetId
  * @property {number} rowIndex
+ */
+
+/**
+ * @typedef {'dataset-source-row'} GroupRowsSortOrder
+ */
+
+/**
+ * @typedef {object} GroupGridRef
+ * @property {number} cellLat
+ * @property {number} cellLon
+ * @property {number} cellHeight
+ * @property {number} cellWidth
+ */
+
+/**
+ * Immutable context needed to reproduce the rows represented by one group.
+ * The originating bounds matter because edge grid cells can extend beyond the
+ * viewport, while the grid dimensions depend on that viewport's render query.
+ *
+ * @typedef {object} GroupRef
+ * @property {string} groupId
+ * @property {MapBounds} bounds
+ * @property {TimelineFilter|null} timeline
+ * @property {GroupGridRef} grid
+ * @property {GroupRowsSortOrder} sortOrder
  */
 
 /**
@@ -160,10 +190,13 @@ export const DATA_SOURCE_METHODS = Object.freeze({
 
 /**
  * @typedef {object} GroupRowsQuery
+ * @property {GroupRef|null} [groupRef]
+ *   Preferred grouped-marker lookup context. It preserves the original spatial
+ *   and timeline query instead of relying on the UI's current map state.
  * @property {string|null} [datasetId]
- * @property {string|null} [groupId]
+ *   Optional dataset-only lookup used by data sources without grouped markers.
  * @property {number} [offset]
- * @property {number} [limit]
+ * @property {number} [limit=30]
  */
 
 /**

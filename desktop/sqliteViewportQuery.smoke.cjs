@@ -95,6 +95,10 @@ function runUnderBudgetExactSmoke() {
     assert.equal(result.stats.overBudget, false);
     assert.equal(result.stats.limitedToRenderBudget, null);
     assert.equal(result.stats.hiddenByRenderBudget, 0);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(result.points[0], 'groupRef'),
+      false,
+    );
 
     console.log("SQLite viewport smoke: under-budget exact results passed.");
   } finally {
@@ -188,6 +192,52 @@ function runOverBudgetGroupingSmoke() {
     assert.equal(result.stats.overBudget, true);
     assert.equal(result.stats.limitedToRenderBudget, 3);
     assert.equal(result.stats.hiddenByRenderBudget, 0);
+    assert.deepEqual(
+      result.points.map((point) => point.groupRef),
+      [
+        {
+          groupId: 'grid:18:36',
+          bounds: {
+            north: 10,
+            south: 0,
+            east: 10,
+            west: 0,
+          },
+          timeline: null,
+          grid: {
+            cellLat: 18,
+            cellLon: 36,
+            cellHeight: 5,
+            cellWidth: 5,
+          },
+          sortOrder: 'dataset-source-row',
+        },
+        {
+          groupId: 'grid:19:37',
+          bounds: {
+            north: 10,
+            south: 0,
+            east: 10,
+            west: 0,
+          },
+          timeline: null,
+          grid: {
+            cellLat: 19,
+            cellLon: 37,
+            cellHeight: 5,
+            cellWidth: 5,
+          },
+          sortOrder: 'dataset-source-row',
+        },
+      ],
+    );
+    const { getSqliteGroupRows } = require('./sqliteDetailQuery.cjs');
+    assert.deepEqual(
+      result.points.map((point) => (
+        getSqliteGroupRows({ db, groupRef: point.groupRef }).totalRows
+      )),
+      [3, 1],
+    );
     assert.equal(
       result.points.reduce((sum, point) => sum + point.count, 0),
       4,
@@ -290,6 +340,35 @@ function runTimelineBeforeGroupingSmoke() {
     assert.equal(result.stats.overBudget, true);
     assert.equal(result.stats.limitedToRenderBudget, 2);
     assert.equal(result.stats.hiddenByRenderBudget, 0);
+    assert.deepEqual(result.points[0].groupRef, {
+      groupId: 'grid:9:36',
+      bounds: {
+        north: 10,
+        south: 0,
+        east: 10,
+        west: 0,
+      },
+      timeline: {
+        timelineEnabled: true,
+        startYear: 2000,
+        endYear: 2005,
+      },
+      grid: {
+        cellLat: 9,
+        cellLon: 36,
+        cellHeight: 10,
+        cellWidth: 5,
+      },
+      sortOrder: 'dataset-source-row',
+    });
+    const { getSqliteGroupRows } = require('./sqliteDetailQuery.cjs');
+    assert.equal(
+      getSqliteGroupRows({
+        db,
+        groupRef: result.points[0].groupRef,
+      }).totalRows,
+      3,
+    );
 
     console.log("SQLite viewport smoke: timeline filtering before grouping passed.");
   } finally {

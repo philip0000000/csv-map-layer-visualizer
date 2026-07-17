@@ -6,6 +6,11 @@ const { importCsvFileToSqlite } = require("./csvImportService.cjs");
 const { closeSqliteStore, openSqliteStore } = require("./sqliteStore.cjs");
 const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
 
+const {
+  getSqliteFeatureDetails,
+  getSqliteGroupRows,
+} = require('./sqliteDetailQuery.cjs');
+
 // The prototype DB lives in Electron userData, not inside the repository.
 const SQLITE_DB_FILE_NAME = "csv-map-layer-visualizer.sqlite";
 
@@ -59,6 +64,33 @@ function registerDesktopBridgeHandlers() {
         bounds: query?.bounds,
         timeline: query?.timeline,
         renderBudget: query?.renderBudget,
+      });
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
+  ipcMain.handle('desktop:getFeatureDetails', async (_event, query = {}) => {
+    // Keep SQLite access in the main process and return full rows only on demand.
+    const db = openSqliteStore(getDesktopDatabasePath());
+
+    try {
+      return getSqliteFeatureDetails({
+        db,
+        sourceRef: query?.sourceRef,
+      });
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
+  ipcMain.handle('desktop:getGroupRows', async (_event, query = {}) => {
+    const db = openSqliteStore(getDesktopDatabasePath());
+
+    try {
+      return getSqliteGroupRows({
+        db,
+        groupRef: query?.groupRef,
+        offset: query?.offset,
+        limit: query?.limit,
       });
     } finally {
       closeSqliteStore(db);

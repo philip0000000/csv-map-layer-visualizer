@@ -189,6 +189,21 @@ export default function App() {
   const viewportQueryStats = desktopSqliteMapActive
     ? desktopMapViewState.result?.stats ?? null
     : null;
+  // Detail loaders are desktop-only, so browser and in-memory maps keep their old path.
+  const getDesktopFeatureDetails = useCallback(
+    (query) => desktopSqliteDataSource.getFeatureDetails(query),
+    [desktopSqliteDataSource],
+  );
+  const activeFeatureDetailsLoader = desktopSqliteMapActive
+    ? getDesktopFeatureDetails
+    : null;
+  const getDesktopGroupRows = useCallback(
+    (query) => desktopSqliteDataSource.getGroupRows(query),
+    [desktopSqliteDataSource],
+  );
+  const activeGroupRowsLoader = desktopSqliteMapActive
+    ? getDesktopGroupRows
+    : null;
   const selectedHeaders = selected?.headers;
   const selectedRows = selected?.rows;
   const visibleMarkerPointCount = useMemo(
@@ -315,6 +330,8 @@ export default function App() {
           regions={activeMapFeatures.regions.polygons}
           lines={activeMapFeatures.lines.lines}
           getSourceRow={activeMapFeatures.getSourceRow}
+          getFeatureDetails={activeFeatureDetailsLoader}
+          getGroupRows={activeGroupRowsLoader}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
           clusterRadius={mapToolsApi.state.clusterRadius}
           onViewportChange={setMapViewport}

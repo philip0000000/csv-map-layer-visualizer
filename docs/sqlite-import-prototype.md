@@ -140,6 +140,81 @@ Each npm command starts with the local Node runtime, then its script relaunches 
 
 To extend the smoke coverage, add an isolated fixture and assertion to the relevant viewport or detail smoke file. Keep the full-row sentinel assertion for new viewport result shapes so detail data does not enter the render query by accident.
 
+## Large-File Desktop Validation
+
+Issue #85 adds a repeatable 30k-row validation command for the full desktop SQLite path:
+
+```bash
+npm run validate:desktop-large-file
+```
+
+The runner generates a temporary CSV, imports it through the production SQLite importer, runs viewport/detail/paging queries, reports measurements, and removes its temporary CSV and database. For a manual Electron check, preserve the generated files explicitly:
+
+```bash
+npm run validate:desktop-large-file -- --keep-files
+```
+
+The opt-in command prints the temporary directory and CSV path. Remove those files after the manual check; normal validation runs continue to clean up automatically.
+
+### Validation Fixture
+
+The deterministic fixture contains 30,000 valid point rows:
+
+- 24,000 points in one dense Stockholm area
+- 5,600 points spread through a sparse European area
+- 400 points in a separate exact-marker area
+- timeline ranges, marker values, names, and detail comments on every row
+
+This fixture exercises grouped, exact, sparse, empty, timeline-filtered, detail, and paged-row paths without committing a large CSV to the repository.
+
+### Automated Results
+
+Measurements were recorded on the local Windows development machine on 2026-07-18. Two consecutive final runs produced stable counts and similar timings:
+
+| Scenario | Observed result |
+| --- | --- |
+| CSV import | 30,000 of 30,000 rows, zero skipped, 2.02-2.25 seconds |
+| File sizes | 2,029,375-byte CSV; 21,213,184-byte SQLite database |
+| Approximate import heap change | 18.03-18.25 MiB in the Electron main-process validation runner |
+| Dense viewport | 24,000 matches represented by 12 groups; 77.78-79.60 ms warm median |
+| Exact viewport | 400 exact markers; 16.29-16.58 ms warm median |
+| Sparse viewport | 272 exact markers; 16.01-16.04 ms warm median |
+| Empty viewport | zero results; 15.60-15.62 ms warm median |
+| Timeline viewport | 5,418 matches and 18,582 skipped for 2000-2005; 30.65-30.74 ms warm median |
+| Exact detail | original row fetched on demand; 0.03 ms warm median |
+| Group paging | two stable 30-row pages without duplicates; approximately 5 ms warm median |
+
+The dense, exact, and timeline results were stable across repeated queries. Group IDs, counts, representative markers, source references, detail rows, and page ordering remained deterministic.
+
+### Manual Electron Results
+
+The generated fixture was imported through the visible Electron UI using an isolated temporary `userData` directory:
+
+- the UI reported `Stored 30000 of 30000 rows`
+- pan and zoom remained responsive
+- the dense area rendered as a grouped marker representing 24,000 rows
+- exact sparse markers loaded their original row details on demand
+- `Show 30 more` advanced grouped rows from 30 to 60 and then 90 without observed duplicates
+- the 2000-2005 timeline range produced the expected 5,418 grouped rows
+- timeline-filtered group paging continued to return matching rows
+- three idle renderer readings were stable at 13.64 MiB used JavaScript heap and 18.41 MiB allocated JavaScript heap
+
+The existing render budget of 1,000 and group page size of 30 were sufficient for this first-pass target, so neither limit was changed.
+
+### Browser Comparison
+
+The same generated CSV was loaded through the normal browser/in-memory flow. Firefox Developer Edition parsed and listed all 30,000 rows, and clustered markers eventually appeared after roughly 40 seconds. The page remained effectively unusable, with roughly 40-second interaction updates and Firefox's slow-page warning. Pan/zoom and DevTools memory inspection could not be completed reliably.
+
+This comparison does not change the browser path or claim large-file GitHub Pages support. Browser large-file performance remains a non-goal for the desktop validation work.
+
+### Conclusion and Follow-Up
+
+SQLite live queries are sufficient for the first desktop version at the 30k-row target. The measured viewport, timeline, detail, and paging queries do not justify DuckDB, precomputed map tiles, or a different render budget.
+
+No desktop query bottleneck was found at 30,000 rows. Import remains the longest measured desktop operation at about two seconds and currently parses the complete file before insertion; profile that path again before raising the supported target substantially.
+
+One unrelated visual issue was observed in the `Visible year range` slider during manual testing. Its displayed slider state did not match the applied range consistently. The timeline query and grouped result counts were correct, so that visual issue remains separate follow-up work outside issue #85.
+
 ## Manual Acceptance Check
 
 Use `npm run desktop:start` with one small CSV and one dense CSV containing more than 30 points in a group:

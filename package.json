@@ -12,6 +12,7 @@
     "desktop:start": "npm run build:desktop && node desktop/run-electron.cjs .",
     "smoke:sqlite-viewport": "node desktop/sqliteViewportQuery.smoke.cjs",
     "smoke:sqlite-detail": "node desktop/sqliteDetailQuery.smoke.cjs",
+    "validate:desktop-large-file": "node desktop/largeFileValidation.cjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -17,6 +17,7 @@ import { useCsvFileDrop } from "./components/useCsvFileDrop";
 import { useExampleCsvFilesFromUrl } from "./components/useExampleCsvFilesFromUrl";
 import { useTimelinePlayback } from "./components/useTimelinePlayback";
 import { createDesktopSqliteDataSource } from "./data/desktopSqliteDataSource";
+import { MarkerDetailsPanel } from "./components/MarkerDetailsPanel";
 
 const LARGE_RAW_MARKER_WARNING_THRESHOLD = 3000;
 const SQLITE_RENDER_BUDGET = 1000;
@@ -79,6 +80,13 @@ export default function App() {
     error: null,
   });
   const [mapViewport, setMapViewport] = useState(null);
+
+  // App owns marker selection so the map and details panel share one lifecycle.
+  const [selectedMarker, setSelectedMarker] = useState(null);
+  const [isMarkerPanelCollapsed, setIsMarkerPanelCollapsed] = useState(false);
+
+  // The details panel uses the CSV panel's visible edge as its left position.
+  const [csvPanelVisibleWidth, setCsvPanelVisibleWidth] = useState(420);
   const [desktopMapViewState, setDesktopMapViewState] = useState({
     status: "idle",
     result: null,
@@ -92,6 +100,22 @@ export default function App() {
     () => createDesktopSqliteDataSource({ desktopApi }),
     [desktopApi],
   );
+
+  const handleMarkerSelect = useCallback((marker) => {
+    // Selecting a marker always reveals its details, even after a collapse.
+    setSelectedMarker(marker);
+    setIsMarkerPanelCollapsed(false);
+  }, []);
+
+  const handleMarkerPanelCollapse = useCallback(() => {
+    setIsMarkerPanelCollapsed((isCollapsed) => !isCollapsed);
+  }, []);
+
+  const handleMarkerPanelClose = useCallback(() => {
+    // Clearing the selection unmounts both the panel and its collapsed control.
+    setSelectedMarker(null);
+    setIsMarkerPanelCollapsed(false);
+  }, []);
 
   /**
    * Start the desktop-only SQLite import flow.
@@ -330,14 +354,14 @@ export default function App() {
           regions={activeMapFeatures.regions.polygons}
           lines={activeMapFeatures.lines.lines}
           getSourceRow={activeMapFeatures.getSourceRow}
-          getFeatureDetails={activeFeatureDetailsLoader}
-          getGroupRows={activeGroupRowsLoader}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
           clusterRadius={mapToolsApi.state.clusterRadius}
           onViewportChange={setMapViewport}
+          onMarkerSelect={handleMarkerSelect}
+          selectedMarker={selectedMarker}
         />
 
-        <CsvPanelOverlay>
+        <CsvPanelOverlay onVisibleWidthChange={setCsvPanelVisibleWidth}>
           <CsvPanel
             files={files}
             selectedId={selectedId}
@@ -364,6 +388,17 @@ export default function App() {
             onMapToolsPatch={patchMapToolsWithSafeguards}
           />
         </CsvPanelOverlay>
+
+        <MarkerDetailsPanel
+          marker={selectedMarker}
+          leftOffset={csvPanelVisibleWidth}
+          getSourceRow={activeMapFeatures.getSourceRow}
+          getFeatureDetails={activeFeatureDetailsLoader}
+          getGroupRows={activeGroupRowsLoader}
+          isCollapsed={isMarkerPanelCollapsed}
+          onToggleCollapse={handleMarkerPanelCollapse}
+          onClose={handleMarkerPanelClose}
+        />
       </div>
     </div>
   );

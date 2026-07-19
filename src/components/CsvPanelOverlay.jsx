@@ -13,7 +13,7 @@ const MAX_PANEL_WIDTH_RATIO = 0.85;
  */
 const HANDLE_VISIBLE_PX = 34;
 
-export function CsvPanelOverlay({ children }) {
+export function CsvPanelOverlay({ children, onVisibleWidthChange }) {
   /** True when the CSV panel is hidden */
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -67,6 +67,13 @@ export function CsvPanelOverlay({ children }) {
       window.removeEventListener("mouseup", onUp);
     };
   }, []);
+
+  // Keep adjacent overlays aligned with the panel's actual visible edge.
+  useEffect(() => {
+    onVisibleWidthChange?.(
+      isCollapsed ? HANDLE_VISIBLE_PX : panelWidth,
+    );
+  }, [isCollapsed, onVisibleWidthChange, panelWidth]);
 
   /**
    * Starts the resize action.

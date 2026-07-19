@@ -81,12 +81,6 @@ This launches the current app in the Electron desktop shell. It does not create 
 
 For more details, see [Desktop runtime decision](docs/desktop-runtime.md).
 
-## Embedding
-
-The long term goal is for the app to be embeddable in other web pages.
-
-Currently, it runs as a standalone Vite built client application. A dedicated embeddable build/package does not exist yet.
-
 ## Author
 
 Developed and maintained by **philip0000000**.

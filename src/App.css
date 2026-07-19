@@ -112,6 +112,109 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+/* Marker details overlay, positioned directly after the visible CSV panel. */
+.markerDetailsPanel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1150;
+  width: 360px;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-right: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 8px 0 30px rgba(0, 0, 0, 0.35);
+}
+
+.markerDetailsPanelHeader {
+  min-height: 48px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.markerDetailsPanelTitle {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.markerDetailsPanelHeaderActions {
+  display: flex;
+  gap: 6px;
+}
+
+.markerDetailsPanelCollapse,
+.markerDetailsPanelClose {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.8);
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.markerDetailsPanelCollapse:hover,
+.markerDetailsPanelClose:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.markerDetailsPanelExpand {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 64px;
+  padding: 0;
+  border-radius: 0 12px 12px 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.95);
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.markerDetailsPanelExpand:hover {
+  background: rgba(15, 23, 42, 1);
+}
+
+.markerDetailsPanelContent {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+/* Right-edge drag target for changing the marker panel width. */
+.markerDetailsPanelDivider {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  background: rgba(255, 255, 255, 0.06);
+  user-select: none;
+}
+
+.markerDetailsPanelDivider:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 /* --- CSV panel internals (your existing styles) --- */
 .csvPanel {
   height: 100%;

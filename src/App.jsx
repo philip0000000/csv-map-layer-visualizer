@@ -81,6 +81,31 @@ export default function App() {
   });
   const [mapViewport, setMapViewport] = useState(null);
 
+  // Reconnect the desktop map to persisted SQLite data without affecting browser startup.
+  useEffect(() => {
+    if (!desktopImportAvailable || typeof desktopApi?.getStatus !== "function") {
+      return undefined;
+    }
+
+    let canceled = false;
+
+    desktopApi.getStatus().then((status) => {
+      if (canceled || !status?.hasImportedData) return;
+
+      setDesktopImportState((current) => (
+        current.status === "idle"
+          ? { status: "imported", summary: null, error: null }
+          : current
+      ));
+    }, () => {
+      // Keep the normal import flow available if persisted-data detection fails.
+    });
+
+    return () => {
+      canceled = true;
+    };
+  }, [desktopApi, desktopImportAvailable]);
+
   // App owns marker selection so the map and details panel share one lifecycle.
   const [selectedMarker, setSelectedMarker] = useState(null);
   const [isMarkerPanelCollapsed, setIsMarkerPanelCollapsed] = useState(false);

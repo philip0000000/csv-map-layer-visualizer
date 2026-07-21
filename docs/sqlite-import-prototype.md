@@ -19,13 +19,15 @@ The renderer does not pass arbitrary IPC channel names, local file paths, SQL, o
 
 ## Database Location
 
-The prototype database is stored under Electron's app data directory:
+The desktop database is stored in the project-local data directory:
 
 ```text
-app.getPath("userData") / csv-map-layer-visualizer.sqlite
+<project root>/.local-data/csv-map-layer-visualizer.sqlite
 ```
 
-This keeps imported local data outside the repository and outside the browser build output.
+The `.local-data/` directory and database are created only when desktop SQLite is first needed. If the database already contains imported datasets, desktop startup detects it and activates the existing SQLite query path automatically. If no database exists, the app starts normally without creating one.
+
+The entire `.local-data/` directory is ignored by Git, including SQLite WAL and SHM files. The browser build does not use this directory or the desktop database.
 
 ## Native Module Rebuild
 
@@ -121,7 +123,7 @@ npm run smoke:sqlite-viewport
 npm run smoke:sqlite-detail
 ```
 
-The smoke scripts create isolated in-memory SQLite databases. The viewport suite calls `querySqliteMapView(...)`, while the detail suite calls the exact and grouped lookup functions directly. Neither suite opens the Electron UI or reads from or modifies the app database under `userData`.
+The smoke scripts create isolated in-memory SQLite databases. The viewport suite calls `querySqliteMapView(...)`, while the detail suite calls the exact and grouped lookup functions directly. Neither suite opens the Electron UI or reads from or modifies the project-local app database.
 
 The current scenarios cover:
 
@@ -188,7 +190,7 @@ The dense, exact, and timeline results were stable across repeated queries. Grou
 
 ### Manual Electron Results
 
-The generated fixture was imported through the visible Electron UI using an isolated temporary `userData` directory:
+These historical results were recorded before issue #97, when the generated fixture was imported through the visible Electron UI using an isolated temporary `userData` directory:
 
 - the UI reported `Stored 30000 of 30000 rows`
 - pan and zoom remained responsive

@@ -1,6 +1,7 @@
 "use strict";
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const fs = require("node:fs");
 const path = require("node:path");
 const { importCsvFileToSqlite } = require("./csvImportService.cjs");
 const { closeSqliteStore, openSqliteStore } = require("./sqliteStore.cjs");
@@ -11,7 +12,7 @@ const {
   getSqliteGroupRows,
 } = require('./sqliteDetailQuery.cjs');
 
-// The prototype DB lives in Electron userData, not inside the repository.
+const LOCAL_DATA_DIR_NAME = ".local-data";
 const SQLITE_DB_FILE_NAME = "csv-map-layer-visualizer.sqlite";
 
 function getDevServerUrl() {
@@ -27,6 +28,7 @@ function registerDesktopBridgeHandlers() {
   ipcMain.handle("desktop:getStatus", () => ({
     ok: true,
     runtime: "electron",
+    ...getDesktopDatabaseStatus(),
   }));
 
   // The renderer asks to import, but the main process opens the file picker.
@@ -44,7 +46,7 @@ function registerDesktopBridgeHandlers() {
       return { ok: false, canceled: true };
     }
 
-    const db = openSqliteStore(getDesktopDatabasePath());
+    const db = openDesktopSqliteStore();
 
     try {
       return importCsvFileToSqlite({
@@ -56,7 +58,7 @@ function registerDesktopBridgeHandlers() {
     }
   });
   ipcMain.handle("desktop:queryMapView", async (_event, query = {}) => {
-    const db = openSqliteStore(getDesktopDatabasePath());
+    const db = openDesktopSqliteStore();
 
     try {
       return querySqliteMapView({
@@ -71,7 +73,7 @@ function registerDesktopBridgeHandlers() {
   });
   ipcMain.handle('desktop:getFeatureDetails', async (_event, query = {}) => {
     // Keep SQLite access in the main process and return full rows only on demand.
-    const db = openSqliteStore(getDesktopDatabasePath());
+    const db = openDesktopSqliteStore();
 
     try {
       return getSqliteFeatureDetails({
@@ -83,7 +85,7 @@ function registerDesktopBridgeHandlers() {
     }
   });
   ipcMain.handle('desktop:getGroupRows', async (_event, query = {}) => {
-    const db = openSqliteStore(getDesktopDatabasePath());
+    const db = openDesktopSqliteStore();
 
     try {
       return getSqliteGroupRows({
@@ -99,10 +101,46 @@ function registerDesktopBridgeHandlers() {
 }
 
 /**
- * Return the per-user database path for the desktop app.
+ * Return the project-local database path for the desktop app.
  */
 function getDesktopDatabasePath() {
-  return path.join(app.getPath("userData"), SQLITE_DB_FILE_NAME);
+  return path.join(__dirname, "..", LOCAL_DATA_DIR_NAME, SQLITE_DB_FILE_NAME);
+}
+
+/**
+ * Detect persisted imports without creating a database on first startup.
+ */
+function getDesktopDatabaseStatus() {
+  const dbPath = getDesktopDatabasePath();
+
+  if (!fs.existsSync(dbPath)) {
+    return {
+      databaseExists: false,
+      hasImportedData: false,
+    };
+  }
+
+  const db = openDesktopSqliteStore();
+
+  try {
+    const row = db.prepare("SELECT EXISTS(SELECT 1 FROM datasets) AS has_imported_data").get();
+
+    return {
+      databaseExists: true,
+      hasImportedData: row?.has_imported_data === 1,
+    };
+  } finally {
+    closeSqliteStore(db);
+  }
+}
+
+/**
+ * Create the local data folder only when SQLite is first needed.
+ */
+function openDesktopSqliteStore() {
+  const dbPath = getDesktopDatabasePath();
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  return openSqliteStore(dbPath);
 }
 
 /**

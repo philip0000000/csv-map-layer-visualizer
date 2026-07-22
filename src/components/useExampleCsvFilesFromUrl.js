@@ -48,6 +48,8 @@ export function useExampleCsvFilesFromUrl({ importExampleFile }) {
     if (validExamples.length === 0) return;
 
     const loadExamples = async () => {
+      if (typeof importExampleFile !== "function") return;
+
       for (const name of validExamples) {
         await importExampleFile(name);
       }

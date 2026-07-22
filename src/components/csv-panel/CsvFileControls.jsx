@@ -6,8 +6,10 @@ export default function CsvFileControls({
   onSelect,
   onImportFiles,
   desktopImport,
+  datasetListState,
   viewportQueryStats,
   onUnloadFile,
+  removeActionLabel = "Unload",
   onToggleEnabled,
 }) {
   /**
@@ -17,7 +19,15 @@ export default function CsvFileControls({
   const fileInputRef = useRef(null);
   const isDesktopImporting = desktopImport?.status === "importing";
   const desktopSummary = desktopImport?.summary ?? null;
+  const desktopProgress = desktopImport?.progress ?? null;
+  const desktopImportResults = Array.isArray(desktopSummary?.results)
+    ? desktopSummary.results
+    : [];
   const hiddenByRenderBudget = normalizeCount(viewportQueryStats?.hiddenByRenderBudget);
+  const browserImportAvailable = typeof onImportFiles === "function";
+  const canSelect = typeof onSelect === "function";
+  const canToggleEnabled = typeof onToggleEnabled === "function";
+  const canRemove = typeof onUnloadFile === "function";
 
   /**
    * Trigger the hidden file input.
@@ -45,15 +55,17 @@ export default function CsvFileControls({
 
   return (
     <>
-      <button
-        className="csvBtnPrimary csvImportButton"
-        onClick={handleClickImport}
-        aria-label="Import CSV files"
-      >
-        Import...
-      </button>
+      {browserImportAvailable && (
+        <button
+          className="csvBtnPrimary csvImportButton"
+          onClick={handleClickImport}
+          aria-label="Import CSV files"
+        >
+          Import...
+        </button>
+      )}
 
-      {/* Desktop-only SQLite import. This is separate from the normal map import above. */}
+      {/* Desktop uses the native picker; browser mode uses the hidden input above. */}
       {desktopImport?.isAvailable && (
         <div className="csvDesktopImportBlock">
           <button
@@ -61,20 +73,43 @@ export default function CsvFileControls({
             className="csvBtnPrimary csvDesktopImportButton"
             onClick={desktopImport.onImport}
             disabled={isDesktopImporting}
+            aria-label="Import CSV files"
           >
-            {isDesktopImporting ? "Importing to SQLite..." : "Import to local SQLite"}
+            {isDesktopImporting ? "Importing..." : "Import..."}
           </button>
 
-          {desktopImport.status === "imported" && desktopSummary && (
+          {isDesktopImporting && desktopProgress && (
             <div className="csvDesktopImportStatus" role="status">
-              <div className="csvDesktopImportTitle">{desktopSummary.fileName}</div>
-              <div>
-                Stored {desktopSummary.importedFeatureCount} of {desktopSummary.rowCount} rows
-                {desktopSummary.skippedRowCount ? `, skipped ${desktopSummary.skippedRowCount}` : ""}.
-              </div>
-              <div>
-                Fields: {formatFieldList(desktopSummary.detectedFields)}
-              </div>
+              Importing {desktopProgress.fileNumber} of {desktopProgress.totalFiles}: {desktopProgress.fileName}
+            </div>
+          )}
+
+          {desktopImportResults.length > 0 && (
+            <div className="csvDesktopImportStatus" role="status">
+              {desktopImportResults.map((result, index) => (
+                <div
+                  key={`${result.fileName}-${index}`}
+                  className={result.ok ? undefined : "csvDesktopImportStatusError"}
+                >
+                  <div className="csvDesktopImportTitle">{result.fileName}</div>
+                  {result.ok ? (
+                    <>
+                      <div>
+                        Imported {result.importedFeatureCount} of {result.rowCount} rows
+                        {result.skippedRowCount
+                          ? `, skipped ${result.skippedRowCount}`
+                          : ""}.
+                      </div>
+                      <div>Fields: {formatFieldList(result.detectedFields)}</div>
+                      {result.parseErrors?.length > 0 && (
+                        <div>{result.parseErrors.length} parsing warning(s).</div>
+                      )}
+                    </>
+                  ) : (
+                    <div>{result.error ?? "Import failed."}</div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
@@ -99,14 +134,16 @@ export default function CsvFileControls({
       )}
 
       {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,text/csv"
-        multiple
-        onChange={handleFileChange}
-        style={{ display: "none" }}
-      />
+      {browserImportAvailable && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          multiple
+          onChange={handleFileChange}
+          style={{ display: "none" }}
+        />
+      )}
 
       <div className="csvFilesList" role="list">
         <div className="csvFilesHeaderRow">
@@ -116,7 +153,25 @@ export default function CsvFileControls({
           <div />
         </div>
 
-        {files.length === 0 ? (
+        {datasetListState?.status === "error" && (
+          <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+            {datasetListState.error ?? "Could not load desktop datasets."}
+          </div>
+        )}
+        {datasetListState?.mutationError && (
+          <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+            {datasetListState.mutationError}
+          </div>
+        )}
+        {datasetListState?.removalError && (
+          <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+            {datasetListState.removalError}
+          </div>
+        )}
+
+        {datasetListState?.status === "loading" && files.length === 0 ? (
+          <div className="csvEmptyState">Loading CSV files...</div>
+        ) : files.length === 0 ? (
           <div className="csvEmptyState">No CSV files loaded.</div>
         ) : (
           files.map((file) => (
@@ -126,33 +181,45 @@ export default function CsvFileControls({
               className={`csvFilesRow${
                 file.id === selectedId ? " csvFilesRowSelected" : ""
               }`}
-              onClick={() => onSelect(file.id)}
+              onClick={canSelect ? () => onSelect(file.id) : undefined}
             >
               <input
                 type="checkbox"
                 aria-label={`Toggle visibility for ${file.name}`}
                 checked={!!file.enabled}
+                disabled={
+                  !canToggleEnabled ||
+                  datasetListState?.pendingDatasetIds?.includes(file.id) ||
+                  datasetListState?.pendingRemovalDatasetIds?.includes(file.id)
+                }
                 onChange={(e) => onToggleEnabled?.(file.id, e.target.checked)}
                 onClick={(e) => e.stopPropagation()}
               />
               <button
                 type="button"
                 className="csvFileNameButton"
-                onClick={() => onSelect(file.id)}
+                aria-disabled={!canSelect}
+                onClick={() => onSelect?.(file.id)}
               >
                 {file.name}
               </button>
-              <div className="csvFileRows">{file.rows?.length ?? 0}</div>
-              <button
-                type="button"
-                className="csvBtnTiny"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUnloadFile?.(file.id);
-                }}
-              >
-                Unload
-              </button>
+              <div className="csvFileRows">{getDisplayedRowCount(file)}</div>
+              {canRemove ? (
+                <button
+                  type="button"
+                  className="csvBtnTiny"
+                  disabled={
+                    datasetListState?.pendingRemovalDatasetIds?.includes(file.id) ||
+                    datasetListState?.pendingDatasetIds?.includes(file.id)
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUnloadFile(file.id);
+                  }}
+                >
+                  {removeActionLabel}
+                </button>
+              ) : <div />}
             </div>
           ))
         )}
@@ -181,4 +248,12 @@ function normalizeCount(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return 0;
   return Math.max(0, Math.trunc(number));
+}
+
+function getDisplayedRowCount(file) {
+  if (file?.importedFeatureCount != null) {
+    return normalizeCount(file.importedFeatureCount);
+  }
+
+  return normalizeCount(file?.rows?.length ?? file?.rowCount);
 }

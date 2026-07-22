@@ -68,6 +68,101 @@ function importCsvFileToSqlite({ db, filePath }) {
 }
 
 /**
+ * Import selected files independently so one failure cannot undo other imports.
+ */
+function importCsvFilesToSqlite({ db, filePaths, onProgress = null }) {
+  if (!db?.open) {
+    throw new TypeError("An open SQLite database is required.");
+  }
+  if (!Array.isArray(filePaths)) {
+    throw new TypeError("CSV file paths are required.");
+  }
+
+  const results = [];
+  const totalFiles = filePaths.length;
+
+  filePaths.forEach((filePath, index) => {
+    const fileName = getSafeFileName(filePath);
+    emitImportProgress(onProgress, {
+      state: "started",
+      fileName,
+      fileNumber: index + 1,
+      totalFiles,
+    });
+
+    try {
+      const summary = importCsvFileToSqlite({ db, filePath });
+      const result = {
+        ok: true,
+        fileName: summary.fileName,
+        rowCount: summary.rowCount,
+        importedFeatureCount: summary.importedFeatureCount,
+        skippedRowCount: summary.skippedRowCount,
+        detectedFields: summary.detectedFields,
+        parseErrors: summary.parseErrors,
+      };
+      results.push(result);
+      emitImportProgress(onProgress, {
+        state: "completed",
+        fileName,
+        fileNumber: index + 1,
+        totalFiles,
+        ok: true,
+      });
+    } catch (error) {
+      const result = {
+        ok: false,
+        fileName,
+        error: getSafeImportError(error),
+      };
+      results.push(result);
+      emitImportProgress(onProgress, {
+        state: "completed",
+        fileName,
+        fileNumber: index + 1,
+        totalFiles,
+        ok: false,
+      });
+    }
+  });
+  const successfulCount = results.filter((result) => result.ok).length;
+
+  return {
+    ok: successfulCount > 0,
+    canceled: false,
+    successfulCount,
+    failedCount: results.length - successfulCount,
+    results,
+  };
+}
+
+function emitImportProgress(onProgress, progress) {
+  if (typeof onProgress !== "function") return;
+
+  try {
+    onProgress(progress);
+  } catch {
+    // Progress reporting must never interrupt an import transaction or batch.
+  }
+}
+
+function getSafeFileName(filePath) {
+  if (typeof filePath !== "string" || !filePath.trim()) {
+    return "Unknown CSV file";
+  }
+
+  return path.basename(filePath);
+}
+
+function getSafeImportError(error) {
+  if (error?.code === "ENOENT" || error?.code === "EACCES") {
+    return "The CSV file could not be read.";
+  }
+
+  return "The CSV file could not be imported.";
+}
+
+/**
  * Parse CSV text into headers and row objects.
  * This mirrors the browser parser shape, but runs in Electron main process code.
  */
@@ -424,4 +519,5 @@ function getCompactFields(row, detectedFields) {
 
 module.exports = {
   importCsvFileToSqlite,
+  importCsvFilesToSqlite,
 };

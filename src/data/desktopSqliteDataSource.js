@@ -1,4 +1,4 @@
-import { DEFAULT_GROUP_ROWS_LIMIT } from './dataSource';
+import { DEFAULT_GROUP_ROWS_LIMIT } from './dataSource.js';
 
 const DEFAULT_SQLITE_RENDER_BUDGET = 1000;
 
@@ -57,13 +57,116 @@ export function createDesktopSqliteDataSource({ desktopApi }) {
       return normalizeGroupRowsResult(result, offset, limit);
     },
 
-    getDatasetSummary() {
-      return {
-        datasets: [],
-        timeline: null,
-      };
+    async getDatasetSummary() {
+      if (typeof desktopApi?.getDatasetSummary !== "function") {
+        return createEmptyDatasetSummary();
+      }
+
+      const result = await desktopApi.getDatasetSummary();
+      return normalizeDatasetSummary(result);
+    },
+
+    async setDatasetEnabled(datasetId, enabled) {
+      const normalizedDatasetId = normalizeDatasetId(datasetId);
+      if (
+        typeof desktopApi?.setDatasetEnabled !== "function" ||
+        !normalizedDatasetId ||
+        typeof enabled !== "boolean"
+      ) {
+        return createDatasetMutationResult(false);
+      }
+
+      const result = await desktopApi.setDatasetEnabled(
+        normalizedDatasetId,
+        enabled,
+      );
+      return normalizeDatasetMutationResult(result);
+    },
+
+    async removeDataset(datasetId) {
+      const normalizedDatasetId = normalizeDatasetId(datasetId);
+      if (
+        typeof desktopApi?.removeDataset !== "function" ||
+        !normalizedDatasetId
+      ) {
+        return createDatasetRemovalResult(false);
+      }
+
+      const result = await desktopApi.removeDataset(normalizedDatasetId);
+      return normalizeDatasetRemovalResult(result);
     },
   };
+}
+
+function normalizeDatasetSummary(result) {
+  if (!result || typeof result !== "object") {
+    return createEmptyDatasetSummary();
+  }
+
+  const datasets = Array.isArray(result.datasets)
+    ? result.datasets.map(normalizeDatasetSummaryItem).filter(Boolean)
+    : [];
+
+  return {
+    datasets,
+    timeline: normalizeTimelineSummary(result.timeline),
+  };
+}
+
+function normalizeDatasetSummaryItem(item) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+
+  const id = normalizeNullableString(item.id);
+  const name = normalizeNullableString(item.name);
+  if (!id || !name) return null;
+
+  return {
+    id,
+    name,
+    enabled: item.enabled === true,
+    headers: normalizeStringArray(item.headers),
+    rowCount: normalizeNonNegativeInteger(item.rowCount, 0),
+    totalRows: normalizeNonNegativeInteger(item.totalRows, 0),
+    importedFeatureCount: normalizeNonNegativeInteger(
+      item.importedFeatureCount,
+      0,
+    ),
+    skippedRowCount: normalizeNonNegativeInteger(item.skippedRowCount, 0),
+    importedAt: normalizeNullableString(item.importedAt),
+    latField: normalizeNullableString(item.latField),
+    lonField: normalizeNullableString(item.lonField),
+    parseErrors: normalizeStringArray(item.parseErrors),
+  };
+}
+
+function normalizeTimelineSummary(timeline) {
+  if (!timeline || typeof timeline !== "object" || Array.isArray(timeline)) {
+    return null;
+  }
+
+  const yearMin = normalizeOptionalInteger(timeline.yearMin);
+  const yearMax = normalizeOptionalInteger(timeline.yearMax);
+  if (yearMin == null || yearMax == null) return null;
+
+  return { yearMin, yearMax };
+}
+
+function normalizeStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item) => typeof item === "string");
+}
+
+function normalizeDatasetMutationResult(result) {
+  return createDatasetMutationResult(result?.updated === true);
+}
+
+function normalizeDatasetRemovalResult(result) {
+  return createDatasetRemovalResult(result?.removed === true);
+}
+
+function normalizeDatasetId(value) {
+  const datasetId = normalizeNullableString(value);
+  return datasetId?.trim() || null;
 }
 
 function normalizeMapViewResult(result) {
@@ -317,6 +420,25 @@ function createEmptyGroupRowsResult(offset, limit) {
     offset,
     limit,
     totalRows: 0,
+  };
+}
+
+function createEmptyDatasetSummary() {
+  return {
+    datasets: [],
+    timeline: null,
+  };
+}
+
+function createDatasetMutationResult(updated) {
+  return {
+    updated: updated === true,
+  };
+}
+
+function createDatasetRemovalResult(removed) {
+  return {
+    removed: removed === true,
   };
 }
 

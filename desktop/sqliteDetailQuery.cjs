@@ -92,6 +92,7 @@ function buildGroupWhereClause(groupRef) {
   const { bounds, grid, timeline } = groupRef;
   // Rebuild the original group from its viewport, grid cell, and timeline.
   const clauses = [
+    'dataset_id IN (SELECT id FROM datasets WHERE enabled = 1)',
     'lat BETWEEN @south AND @north',
     bounds.west > bounds.east
       ? '(lon >= @west OR lon <= @east)'

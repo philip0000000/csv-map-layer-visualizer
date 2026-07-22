@@ -145,6 +145,32 @@ function runGroupedPagingSmoke(db) {
     limit: 2,
     totalRows: 3,
   });
+
+  const { setSqliteDatasetEnabled } = require('./sqliteDatasetService.cjs');
+  setSqliteDatasetEnabled({ db, datasetId: DATASET_B, enabled: false });
+  assert.deepEqual(getSqliteGroupRows({
+    db,
+    groupRef,
+    offset: 0,
+    limit: 10,
+  }), {
+    rows: [
+      {
+        name: 'match-one',
+        latitude: '1',
+        longitude: '1',
+      },
+      {
+        name: 'match-two',
+        latitude: '1',
+        longitude: '1',
+      },
+    ],
+    offset: 0,
+    limit: 10,
+    totalRows: 2,
+  });
+  setSqliteDatasetEnabled({ db, datasetId: DATASET_B, enabled: true });
   assert.deepEqual(
     getSqliteGroupRows({
       db,

@@ -32,6 +32,7 @@ function initializeSchema(db) {
       imported_feature_count INTEGER NOT NULL DEFAULT 0,
       skipped_row_count INTEGER NOT NULL DEFAULT 0,
       columns_json TEXT NOT NULL DEFAULT '[]',
+      enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
       imported_at TEXT NOT NULL
     );
 
@@ -59,6 +60,24 @@ function initializeSchema(db) {
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_features_dataset_source_row
       ON features(dataset_id, source_row_index);
+  `);
+
+  ensureDatasetEnabledColumn(db);
+}
+
+/**
+ * Add persistent visibility to databases created before the column existed.
+ * The non-null default makes every existing dataset visible after migration.
+ */
+function ensureDatasetEnabledColumn(db) {
+  const columns = db.pragma("table_info(datasets)");
+  const hasEnabledColumn = columns.some((column) => column.name === "enabled");
+
+  if (hasEnabledColumn) return;
+
+  db.exec(`
+    ALTER TABLE datasets
+    ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1));
   `);
 }
 

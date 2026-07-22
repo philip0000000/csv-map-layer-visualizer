@@ -3,7 +3,13 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
-const { importCsvFileToSqlite } = require("./csvImportService.cjs");
+const { importCsvFilesToSqlite } = require("./csvImportService.cjs");
+const { importDroppedCsvFilesToSqlite } = require("./droppedCsvImport.cjs");
+const {
+  getSqliteDatasetSummary,
+  removeSqliteDataset,
+  setSqliteDatasetEnabled,
+} = require("./sqliteDatasetService.cjs");
 const { closeSqliteStore, openSqliteStore } = require("./sqliteStore.cjs");
 const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
 
@@ -32,10 +38,10 @@ function registerDesktopBridgeHandlers() {
   }));
 
   // The renderer asks to import, but the main process opens the file picker.
-  ipcMain.handle("desktop:importCsvToSqlite", async () => {
+  ipcMain.handle("desktop:importCsvToSqlite", async (event) => {
     const fileResult = await dialog.showOpenDialog({
-      title: "Import CSV to local SQLite",
-      properties: ["openFile"],
+      title: "Import CSV files",
+      properties: ["openFile", "multiSelections"],
       filters: [
         { name: "CSV files", extensions: ["csv"] },
         { name: "All files", extensions: ["*"] },
@@ -49,9 +55,10 @@ function registerDesktopBridgeHandlers() {
     const db = openDesktopSqliteStore();
 
     try {
-      return importCsvFileToSqlite({
+      return importCsvFilesToSqlite({
         db,
-        filePath: fileResult.filePaths[0],
+        filePaths: fileResult.filePaths,
+        onProgress: (progress) => sendCsvImportProgress(event, progress),
       });
     } finally {
       closeSqliteStore(db);
@@ -66,6 +73,53 @@ function registerDesktopBridgeHandlers() {
         bounds: query?.bounds,
         timeline: query?.timeline,
         renderBudget: query?.renderBudget,
+      });
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
+  ipcMain.handle("desktop:importDroppedCsvFiles", async (event, request = {}) => {
+    const db = openDesktopSqliteStore();
+
+    try {
+      return importDroppedCsvFilesToSqlite({
+        db,
+        filePaths: request?.filePaths,
+        onProgress: (progress) => sendCsvImportProgress(event, progress),
+      });
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
+  ipcMain.handle("desktop:getDatasetSummary", async () => {
+    const db = openDesktopSqliteStore();
+
+    try {
+      return getSqliteDatasetSummary({ db });
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
+  ipcMain.handle("desktop:setDatasetEnabled", async (_event, request = {}) => {
+    const db = openDesktopSqliteStore();
+
+    try {
+      return setSqliteDatasetEnabled({
+        db,
+        datasetId: request?.datasetId,
+        enabled: request?.enabled,
+      });
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
+  ipcMain.handle("desktop:removeDataset", async (_event, request = {}) => {
+    const db = openDesktopSqliteStore();
+
+    try {
+      return removeSqliteDataset({
+        db,
+        datasetId: request?.datasetId,
       });
     } finally {
       closeSqliteStore(db);
@@ -98,6 +152,11 @@ function registerDesktopBridgeHandlers() {
       closeSqliteStore(db);
     }
   });
+}
+
+function sendCsvImportProgress(event, progress) {
+  if (!event?.sender || event.sender.isDestroyed()) return;
+  event.sender.send("desktop:csvImportProgress", progress);
 }
 
 /**

@@ -208,7 +208,10 @@ function buildWhereClause({ bounds, timeline }) {
 }
 
 function buildBoundsFilter(bounds) {
-  const clauses = ["lat BETWEEN @south AND @north"];
+  const clauses = [
+    "dataset_id IN (SELECT id FROM datasets WHERE enabled = 1)",
+    "lat BETWEEN @south AND @north",
+  ];
   const params = {
     north: bounds.north,
     south: bounds.south,

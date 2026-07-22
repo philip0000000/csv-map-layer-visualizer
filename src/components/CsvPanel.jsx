@@ -12,13 +12,13 @@ import MapToolsMenu from "./csv-panel/MapToolsMenu";
  *
  * Left-side (overlay) panel that lets the user:
  * - Import one or more CSV files
- * - Select one CSV file for preview
+ * - Select one CSV file for preview in browser mode
  * - Enable or disable CSV files for map display
- * - Unload loaded CSV files
- * - Preview basic metadata and a few rows
+ * - Unload browser files or remove desktop datasets
+ * - Preview basic metadata and a few rows in browser mode
  *
  * This component does NOT parse CSV files itself.
- * All parsing and storage is handled outside (useCsvFiles hook).
+ * Parsing and storage are handled by the browser hook or desktop bridge.
  */
 export default function CsvPanel({
   files,            // Array of loaded CSV file objects
@@ -26,8 +26,10 @@ export default function CsvPanel({
   onSelect,         // Callback to change selected CSV
   onImportFiles,    // Callback to import new CSV files
   desktopImport,
+  datasetListState,
   viewportQueryStats,
   onUnloadFile,     // Callback to unload a CSV by ID
+  removeActionLabel,
   onToggleEnabled,  // Callback to toggle file visibility
   onUpdateMapping,  // Callback when user changes latitude/longitude fields
 
@@ -151,8 +153,10 @@ export default function CsvPanel({
             onSelect={onSelect}
             onImportFiles={onImportFiles}
             desktopImport={desktopImport}
+            datasetListState={datasetListState}
             viewportQueryStats={viewportQueryStats}
             onUnloadFile={onUnloadFile}
+            removeActionLabel={removeActionLabel}
             onToggleEnabled={onToggleEnabled}
           />
 
@@ -455,7 +459,11 @@ export default function CsvPanel({
         {/* No CSV selected */}
         {!selected ? (
           <div className="csvEmptyState">
-            Import one or more CSV files to preview data here.
+            {datasetListState
+              ? files.length === 0
+                ? "Import one or more CSV files to display data on the map."
+                : "Imported CSV data is displayed directly on the map."
+              : "Import one or more CSV files to preview data here."}
           </div>
         ) : (
           <>

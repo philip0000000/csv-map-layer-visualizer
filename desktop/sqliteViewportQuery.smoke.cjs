@@ -5,6 +5,7 @@ const { spawnSync } = require("node:child_process");
 
 const ELECTRON_SMOKE_CHILD = "CSV_MAP_SQLITE_VIEWPORT_SMOKE_CHILD";
 const SMOKE_DATASET_ID = "sqlite-viewport-smoke";
+const SECOND_DATASET_ID = "sqlite-viewport-smoke-second";
 const ROW_JSON_SENTINEL = "sqlite-viewport-smoke-full-row";
 
 /**
@@ -15,7 +16,91 @@ function runSmokeCheck() {
   runUnderBudgetExactSmoke();
   runOverBudgetGroupingSmoke();
   runTimelineBeforeGroupingSmoke();
+  runDatasetVisibilitySmoke();
   console.log("SQLite viewport smoke: compact render results passed.");
+}
+
+function runDatasetVisibilitySmoke() {
+  const { closeSqliteStore } = require("./sqliteStore.cjs");
+  const { setSqliteDatasetEnabled } = require("./sqliteDatasetService.cjs");
+  const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
+  const db = createSmokeDatabase([
+    {
+      id: "visible-1",
+      datasetId: SMOKE_DATASET_ID,
+      lat: 1,
+      lon: 1,
+      timelineStartYear: 2000,
+      timelineEndYear: 2000,
+    },
+    {
+      id: "visible-2",
+      datasetId: SMOKE_DATASET_ID,
+      lat: 1,
+      lon: 1,
+      timelineStartYear: 2001,
+      timelineEndYear: 2001,
+    },
+    {
+      id: "toggle-match",
+      datasetId: SECOND_DATASET_ID,
+      lat: 1,
+      lon: 1,
+      timelineStartYear: 2002,
+      timelineEndYear: 2002,
+    },
+    {
+      id: "toggle-outside-timeline",
+      datasetId: SECOND_DATASET_ID,
+      lat: 1,
+      lon: 1,
+      timelineStartYear: 1980,
+      timelineEndYear: 1980,
+    },
+  ]);
+  const query = {
+    db,
+    bounds: { north: 10, south: 0, east: 10, west: 0 },
+    timeline: { timelineEnabled: true, startYear: 2000, endYear: 2005 },
+    renderBudget: 1,
+  };
+
+  try {
+    setSqliteDatasetEnabled({
+      db,
+      datasetId: SECOND_DATASET_ID,
+      enabled: false,
+    });
+    const disabledResult = querySqliteMapView(query);
+    assert.equal(disabledResult.stats.totalMatchingCount, 2);
+    assert.equal(disabledResult.stats.skippedPointsByTimeline, 0);
+    assert.equal(disabledResult.points[0].count, 2);
+
+    setSqliteDatasetEnabled({
+      db,
+      datasetId: SECOND_DATASET_ID,
+      enabled: true,
+    });
+    const enabledResult = querySqliteMapView(query);
+    assert.equal(enabledResult.stats.totalMatchingCount, 3);
+    assert.equal(enabledResult.stats.skippedPointsByTimeline, 1);
+    assert.equal(enabledResult.points[0].count, 3);
+
+    setSqliteDatasetEnabled({
+      db,
+      datasetId: SECOND_DATASET_ID,
+      enabled: false,
+    });
+    assert.deepEqual(
+      querySqliteMapView({ ...query, timeline: null, renderBudget: 10 })
+        .points.map((point) => point.id),
+      ["visible-1", "visible-2"],
+    );
+
+    console.log("SQLite viewport smoke: dataset visibility passed.");
+  } finally {
+    closeSqliteStore(db);
+  }
 }
 
 /**
@@ -410,7 +495,7 @@ function createSmokeDatabase(features) {
     // Reuse the production schema so fixture drift breaks the smoke check visibly.
     initializeSchema(db);
 
-    db.prepare(`
+    const insertDataset = db.prepare(`
       INSERT INTO datasets (
         id,
         file_name,
@@ -430,11 +515,19 @@ function createSmokeDatabase(features) {
         '[]',
         @importedAt
       )
-    `).run({
-      id: SMOKE_DATASET_ID,
-      fileName: "sqlite-viewport-smoke.csv",
-      rowCount: features.length,
-      importedAt: "2026-01-01T00:00:00.000Z",
+    `);
+    const datasetCounts = new Map();
+    features.forEach((feature) => {
+      const datasetId = feature.datasetId ?? SMOKE_DATASET_ID;
+      datasetCounts.set(datasetId, (datasetCounts.get(datasetId) ?? 0) + 1);
+    });
+    datasetCounts.forEach((rowCount, datasetId) => {
+      insertDataset.run({
+        id: datasetId,
+        fileName: `${datasetId}.csv`,
+        rowCount,
+        importedAt: "2026-01-01T00:00:00.000Z",
+      });
     });
 
     const insertFeature = db.prepare(`
@@ -464,7 +557,7 @@ function createSmokeDatabase(features) {
       rows.forEach((feature, index) => {
         insertFeature.run({
           id: feature.id,
-          datasetId: SMOKE_DATASET_ID,
+          datasetId: feature.datasetId ?? SMOKE_DATASET_ID,
           sourceRowIndex: feature.sourceRowIndex ?? index,
           lat: feature.lat,
           lon: feature.lon,

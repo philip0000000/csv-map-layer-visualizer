@@ -6,4 +6,17 @@ import react from "@vitejs/plugin-react";
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
   base: mode === "desktop" ? "./" : mode === "production" ? "/csv-map-layer-visualizer/" : "/",
+  worker: {
+    format: "es",
+  },
+  build: {
+    rollupOptions: {
+      input: mode === "desktop"
+        ? { app: "index.html" }
+        : {
+            app: "index.html",
+            sqliteWasmPrototype: "sqlite-wasm-prototype.html",
+          },
+    },
+  },
 }));

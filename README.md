@@ -81,6 +81,9 @@ This launches the current app in the Electron desktop shell. It does not create 
 
 For more details, see [Desktop runtime decision](docs/desktop-runtime.md).
 
+For the isolated GitHub Pages experiment, see
+[Temporary SQLite WASM prototype](docs/sqlite-wasm-prototype.md).
+
 ## Author
 
 Developed and maintained by **philip0000000**.

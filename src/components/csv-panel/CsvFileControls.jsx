@@ -101,8 +101,8 @@ export default function CsvFileControls({
                           : ""}.
                       </div>
                       <div>Fields: {formatFieldList(result.detectedFields)}</div>
-                      {result.parseErrors?.length > 0 && (
-                        <div>{result.parseErrors.length} parsing warning(s).</div>
+                      {result.warnings?.length > 0 && (
+                        <div>{result.warnings.length} parsing warning(s).</div>
                       )}
                     </>
                   ) : (

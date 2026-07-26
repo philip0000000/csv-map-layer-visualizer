@@ -1,333 +1,419 @@
-import { DEFAULT_GROUP_ROWS_LIMIT } from './dataSource.js';
+import {
+  BACKEND_FAILURE_CATEGORIES,
+  DATA_SOURCE_METHODS,
+  DEFAULT_GROUP_ROWS_LIMIT,
+} from './dataSource.js';
+import {
+  normalizeBackendCapabilities,
+  normalizeBackendFailure,
+  normalizeDatasetMutationResult,
+  normalizeDatasetSummary,
+  normalizeFeatureDetailsResult,
+  normalizeGroupRowsResult,
+  normalizeImportBatchResult,
+  normalizeImportCancellationResult,
+  normalizeImportProgress,
+  normalizeInitializationResult,
+  normalizeMapViewResult,
+} from './dataSourceNormalization.js';
 
 const DEFAULT_SQLITE_RENDER_BUDGET = 1000;
 
-/**
- * Renderer-side DataSource adapter for the Electron SQLite bridge.
- * It keeps IPC details out of React components and preserves the app-facing contract.
- */
-export function createDesktopSqliteDataSource({ desktopApi }) {
+/** Renderer-side contract adapter for the fixed Electron preload bridge. */
+export function createDesktopSqliteDataSource({ desktopApi } = {}) {
+  let disposed = false;
+  let importSequence = 0;
+  let activeImportId = null;
+  const progressCleanups = new Set();
+  const capabilities = normalizeBackendCapabilities({
+    persistence: 'persistent',
+    browserFileImport: false,
+    nativeFilePickerImport: typeof desktopApi?.importCsvToSqlite === 'function',
+    droppedFileImport: typeof desktopApi?.importDroppedCsvFiles === 'function',
+    exampleImport: false,
+    multipleFileImport:
+      typeof desktopApi?.importCsvToSqlite === 'function' ||
+      typeof desktopApi?.importDroppedCsvFiles === 'function',
+    importProgress: typeof desktopApi?.onCsvImportProgress === 'function',
+    importCancellation: false,
+    datasetSelection: false,
+    datasetVisibility: typeof desktopApi?.setDatasetEnabled === 'function',
+    datasetRemoval: typeof desktopApi?.removeDataset === 'function',
+    datasetMapping: false,
+    previewPaging: false,
+    points: typeof desktopApi?.queryMapView === 'function',
+    lines: typeof desktopApi?.queryMapView === 'function',
+    regions: typeof desktopApi?.queryMapView === 'function',
+    groupedViewportResults:
+      typeof desktopApi?.queryMapView === 'function' &&
+      typeof desktopApi?.getGroupRows === 'function',
+  });
+
   return {
-    async queryMapView(query = {}) {
-      if (typeof desktopApi?.queryMapView !== "function") {
-        return createEmptyMapViewResult();
+    async initialize() {
+      if (disposed || typeof desktopApi?.getStatus !== 'function') {
+        return normalizeInitializationResult(null);
       }
-
-      const result = await desktopApi.queryMapView({
-        bounds: query.bounds ?? null,
-        zoom: query.zoom ?? null,
-        timeline: query.timeline ?? null,
-        renderBudget: query.renderBudget ?? DEFAULT_SQLITE_RENDER_BUDGET,
-      });
-
-      return normalizeMapViewResult(result);
+      try {
+        const status = await desktopApi.getStatus();
+        return normalizeInitializationResult({
+          ok: status?.ok === true,
+          capabilities,
+        });
+      } catch {
+        return normalizeInitializationResult(null);
+      }
     },
 
-    async getFeatureDetails(query = {}) {
-      const sourceRef = normalizeFeatureSourceRef(query.sourceRef);
-      if (
-        typeof desktopApi?.getFeatureDetails !== 'function' ||
-        !sourceRef
-      ) {
-        return createEmptyFeatureDetailsResult();
-      }
-
-      const result = await desktopApi.getFeatureDetails({ sourceRef });
-      return normalizeFeatureDetailsResult(result);
+    getCapabilities() {
+      return capabilities;
     },
 
-    async getGroupRows(query = {}) {
-      const offset = normalizeNonNegativeInteger(query.offset, 0);
-      const limit = normalizePositiveInteger(
-        query.limit ?? DEFAULT_GROUP_ROWS_LIMIT,
-        DEFAULT_GROUP_ROWS_LIMIT,
+    importBrowserFiles() {
+      assertActive(DATA_SOURCE_METHODS.importBrowserFiles);
+      return unsupportedImport(
+        DATA_SOURCE_METHODS.importBrowserFiles,
+        'Browser file imports are unavailable in the desktop backend.',
       );
-      const groupRef = normalizeGroupRef(query.groupRef);
+    },
 
-      if (typeof desktopApi?.getGroupRows !== 'function' || !groupRef) {
-        return createEmptyGroupRowsResult(offset, limit);
+    importFromPicker() {
+      assertActive(DATA_SOURCE_METHODS.importFromPicker);
+      return runImport(
+        DATA_SOURCE_METHODS.importFromPicker,
+        () => desktopApi?.importCsvToSqlite?.(),
+        capabilities.nativeFilePickerImport,
+      );
+    },
+
+    importDroppedFiles(request = {}) {
+      assertActive(DATA_SOURCE_METHODS.importDroppedFiles);
+      return runImport(
+        DATA_SOURCE_METHODS.importDroppedFiles,
+        () => desktopApi?.importDroppedCsvFiles?.(Array.from(request.files ?? [])),
+        capabilities.droppedFileImport,
+      );
+    },
+
+    importExample() {
+      assertActive(DATA_SOURCE_METHODS.importExample);
+      return unsupportedImport(
+        DATA_SOURCE_METHODS.importExample,
+        'Example imports are unavailable in the desktop backend.',
+      );
+    },
+
+    subscribeImportProgress(listener) {
+      if (
+        disposed ||
+        typeof listener !== 'function' ||
+        typeof desktopApi?.onCsvImportProgress !== 'function'
+      ) {
+        return () => {};
       }
 
-      const result = await desktopApi.getGroupRows({
-        groupRef,
-        offset,
-        limit,
+      const bridgeCleanup = desktopApi.onCsvImportProgress((progress) => {
+        const normalized = normalizeImportProgress({
+          ...progress,
+          importId: progress?.importId ?? activeImportId,
+        });
+        if (!normalized) return;
+        try {
+          listener(normalized);
+        } catch {
+          // A renderer observer cannot interrupt an import operation.
+        }
       });
+      let subscribed = true;
+      const cleanup = () => {
+        if (!subscribed) return;
+        subscribed = false;
+        progressCleanups.delete(cleanup);
+        if (typeof bridgeCleanup === 'function') bridgeCleanup();
+      };
+      progressCleanups.add(cleanup);
+      return cleanup;
+    },
 
-      return normalizeGroupRowsResult(result, offset, limit);
+    cancelImport(importId) {
+      assertActive(DATA_SOURCE_METHODS.cancelImport);
+      return normalizeImportCancellationResult(null, importId);
     },
 
     async getDatasetSummary() {
-      if (typeof desktopApi?.getDatasetSummary !== "function") {
-        return createEmptyDatasetSummary();
+      assertActive(DATA_SOURCE_METHODS.getDatasetSummary);
+      requireMethod(desktopApi?.getDatasetSummary, DATA_SOURCE_METHODS.getDatasetSummary);
+      try {
+        const result = await desktopApi.getDatasetSummary();
+        if (!isRecord(result)) throw new TypeError('Malformed dataset summary');
+        return normalizeDatasetSummary(result);
+      } catch {
+        throw queryFailure(DATA_SOURCE_METHODS.getDatasetSummary);
       }
+    },
 
-      const result = await desktopApi.getDatasetSummary();
-      return normalizeDatasetSummary(result);
+    selectDataset(datasetId) {
+      assertActive(DATA_SOURCE_METHODS.selectDataset);
+      return unsupportedMutation(DATA_SOURCE_METHODS.selectDataset, datasetId);
     },
 
     async setDatasetEnabled(datasetId, enabled) {
-      const normalizedDatasetId = normalizeDatasetId(datasetId);
-      if (
-        typeof desktopApi?.setDatasetEnabled !== "function" ||
-        !normalizedDatasetId ||
-        typeof enabled !== "boolean"
-      ) {
-        return createDatasetMutationResult(false);
+      assertActive(DATA_SOURCE_METHODS.setDatasetEnabled);
+      const normalizedId = normalizeId(datasetId);
+      if (!capabilities.datasetVisibility) {
+        return unsupportedMutation(DATA_SOURCE_METHODS.setDatasetEnabled, normalizedId);
       }
-
-      const result = await desktopApi.setDatasetEnabled(
-        normalizedDatasetId,
-        enabled,
-      );
-      return normalizeDatasetMutationResult(result);
+      if (!normalizedId || typeof enabled !== 'boolean') {
+        return normalizeDatasetMutationResult(null, {
+          datasetId: normalizedId,
+          operation: DATA_SOURCE_METHODS.setDatasetEnabled,
+        });
+      }
+      try {
+        const result = await desktopApi.setDatasetEnabled(normalizedId, enabled);
+        return normalizeDatasetMutationResult(result, {
+          datasetId: normalizedId,
+          operation: DATA_SOURCE_METHODS.setDatasetEnabled,
+        });
+      } catch {
+        return failedMutation(DATA_SOURCE_METHODS.setDatasetEnabled, normalizedId);
+      }
     },
 
     async removeDataset(datasetId) {
-      const normalizedDatasetId = normalizeDatasetId(datasetId);
-      if (
-        typeof desktopApi?.removeDataset !== "function" ||
-        !normalizedDatasetId
-      ) {
-        return createDatasetRemovalResult(false);
+      assertActive(DATA_SOURCE_METHODS.removeDataset);
+      const normalizedId = normalizeId(datasetId);
+      if (!capabilities.datasetRemoval) {
+        return unsupportedMutation(DATA_SOURCE_METHODS.removeDataset, normalizedId);
       }
+      if (!normalizedId) {
+        return normalizeDatasetMutationResult(null, {
+          datasetId: normalizedId,
+          operation: DATA_SOURCE_METHODS.removeDataset,
+        });
+      }
+      try {
+        const result = await desktopApi.removeDataset(normalizedId);
+        return normalizeDatasetMutationResult(result, {
+          datasetId: normalizedId,
+          operation: DATA_SOURCE_METHODS.removeDataset,
+        });
+      } catch {
+        return failedMutation(DATA_SOURCE_METHODS.removeDataset, normalizedId);
+      }
+    },
 
-      const result = await desktopApi.removeDataset(normalizedDatasetId);
-      return normalizeDatasetRemovalResult(result);
+    updateDatasetMapping(datasetId) {
+      assertActive(DATA_SOURCE_METHODS.updateDatasetMapping);
+      const normalizedId = normalizeId(datasetId) ?? '';
+      return {
+        ok: false,
+        datasetId: normalizedId,
+        mapping: null,
+        detectedFields: null,
+        dataset: null,
+        error: unsupportedFailure(
+          DATA_SOURCE_METHODS.updateDatasetMapping,
+          'Coordinate mapping is unavailable in the desktop backend.',
+          { datasetId: normalizedId },
+        ),
+      };
+    },
+
+    getPreviewPage(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getPreviewPage);
+      throw unsupportedFailure(
+        DATA_SOURCE_METHODS.getPreviewPage,
+        'Dataset preview is unavailable in the desktop backend.',
+        { datasetId: query.datasetId },
+      );
+    },
+
+    async queryMapView(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.queryMapView);
+      requireMethod(desktopApi?.queryMapView, DATA_SOURCE_METHODS.queryMapView);
+      try {
+        const result = await desktopApi.queryMapView({
+          bounds: query.bounds ?? null,
+          zoom: query.zoom ?? null,
+          timeline: query.timeline ?? null,
+          renderBudget: query.renderBudget ?? DEFAULT_SQLITE_RENDER_BUDGET,
+          datasetIds: query.datasetIds ?? null,
+        });
+        if (!isRecord(result)) throw new TypeError('Malformed map result');
+        return normalizeMapViewResult(result);
+      } catch {
+        throw queryFailure(DATA_SOURCE_METHODS.queryMapView);
+      }
+    },
+
+    async getFeatureDetails(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getFeatureDetails);
+      requireMethod(desktopApi?.getFeatureDetails, DATA_SOURCE_METHODS.getFeatureDetails);
+      const sourceRef = normalizeSourceRef(query.sourceRef);
+      if (!sourceRef) throw queryFailure(DATA_SOURCE_METHODS.getFeatureDetails);
+      try {
+        const result = await desktopApi.getFeatureDetails({ sourceRef });
+        if (!isRecord(result)) throw new TypeError('Malformed details result');
+        return normalizeFeatureDetailsResult(result);
+      } catch {
+        throw queryFailure(DATA_SOURCE_METHODS.getFeatureDetails);
+      }
+    },
+
+    async getGroupRows(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getGroupRows);
+      requireMethod(desktopApi?.getGroupRows, DATA_SOURCE_METHODS.getGroupRows);
+      const groupRef = normalizeGroupRef(query.groupRef);
+      if (!groupRef) throw queryFailure(DATA_SOURCE_METHODS.getGroupRows);
+      const offset = normalizeNonNegativeInteger(query.offset, 0);
+      const limit = normalizePositiveInteger(query.limit, DEFAULT_GROUP_ROWS_LIMIT);
+      try {
+        const result = await desktopApi.getGroupRows({ groupRef, offset, limit });
+        if (!isRecord(result)) throw new TypeError('Malformed group result');
+        return normalizeGroupRowsResult(result, { offset, limit });
+      } catch {
+        throw queryFailure(DATA_SOURCE_METHODS.getGroupRows);
+      }
+    },
+
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      activeImportId = null;
+      for (const cleanup of [...progressCleanups]) cleanup();
     },
   };
-}
 
-function normalizeDatasetSummary(result) {
-  if (!result || typeof result !== "object") {
-    return createEmptyDatasetSummary();
+  async function runImport(operation, invoke, supported) {
+    if (!supported) return unsupportedImport(operation);
+    const importId = `desktop-import-${++importSequence}`;
+    activeImportId = importId;
+    try {
+      const result = await invoke();
+      return normalizeImportBatchResult({ ...result, importId }, { operation });
+    } catch {
+      return normalizeImportBatchResult({ importId }, { operation });
+    } finally {
+      activeImportId = null;
+    }
   }
 
-  const datasets = Array.isArray(result.datasets)
-    ? result.datasets.map(normalizeDatasetSummaryItem).filter(Boolean)
-    : [];
+  function assertActive(operation) {
+    if (!disposed) return;
+    throw unsupportedFailure(
+      operation,
+      'The desktop data backend is unavailable.',
+    );
+  }
+}
 
+function unsupportedImport(operation, message) {
+  return normalizeImportBatchResult(null, {
+    operation,
+    category: BACKEND_FAILURE_CATEGORIES.BACKEND_UNAVAILABLE,
+    message: message ?? 'This import operation is unavailable.',
+  });
+}
+
+function unsupportedMutation(operation, datasetId) {
   return {
-    datasets,
-    timeline: normalizeTimelineSummary(result.timeline),
+    ok: false,
+    datasetId: normalizeId(datasetId),
+    changed: false,
+    dataset: null,
+    error: unsupportedFailure(operation, 'This dataset operation is unavailable.', {
+      datasetId,
+    }),
   };
 }
 
-function normalizeDatasetSummaryItem(item) {
-  if (!item || typeof item !== "object" || Array.isArray(item)) return null;
-
-  const id = normalizeNullableString(item.id);
-  const name = normalizeNullableString(item.name);
-  if (!id || !name) return null;
-
+function failedMutation(operation, datasetId) {
   return {
-    id,
-    name,
-    enabled: item.enabled === true,
-    headers: normalizeStringArray(item.headers),
-    rowCount: normalizeNonNegativeInteger(item.rowCount, 0),
-    totalRows: normalizeNonNegativeInteger(item.totalRows, 0),
-    importedFeatureCount: normalizeNonNegativeInteger(
-      item.importedFeatureCount,
-      0,
-    ),
-    skippedRowCount: normalizeNonNegativeInteger(item.skippedRowCount, 0),
-    importedAt: normalizeNullableString(item.importedAt),
-    latField: normalizeNullableString(item.latField),
-    lonField: normalizeNullableString(item.lonField),
-    parseErrors: normalizeStringArray(item.parseErrors),
+    ok: false,
+    datasetId: normalizeId(datasetId),
+    changed: false,
+    dataset: null,
+    error: normalizeBackendFailure(null, {
+      category: BACKEND_FAILURE_CATEGORIES.QUERY_FAILED,
+      operation,
+      message: 'The dataset operation could not be completed.',
+      recoverable: true,
+      datasetId,
+    }),
   };
 }
 
-function normalizeTimelineSummary(timeline) {
-  if (!timeline || typeof timeline !== "object" || Array.isArray(timeline)) {
-    return null;
+function unsupportedFailure(operation, message, context = {}) {
+  return normalizeBackendFailure(null, {
+    category: BACKEND_FAILURE_CATEGORIES.BACKEND_UNAVAILABLE,
+    operation,
+    message,
+    recoverable: false,
+    ...context,
+  });
+}
+
+function queryFailure(operation) {
+  return normalizeBackendFailure(null, {
+    category: BACKEND_FAILURE_CATEGORIES.QUERY_FAILED,
+    operation,
+    message: 'The requested desktop data could not be loaded.',
+    recoverable: true,
+  });
+}
+
+function requireMethod(method, operation) {
+  if (typeof method !== 'function') {
+    throw unsupportedFailure(operation, 'This desktop data operation is unavailable.');
   }
-
-  const yearMin = normalizeOptionalInteger(timeline.yearMin);
-  const yearMax = normalizeOptionalInteger(timeline.yearMax);
-  if (yearMin == null || yearMax == null) return null;
-
-  return { yearMin, yearMax };
 }
 
-function normalizeStringArray(value) {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item) => typeof item === "string");
+function normalizeSourceRef(value) {
+  if (!isRecord(value)) return null;
+  const datasetId = normalizeId(value.datasetId);
+  const rowIndex = normalizeOptionalNonNegativeInteger(value.rowIndex);
+  return datasetId && rowIndex != null ? { datasetId, rowIndex } : null;
 }
 
-function normalizeDatasetMutationResult(result) {
-  return createDatasetMutationResult(result?.updated === true);
+function normalizeGroupRef(value) {
+  if (!isRecord(value) || value.sortOrder !== 'dataset-source-row') return null;
+  const groupId = normalizeId(value.groupId);
+  const bounds = normalizeBounds(value.bounds);
+  const grid = normalizeGrid(value.grid);
+  const timeline = normalizeTimeline(value.timeline);
+  if (!groupId || !bounds || !grid || timeline === undefined) return null;
+  if (groupId !== ['grid', grid.cellLat, grid.cellLon].join(':')) return null;
+  return { groupId, bounds, grid, timeline, sortOrder: 'dataset-source-row' };
 }
 
-function normalizeDatasetRemovalResult(result) {
-  return createDatasetRemovalResult(result?.removed === true);
+function normalizeBounds(value) {
+  if (!isRecord(value)) return null;
+  const north = normalizeFiniteNumber(value.north);
+  const south = normalizeFiniteNumber(value.south);
+  const east = normalizeFiniteNumber(value.east);
+  const west = normalizeFiniteNumber(value.west);
+  return [north, south, east, west].every((item) => item != null)
+    ? { north, south, east, west }
+    : null;
 }
 
-function normalizeDatasetId(value) {
-  const datasetId = normalizeNullableString(value);
-  return datasetId?.trim() || null;
+function normalizeGrid(value) {
+  if (!isRecord(value)) return null;
+  const cellLat = normalizeInteger(value.cellLat);
+  const cellLon = normalizeInteger(value.cellLon);
+  const cellHeight = normalizePositiveNumber(value.cellHeight);
+  const cellWidth = normalizePositiveNumber(value.cellWidth);
+  return cellLat != null && cellLon != null && cellHeight && cellWidth
+    ? { cellLat, cellLon, cellHeight, cellWidth }
+    : null;
 }
 
-function normalizeMapViewResult(result) {
-  if (!result || typeof result !== "object") {
-    return createEmptyMapViewResult();
-  }
-
-  const points = Array.isArray(result.points)
-    ? result.points.map(normalizePointFeature)
-    : [];
-  const lines = Array.isArray(result.lines) ? result.lines : [];
-  const regions = Array.isArray(result.regions) ? result.regions : [];
-  const stats = normalizeStats(result.stats, points.length);
-  const timelineIndex = result.timelineIndex && typeof result.timelineIndex === "object"
-    ? result.timelineIndex
-    : { entries: [] };
-
-  return {
-    points,
-    lines,
-    regions,
-    stats,
-    timelineIndex: {
-      entries: Array.isArray(timelineIndex.entries) ? timelineIndex.entries : [],
-    },
-  };
-}
-
-/**
- * Normalize point render metadata crossing the Electron IPC boundary.
- */
-function normalizePointFeature(point) {
-  if (!point || typeof point !== "object") {
-    return {
-      renderType: "exact",
-      count: 1,
-      groupId: null,
-      groupRef: null,
-    };
-  }
-
-  return {
-    ...point,
-    renderType: normalizePointRenderType(point.renderType),
-    count: normalizePositiveInteger(point.count, 1),
-    groupId: normalizeNullableString(point.groupId),
-    groupRef: normalizeGroupRef(point.groupRef),
-  };
-}
-
-function normalizePointRenderType(value) {
-  if (value === "grouped" || value === "representative") {
-    return value;
-  }
-
-  return "exact";
-}
-
-function normalizeFeatureDetailsResult(result) {
-  if (!result || typeof result !== 'object') {
-    return createEmptyFeatureDetailsResult();
-  }
-
-  return {
-    featureId: normalizeNullableString(result.featureId),
-    row: normalizeRecord(result.row),
-    latField: normalizeNullableString(result.latField),
-    lonField: normalizeNullableString(result.lonField),
-  };
-}
-
-// Validate detail IPC results before they reach React components.
-function normalizeGroupRowsResult(result, requestedOffset, requestedLimit) {
-  if (!result || typeof result !== 'object') {
-    return createEmptyGroupRowsResult(requestedOffset, requestedLimit);
-  }
-
-  const rows = Array.isArray(result.rows)
-    ? result.rows.map(normalizeRecord).filter(Boolean)
-    : [];
-
-  return {
-    rows,
-    offset: normalizeNonNegativeInteger(
-      result.offset ?? requestedOffset,
-      requestedOffset,
-    ),
-    limit: normalizePositiveInteger(
-      result.limit ?? requestedLimit,
-      requestedLimit,
-    ),
-    totalRows: normalizeNonNegativeInteger(
-      result.totalRows ?? rows.length,
-      rows.length,
-    ),
-  };
-}
-
-function normalizeFeatureSourceRef(sourceRef) {
-  if (!sourceRef || typeof sourceRef !== 'object') return null;
-
-  const datasetId = normalizeNullableString(sourceRef.datasetId);
-  const rowIndex = normalizeOptionalNonNegativeInteger(sourceRef.rowIndex);
-  if (!datasetId || rowIndex == null) return null;
-
-  return { datasetId, rowIndex };
-}
-
-function normalizeGroupRef(groupRef) {
-  if (!groupRef || typeof groupRef !== 'object') return null;
-
-  const groupId = normalizeNullableString(groupRef.groupId);
-  const bounds = normalizeGroupBounds(groupRef.bounds);
-  const timeline = normalizeGroupTimeline(groupRef.timeline);
-  const grid = normalizeGroupGrid(groupRef.grid);
-
-  if (
-    !groupId ||
-    !bounds ||
-    timeline === undefined ||
-    !grid ||
-    groupRef.sortOrder !== 'dataset-source-row'
-  ) {
-    return null;
-  }
-
-  // A mismatched group ID is unsafe because it could broaden the requested rows.
-  if (groupId !== ['grid', grid.cellLat, grid.cellLon].join(':')) {
-    return null;
-  }
-
-  return {
-    groupId,
-    bounds,
-    timeline,
-    grid,
-    sortOrder: 'dataset-source-row',
-  };
-}
-
-function normalizeGroupBounds(bounds) {
-  if (!bounds || typeof bounds !== 'object') return null;
-
-  const north = normalizeFiniteNumber(bounds.north);
-  const south = normalizeFiniteNumber(bounds.south);
-  const east = normalizeFiniteNumber(bounds.east);
-  const west = normalizeFiniteNumber(bounds.west);
-  if (north == null || south == null || east == null || west == null) {
-    return null;
-  }
-
-  return { north, south, east, west };
-}
-
-function normalizeGroupTimeline(timeline) {
-  if (!timeline?.timelineEnabled) return null;
-
-  const startYear = normalizeOptionalInteger(timeline.startYear);
-  const endYear = normalizeOptionalInteger(timeline.endYear);
+function normalizeTimeline(value) {
+  if (!value?.timelineEnabled) return null;
+  const startYear = normalizeInteger(value.startYear);
+  const endYear = normalizeInteger(value.endYear);
   if (startYear == null || endYear == null) return undefined;
-
   return {
     timelineEnabled: true,
     startYear: Math.min(startYear, endYear),
@@ -335,180 +421,42 @@ function normalizeGroupTimeline(timeline) {
   };
 }
 
-function normalizeGroupGrid(grid) {
-  if (!grid || typeof grid !== 'object') return null;
-
-  const cellLat = normalizeOptionalInteger(grid.cellLat);
-  const cellLon = normalizeOptionalInteger(grid.cellLon);
-  const cellHeight = normalizePositiveNumber(grid.cellHeight);
-  const cellWidth = normalizePositiveNumber(grid.cellWidth);
-  if (
-    cellLat == null ||
-    cellLon == null ||
-    cellHeight == null ||
-    cellWidth == null
-  ) {
-    return null;
-  }
-
-  return { cellLat, cellLon, cellHeight, cellWidth };
-}
-
-function normalizeRecord(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  return value;
-}
-
-function normalizeStats(stats, returnedCount) {
-  const normalizedStats = stats && typeof stats === "object" ? stats : {};
-  const totalMatchingCount = normalizeNonNegativeInteger(
-    normalizedStats.totalMatchingCount,
-    returnedCount,
-  );
-  const normalizedReturnedCount = normalizeNonNegativeInteger(
-    normalizedStats.returnedCount,
-    returnedCount,
-  );
-  const hiddenByRenderBudget = normalizeNonNegativeInteger(
-    normalizedStats.hiddenByRenderBudget,
-    Math.max(0, totalMatchingCount - normalizedReturnedCount),
-  );
-  const skippedPointsByTimeline = normalizeNonNegativeInteger(
-    normalizedStats.skippedPointsByTimeline,
-    0,
-  );
-  const skippedLinesByTimeline = normalizeNonNegativeInteger(
-    normalizedStats.skippedLinesByTimeline,
-    0,
-  );
-  const skippedRegionsByTimeline = normalizeNonNegativeInteger(
-    normalizedStats.skippedRegionsByTimeline,
-    0,
-  );
-
-  return {
-    skippedPoints: normalizeNonNegativeInteger(normalizedStats.skippedPoints, 0),
-    skippedLines: normalizeNonNegativeInteger(normalizedStats.skippedLines, 0),
-    skippedRegions: normalizeNonNegativeInteger(normalizedStats.skippedRegions, 0),
-    skippedPointsByTimeline,
-    skippedLinesByTimeline,
-    skippedRegionsByTimeline,
-    skippedByTimeline: normalizeNonNegativeInteger(
-      normalizedStats.skippedByTimeline,
-      skippedPointsByTimeline + skippedLinesByTimeline + skippedRegionsByTimeline,
-    ),
-    limitedToRenderBudget: normalizedStats.limitedToRenderBudget ?? null,
-    totalMatchingCount,
-    returnedCount: normalizedReturnedCount,
-    hiddenByRenderBudget,
-    overBudget: Boolean(normalizedStats.overBudget ?? hiddenByRenderBudget > 0),
-  };
-}
-
-function createEmptyFeatureDetailsResult() {
-  return {
-    featureId: null,
-    row: null,
-    latField: null,
-    lonField: null,
-  };
-}
-
-function createEmptyGroupRowsResult(offset, limit) {
-  return {
-    rows: [],
-    offset,
-    limit,
-    totalRows: 0,
-  };
-}
-
-function createEmptyDatasetSummary() {
-  return {
-    datasets: [],
-    timeline: null,
-  };
-}
-
-function createDatasetMutationResult(updated) {
-  return {
-    updated: updated === true,
-  };
-}
-
-function createDatasetRemovalResult(removed) {
-  return {
-    removed: removed === true,
-  };
-}
-
-function createEmptyMapViewResult() {
-  return {
-    points: [],
-    lines: [],
-    regions: [],
-    stats: {
-      skippedPoints: 0,
-      skippedLines: 0,
-      skippedRegions: 0,
-      skippedPointsByTimeline: 0,
-      skippedLinesByTimeline: 0,
-      skippedRegionsByTimeline: 0,
-      skippedByTimeline: 0,
-      limitedToRenderBudget: null,
-      totalMatchingCount: 0,
-      returnedCount: 0,
-      hiddenByRenderBudget: 0,
-      overBudget: false,
-    },
-    timelineIndex: {
-      entries: [],
-    },
-  };
+function normalizeId(value) {
+  if (typeof value !== 'string') return null;
+  return value.trim() || null;
 }
 
 function normalizeOptionalNonNegativeInteger(value) {
   const number = normalizeFiniteNumber(value);
-  if (number == null || number < 0) return null;
-  return Math.trunc(number);
+  return number != null && number >= 0 ? Math.trunc(number) : null;
 }
 
-function normalizeOptionalInteger(value) {
+function normalizeNonNegativeInteger(value, fallback) {
   const number = normalizeFiniteNumber(value);
-  if (number == null) return null;
-  return Math.trunc(number);
+  return number != null && number >= 0 ? Math.trunc(number) : fallback;
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const number = normalizeFiniteNumber(value);
+  return number != null && number > 0 ? Math.trunc(number) : fallback;
+}
+
+function normalizeInteger(value) {
+  const number = normalizeFiniteNumber(value);
+  return number == null ? null : Math.trunc(number);
 }
 
 function normalizePositiveNumber(value) {
   const number = normalizeFiniteNumber(value);
-  if (number == null || number <= 0) return null;
-  return number;
+  return number != null && number > 0 ? number : null;
 }
 
 function normalizeFiniteNumber(value) {
-  if (value === null || value === undefined || value === '') return null;
-
+  if (value == null || value === '') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
-function normalizePositiveInteger(value, fallback) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-
-  const integer = Math.trunc(number);
-  return integer > 0 ? integer : fallback;
-}
-
-function normalizeNonNegativeInteger(value, fallback) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.max(0, Math.trunc(number));
-}
-
-function normalizeNullableString(value) {
-  if (value === null || value === undefined) return null;
-
-  const stringValue = String(value);
-  return stringValue.trim() ? stringValue : null;
+function isRecord(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }

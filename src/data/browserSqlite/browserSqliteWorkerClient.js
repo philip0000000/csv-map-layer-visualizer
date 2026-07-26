@@ -261,6 +261,21 @@ export function createBrowserSqliteWorkerClient(options = {}) {
     });
   }
 
+  function queryMapView(query = {}) {
+    if (!isPlainRecord(query)) return invalidRequestPromise();
+    return sendRequest(BROWSER_SQLITE_OPERATIONS.QUERY_MAP_VIEW, query);
+  }
+
+  function getFeatureDetails(query = {}) {
+    if (!isPlainRecord(query)) return invalidRequestPromise();
+    return sendRequest(BROWSER_SQLITE_OPERATIONS.GET_FEATURE_DETAILS, query);
+  }
+
+  function getGroupRows(query = {}) {
+    if (!isPlainRecord(query)) return invalidRequestPromise();
+    return sendRequest(BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS, query);
+  }
+
   function close() {
     return sendRequest(BROWSER_SQLITE_OPERATIONS.CLOSE);
   }
@@ -300,9 +315,19 @@ export function createBrowserSqliteWorkerClient(options = {}) {
     removeDataset,
     updateDatasetMapping,
     getPreviewPage,
+    queryMapView,
+    getFeatureDetails,
+    getGroupRows,
     close,
     dispose,
   });
+}
+
+function invalidRequestPromise() {
+  return Promise.reject(new BrowserSqliteWorkerClientError(
+    'invalid-request',
+    BROWSER_SQLITE_ERROR_MESSAGES['invalid-request'],
+  ));
 }
 
 function createDefaultWorker() {

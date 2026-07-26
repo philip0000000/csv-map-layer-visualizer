@@ -550,16 +550,26 @@ function normalizeGroupRef(value) {
   const bounds = normalizeBounds(value.bounds);
   const grid = normalizeGroupGrid(value.grid);
   const timeline = normalizeCapturedTimeline(value.timeline);
+  const datasetIds = value.datasetIds == null
+    ? null
+    : normalizeGroupDatasetIds(value.datasetIds);
   if (!groupId || !bounds || !grid || timeline === undefined) return null;
+  if (value.datasetIds != null && datasetIds.length === 0) return null;
   if (groupId !== ['grid', grid.cellLat, grid.cellLon].join(':')) return null;
 
   return {
     groupId,
     bounds,
+    ...(datasetIds == null ? {} : { datasetIds }),
     timeline,
     grid,
     sortOrder: 'dataset-source-row',
   };
+}
+
+function normalizeGroupDatasetIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(normalizeNullableId).filter(Boolean))].sort();
 }
 
 function normalizeBounds(value) {

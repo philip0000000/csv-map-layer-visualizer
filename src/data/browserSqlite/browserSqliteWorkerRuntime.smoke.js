@@ -63,7 +63,7 @@ try {
     initialized: true,
     reused: false,
     databaseStorage: 'memory',
-    schemaVersion: 1,
+    schemaVersion: 2,
   });
   const repeatedInitialize = await runtime.handleMessage(request(
     'initialize-repeated',
@@ -138,6 +138,43 @@ try {
     latField: 'lat',
     lonField: 'lon',
   });
+  await runtime.handleMessage(request(
+    'enable-first',
+    BROWSER_SQLITE_OPERATIONS.SET_DATASET_ENABLED,
+    { datasetId: firstDatasetId, enabled: true },
+  ));
+  const exactMap = await runtime.handleMessage(request(
+    'query-first',
+    BROWSER_SQLITE_OPERATIONS.QUERY_MAP_VIEW,
+    {
+      bounds: { north: 90, south: -90, east: 180, west: -180 },
+      renderBudget: 10,
+    },
+  ));
+  assert.equal(exactMap.result.points.length, 2);
+  assert.equal(Object.hasOwn(exactMap.result.points[0], 'row'), false);
+  const pointDetails = await runtime.handleMessage(request(
+    'details-first',
+    BROWSER_SQLITE_OPERATIONS.GET_FEATURE_DETAILS,
+    { sourceRef: exactMap.result.points[0].sourceRef },
+  ));
+  assert.equal(pointDetails.result.row.name, 'First');
+  const groupedMap = await runtime.handleMessage(request(
+    'group-first',
+    BROWSER_SQLITE_OPERATIONS.QUERY_MAP_VIEW,
+    {
+      bounds: { north: 90, south: -90, east: 180, west: -180 },
+      renderBudget: 1,
+    },
+  ));
+  assert.equal(groupedMap.result.points[0].count, 2);
+  const groupRows = await runtime.handleMessage(request(
+    'group-rows-first',
+    BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS,
+    { groupRef: groupedMap.result.points[0].groupRef, offset: 0, limit: 1 },
+  ));
+  assert.equal(groupRows.result.rows[0].name, 'First');
+  assert.equal(groupRows.result.totalRows, 2);
 
   const cancelImportPromise = runtime.handleMessage(request(
     'import-cancel-request',

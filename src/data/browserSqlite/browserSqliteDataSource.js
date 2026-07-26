@@ -11,6 +11,9 @@ import {
   normalizeImportCancellationResult,
   normalizeImportProgress,
   normalizeInitializationResult,
+  normalizeFeatureDetailsResult,
+  normalizeGroupRowsResult,
+  normalizeMapViewResult,
   normalizeMappingMutationResult,
   normalizePreviewPageResult,
 } from '../dataSourceNormalization.js';
@@ -32,10 +35,10 @@ const CAPABILITIES = normalizeBackendCapabilities({
   datasetRemoval: true,
   datasetMapping: true,
   previewPaging: true,
-  points: false,
+  points: true,
   lines: false,
   regions: false,
-  groupedViewportResults: false,
+  groupedViewportResults: true,
 });
 
 /** Create the unselected browser SQLite data-source adapter. */
@@ -255,19 +258,38 @@ export function createBrowserSqliteDataSource({ client } = {}) {
       }
     },
 
-    queryMapView() {
+    async queryMapView(query = {}) {
       assertActive(DATA_SOURCE_METHODS.queryMapView);
-      throw unsupportedFailure(DATA_SOURCE_METHODS.queryMapView);
+      try {
+        return normalizeMapViewResult(await workerClient.queryMapView(query));
+      } catch (error) {
+        throw workerFailure(DATA_SOURCE_METHODS.queryMapView, error);
+      }
     },
 
-    getFeatureDetails() {
+    async getFeatureDetails(query = {}) {
       assertActive(DATA_SOURCE_METHODS.getFeatureDetails);
-      throw unsupportedFailure(DATA_SOURCE_METHODS.getFeatureDetails);
+      try {
+        return normalizeFeatureDetailsResult(
+          await workerClient.getFeatureDetails(query),
+        );
+      } catch (error) {
+        throw workerFailure(DATA_SOURCE_METHODS.getFeatureDetails, error, {
+          datasetId: query.sourceRef?.datasetId,
+        });
+      }
     },
 
-    getGroupRows() {
+    async getGroupRows(query = {}) {
       assertActive(DATA_SOURCE_METHODS.getGroupRows);
-      throw unsupportedFailure(DATA_SOURCE_METHODS.getGroupRows);
+      try {
+        return normalizeGroupRowsResult(
+          await workerClient.getGroupRows(query),
+          query,
+        );
+      } catch (error) {
+        throw workerFailure(DATA_SOURCE_METHODS.getGroupRows, error);
+      }
     },
 
     dispose() {
@@ -340,15 +362,6 @@ function unsupportedImport(operation) {
     operation,
     category: BACKEND_FAILURE_CATEGORIES.BACKEND_UNAVAILABLE,
     message: 'This import operation is unavailable.',
-  });
-}
-
-function unsupportedFailure(operation) {
-  return normalizeBackendFailure(null, {
-    category: BACKEND_FAILURE_CATEGORIES.BACKEND_UNAVAILABLE,
-    operation,
-    message: 'This browser data operation is unavailable.',
-    recoverable: false,
   });
 }
 

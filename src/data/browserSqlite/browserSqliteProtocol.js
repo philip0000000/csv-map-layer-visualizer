@@ -13,6 +13,9 @@ export const BROWSER_SQLITE_OPERATIONS = Object.freeze({
   REMOVE_DATASET: 'remove-dataset',
   UPDATE_DATASET_MAPPING: 'update-dataset-mapping',
   GET_PREVIEW_PAGE: 'get-preview-page',
+  QUERY_MAP_VIEW: 'query-map-view',
+  GET_FEATURE_DETAILS: 'get-feature-details',
+  GET_GROUP_ROWS: 'get-group-rows',
   CLOSE: 'close',
 });
 
@@ -231,6 +234,12 @@ function normalizeOperationPayload(operation, payload) {
       return normalizeDatasetMappingPayload(payload);
     case BROWSER_SQLITE_OPERATIONS.GET_PREVIEW_PAGE:
       return normalizePreviewPayload(payload);
+    case BROWSER_SQLITE_OPERATIONS.QUERY_MAP_VIEW:
+      return normalizeMapViewPayload(payload);
+    case BROWSER_SQLITE_OPERATIONS.GET_FEATURE_DETAILS:
+      return normalizeFeatureDetailsPayload(payload);
+    case BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS:
+      return normalizeGroupRowsPayload(payload);
     default:
       throwProtocolError(
         'unsupported-operation',
@@ -354,6 +363,172 @@ function normalizePreviewPayload(payload) {
   };
 }
 
+function normalizeMapViewPayload(payload) {
+  requirePayload(payload, [
+    'bounds',
+    'zoom',
+    'timeline',
+    'renderBudget',
+    'datasetIds',
+  ]);
+  return {
+    bounds: normalizeBoundsPayload(payload.bounds),
+    zoom: normalizeNullableFiniteNumber(payload.zoom, 'map zoom'),
+    timeline: normalizeTimelinePayload(payload.timeline),
+    renderBudget: normalizeOptionalInteger(
+      payload.renderBudget,
+      null,
+      1,
+      'render budget',
+    ),
+    datasetIds: normalizeDatasetIdsPayload(payload.datasetIds),
+  };
+}
+
+function normalizeFeatureDetailsPayload(payload) {
+  requirePayload(payload, ['featureId', 'sourceRef']);
+  return {
+    featureId: payload.featureId == null
+      ? null
+      : normalizeIdentifier(payload.featureId, 'feature ID', 'invalid-request'),
+    sourceRef: normalizeSourceRefPayload(payload.sourceRef),
+  };
+}
+
+function normalizeGroupRowsPayload(payload) {
+  requirePayload(payload, ['groupRef', 'offset', 'limit']);
+  return {
+    groupRef: normalizeGroupRefPayload(payload.groupRef),
+    offset: normalizeOptionalInteger(payload.offset, 0, 0, 'group offset'),
+    limit: Math.min(
+      normalizeOptionalInteger(payload.limit, 30, 1, 'group limit'),
+      100,
+    ),
+  };
+}
+
+function normalizeBoundsPayload(value) {
+  if (value == null) return null;
+  requirePlainRecord(value, 'invalid-request', 'Map bounds must be an object.');
+  requireOnlyKeys(value, ['north', 'south', 'east', 'west']);
+  return {
+    north: normalizeFiniteNumber(value.north, 'north bound'),
+    south: normalizeFiniteNumber(value.south, 'south bound'),
+    east: normalizeFiniteNumber(value.east, 'east bound'),
+    west: normalizeFiniteNumber(value.west, 'west bound'),
+  };
+}
+
+function normalizeTimelinePayload(value) {
+  if (value == null) return null;
+  requirePlainRecord(value, 'invalid-request', 'Timeline state must be an object.');
+  requireOnlyKeys(value, [
+    'timelineEnabled',
+    'startYear',
+    'endYear',
+    'yearMin',
+    'yearMax',
+    'dayFilterEnabled',
+    'startDay',
+    'endDay',
+  ]);
+  if (
+    Object.hasOwn(value, 'timelineEnabled') &&
+    typeof value.timelineEnabled !== 'boolean'
+  ) {
+    throwProtocolError('invalid-request', 'Timeline enabled state is invalid.');
+  }
+  if (
+    Object.hasOwn(value, 'dayFilterEnabled') &&
+    typeof value.dayFilterEnabled !== 'boolean'
+  ) {
+    throwProtocolError('invalid-request', 'Timeline day-filter state is invalid.');
+  }
+  return {
+    timelineEnabled: value.timelineEnabled === true,
+    startYear: normalizeNullableInteger(value.startYear, 'timeline start year'),
+    endYear: normalizeNullableInteger(value.endYear, 'timeline end year'),
+    yearMin: normalizeNullableInteger(value.yearMin, 'timeline minimum year'),
+    yearMax: normalizeNullableInteger(value.yearMax, 'timeline maximum year'),
+    dayFilterEnabled: value.dayFilterEnabled === true,
+    startDay: normalizeNullableInteger(value.startDay, 'timeline start day'),
+    endDay: normalizeNullableInteger(value.endDay, 'timeline end day'),
+  };
+}
+
+function normalizeDatasetIdsPayload(value) {
+  if (value == null) return null;
+  if (!Array.isArray(value) || value.length > 100) {
+    throwProtocolError('invalid-request', 'Dataset IDs must be a bounded array.');
+  }
+  return [...new Set(value.map((id) => (
+    normalizeIdentifier(id, 'dataset ID', 'invalid-request')
+  )))].sort();
+}
+
+function normalizeSourceRefPayload(value) {
+  if (value == null) return null;
+  requirePlainRecord(value, 'invalid-request', 'A source reference must be an object.');
+  requireOnlyKeys(value, ['datasetId', 'rowIndex']);
+  return {
+    datasetId: normalizeIdentifier(
+      value.datasetId,
+      'dataset ID',
+      'invalid-request',
+    ),
+    rowIndex: normalizeOptionalInteger(
+      value.rowIndex,
+      null,
+      0,
+      'source-row index',
+    ),
+  };
+}
+
+function normalizeGroupRefPayload(value) {
+  if (value == null) return null;
+  requirePlainRecord(value, 'invalid-request', 'A group reference must be an object.');
+  requireOnlyKeys(value, [
+    'groupId',
+    'bounds',
+    'datasetIds',
+    'timeline',
+    'grid',
+    'sortOrder',
+  ]);
+  if (value.sortOrder !== 'dataset-source-row') {
+    throwProtocolError('invalid-request', 'The group sort order is invalid.');
+  }
+  const datasetIds = normalizeDatasetIdsPayload(value.datasetIds);
+  if (!datasetIds || datasetIds.length === 0) {
+    throwProtocolError('invalid-request', 'A group dataset snapshot is required.');
+  }
+  const grid = normalizeGroupGridPayload(value.grid);
+  const groupId = normalizeIdentifier(value.groupId, 'group ID', 'invalid-request');
+  if (groupId !== `grid:${grid.cellLat}:${grid.cellLon}`) {
+    throwProtocolError('invalid-request', 'The group ID is invalid.');
+  }
+  return {
+    groupId,
+    bounds: normalizeBoundsPayload(value.bounds),
+    datasetIds,
+    timeline: normalizeTimelinePayload(value.timeline),
+    grid,
+    sortOrder: 'dataset-source-row',
+  };
+}
+
+function normalizeGroupGridPayload(value) {
+  requirePlainRecord(value, 'invalid-request', 'A group grid must be an object.');
+  requireOnlyKeys(value, ['cellLat', 'cellLon', 'cellHeight', 'cellWidth']);
+  return {
+    cellLat: normalizeRequiredInteger(value.cellLat, 'grid latitude cell'),
+    cellLon: normalizeRequiredInteger(value.cellLon, 'grid longitude cell'),
+    cellHeight: normalizePositiveFiniteNumber(value.cellHeight, 'grid cell height'),
+    cellWidth: normalizePositiveFiniteNumber(value.cellWidth, 'grid cell width'),
+  };
+}
+
 function requirePayload(payload, allowedKeys) {
   requirePlainRecord(payload, 'invalid-request', 'The payload must be an object.');
   requireOnlyKeys(payload, allowedKeys);
@@ -421,6 +596,40 @@ function normalizeOptionalInteger(value, fallback, minimum, label) {
     );
   }
   return value;
+}
+
+function normalizeNullableInteger(value, label) {
+  if (value == null) return null;
+  if (!Number.isSafeInteger(value)) {
+    throwProtocolError('invalid-request', `${label} must be an integer or null.`);
+  }
+  return value;
+}
+
+function normalizeRequiredInteger(value, label) {
+  if (!Number.isSafeInteger(value)) {
+    throwProtocolError('invalid-request', `${label} must be an integer.`);
+  }
+  return value;
+}
+
+function normalizeFiniteNumber(value, label) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throwProtocolError('invalid-request', `${label} must be a finite number.`);
+  }
+  return value;
+}
+
+function normalizeNullableFiniteNumber(value, label) {
+  return value == null ? null : normalizeFiniteNumber(value, label);
+}
+
+function normalizePositiveFiniteNumber(value, label) {
+  const number = normalizeFiniteNumber(value, label);
+  if (number <= 0) {
+    throwProtocolError('invalid-request', `${label} must be positive.`);
+  }
+  return number;
 }
 
 function normalizePositiveInteger(value, label, code) {

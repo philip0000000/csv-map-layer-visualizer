@@ -1,6 +1,9 @@
 import {
   getBrowserSqliteDatasetSummary,
 } from './browserSqliteDatasetQueries.js';
+import {
+  rebuildBrowserSqlitePointFeatures,
+} from './browserSqlitePointDerivation.js';
 
 /**
  * Enable or disable one completely imported dataset.
@@ -84,11 +87,23 @@ export function updateBrowserSqliteDatasetMapping(
   requireKnownHeader(headers, latField, 'latitude');
   requireKnownHeader(headers, lonField, 'longitude');
 
-  database.run(`
-    UPDATE datasets
-    SET coordinate_mapping_json = ?
-    WHERE id = ? AND import_state = 'complete'
-  `, [JSON.stringify({ latField, lonField }), normalizedId]);
+  database.run('BEGIN TRANSACTION');
+  try {
+    database.run(`
+      UPDATE datasets
+      SET coordinate_mapping_json = ?
+      WHERE id = ? AND import_state = 'complete'
+    `, [JSON.stringify({ latField, lonField }), normalizedId]);
+    rebuildBrowserSqlitePointFeatures(database, normalizedId);
+    database.run('COMMIT');
+  } catch (error) {
+    safeRollback(database);
+    if (error instanceof BrowserSqliteMutationError) throw error;
+    throw new BrowserSqliteMutationError(
+      'operation-failed',
+      'The coordinate mapping could not be rebuilt.',
+    );
+  }
 
   const dataset = getSummaryItem(database, normalizedId);
   return {
@@ -99,6 +114,14 @@ export function updateBrowserSqliteDatasetMapping(
     dataset,
     error: null,
   };
+}
+
+function safeRollback(database) {
+  try {
+    database.run('ROLLBACK');
+  } catch {
+    // Preserve the normalized rebuild failure if SQLite already rolled back.
+  }
 }
 
 function requireCompleteDataset(database, datasetId) {

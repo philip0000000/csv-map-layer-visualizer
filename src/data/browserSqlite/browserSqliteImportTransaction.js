@@ -1,4 +1,7 @@
 import { MAX_CSV_PARSE_WARNINGS } from '../csvParsingCompatibility.js';
+import {
+  rebuildBrowserSqlitePointFeatures,
+} from './browserSqlitePointDerivation.js';
 
 /** Maximum already-normalized rows accepted by one storage call. */
 export const MAX_BROWSER_SQLITE_IMPORT_BATCH_ROWS = 1_000;
@@ -177,6 +180,12 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
       throw new Error('The provisional dataset was unavailable.');
     }
 
+    // Derived points join the file transaction so a failed build cannot leave
+    // committed source rows without their matching query records.
+    const pointResult = rebuildBrowserSqlitePointFeatures(
+      state.database,
+      state.datasetId,
+    );
     state.database.run('COMMIT');
     finishActiveImport(state, 'complete');
 
@@ -185,6 +194,8 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
       rowCount: state.nextSourceRowIndex,
       totalParsedRowCount: normalized.totalParsedRowCount,
       skippedRowCount: normalized.skippedRowCount,
+      pointFeatureCount: pointResult.pointFeatureCount,
+      skippedPointCount: pointResult.skippedPointCount,
       importedAt: normalized.importedAt,
     };
   } catch (error) {

@@ -21,6 +21,7 @@
     "smoke:browser-sqlite-worker-runtime": "node src/data/browserSqlite/browserSqliteWorkerRuntime.smoke.js",
     "smoke:browser-sqlite-worker-client": "node src/data/browserSqlite/browserSqliteWorkerClient.smoke.js",
     "smoke:browser-sqlite-data-source": "node src/data/browserSqlite/browserSqliteDataSource.smoke.js",
+    "smoke:browser-sqlite-points": "node src/data/browserSqlite/browserSqlitePointQueries.smoke.js",
     "validate:browser-sqlite-worker": "node desktop/run-electron.cjs desktop/browserSqliteWorkerValidation.cjs",
     "smoke:csv-compatibility": "node src/data/csvParsingCompatibility.smoke.js",
     "smoke:data-source-normalization": "node src/data/dataSourceNormalization.smoke.js",

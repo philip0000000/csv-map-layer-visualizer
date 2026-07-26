@@ -4,7 +4,7 @@
  * The version describes databases created during the current page session. It
  * does not imply that database bytes are persisted or migrated across sessions.
  */
-export const BROWSER_SQLITE_SCHEMA_VERSION = 1;
+export const BROWSER_SQLITE_SCHEMA_VERSION = 2;
 
 const closedDatabases = new WeakSet();
 
@@ -34,7 +34,7 @@ export function createBrowserSqliteDatabase(SQL) {
 }
 
 /**
- * Initialize schema version 1 on a fresh in-memory database.
+ * Initialize the current browser schema on a fresh in-memory database.
  *
  * Foreign keys are enabled before the schema transaction so dataset deletion
  * can safely cascade to original source rows. The composite source-row primary
@@ -67,6 +67,10 @@ export function initializeBrowserSqliteSchema(database) {
           CHECK (stored_row_count >= 0),
         skipped_row_count INTEGER NOT NULL DEFAULT 0
           CHECK (skipped_row_count >= 0),
+        point_feature_count INTEGER NOT NULL DEFAULT 0
+          CHECK (point_feature_count >= 0),
+        skipped_point_count INTEGER NOT NULL DEFAULT 0
+          CHECK (skipped_point_count >= 0),
         enabled INTEGER NOT NULL DEFAULT 1
           CHECK (enabled IN (0, 1)),
         detected_fields_json TEXT NOT NULL DEFAULT '{}'
@@ -101,10 +105,47 @@ export function initializeBrowserSqliteSchema(database) {
           ON DELETE CASCADE
       ) WITHOUT ROWID;
 
+      CREATE TABLE point_features (
+        dataset_id TEXT NOT NULL,
+        source_row_index INTEGER NOT NULL
+          CHECK (source_row_index >= 0),
+        lat REAL NOT NULL
+          CHECK (lat >= -90 AND lat <= 90),
+        lon REAL NOT NULL
+          CHECK (lon >= -180 AND lon <= 180),
+        timeline_start_year INTEGER,
+        timeline_end_year INTEGER,
+        compact_json TEXT NOT NULL DEFAULT '{}'
+          CHECK (json_valid(compact_json)),
+        PRIMARY KEY (dataset_id, source_row_index),
+        FOREIGN KEY (dataset_id, source_row_index)
+          REFERENCES source_rows(dataset_id, source_row_index)
+          ON DELETE CASCADE,
+        CHECK (
+          (timeline_start_year IS NULL AND timeline_end_year IS NULL)
+          OR
+          (
+            timeline_start_year IS NOT NULL
+            AND timeline_end_year IS NOT NULL
+            AND timeline_start_year <= timeline_end_year
+          )
+        )
+      ) WITHOUT ROWID;
+
       CREATE INDEX idx_datasets_imported_order
         ON datasets(imported_at DESC, id);
 
-      PRAGMA user_version = 1;
+      CREATE INDEX idx_point_features_dataset_lat_lon
+        ON point_features(dataset_id, lat, lon);
+
+      CREATE INDEX idx_point_features_dataset_timeline
+        ON point_features(
+          dataset_id,
+          timeline_start_year,
+          timeline_end_year
+        );
+
+      PRAGMA user_version = 2;
     `);
     database.run('COMMIT');
   } catch (error) {

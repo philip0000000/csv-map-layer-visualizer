@@ -33,6 +33,8 @@ async function runRealBrowserValidation() {
   const dataSource = createBrowserSqliteDataSource();
   const progress = [];
   const startedAt = performance.now();
+  let queryHeartbeat = null;
+  let queryHeartbeatSafety = null;
 
   try {
     const initialization = await dataSource.initialize();
@@ -75,6 +77,13 @@ async function runRealBrowserValidation() {
     const summary = await dataSource.getDatasetSummary();
     requireEqual(summary.datasets.length, 1, 'dataset count after import');
     requireEqual(summary.datasets[0].rowCount, LARGE_ROW_COUNT, 'summary row count');
+    requireEqual(
+      summary.datasets[0].importedFeatureCount,
+      LARGE_ROW_COUNT,
+      'derived point count',
+    );
+    requireEqual(summary.timeline?.yearMin, 1000, 'timeline minimum year');
+    requireEqual(summary.timeline?.yearMax, 1999, 'timeline maximum year');
     assertNoSourceRows(summary, 'dataset summary');
     const datasetId = summary.datasets[0].id;
 
@@ -88,6 +97,97 @@ async function runRealBrowserValidation() {
     requireEqual(preview.rows[0]?.name, 'Row 12345', 'first preview row');
     requireEqual(preview.rows[2]?.name, 'Row 12347', 'last preview row');
     requireCondition(preview.hasMore, 'The preview should report more rows.');
+
+    let queryHeartbeatCount = 0;
+    queryHeartbeat = setInterval(() => {
+      queryHeartbeatCount += 1;
+    }, 0);
+    // Ensure a failed assertion cannot leave the validation page with a live timer.
+    queryHeartbeatSafety = setTimeout(() => {
+      clearInterval(queryHeartbeat);
+    }, 30_000);
+    const exactStartedAt = performance.now();
+    const exact = await dataSource.queryMapView({
+      bounds: { north: 1.01, south: 0.99, east: 1.01, west: 0.99 },
+      renderBudget: 100,
+    });
+    const exactDurationMs = performance.now() - exactStartedAt;
+    requireCondition(exact.points.length > 0, 'The exact query returned no points.');
+    requireCondition(!exact.stats.overBudget, 'The exact query grouped unexpectedly.');
+    requireCondition(
+      exact.points.every((point) => point.renderType === 'exact'),
+      'The exact query returned a grouped item.',
+    );
+    assertNoSourceRows(exact, 'exact viewport');
+
+    const denseStartedAt = performance.now();
+    const denseQuery = {
+      bounds: { north: 90, south: -90, east: 180, west: -180 },
+      renderBudget: 100,
+    };
+    const dense = await dataSource.queryMapView(denseQuery);
+    const denseDurationMs = performance.now() - denseStartedAt;
+    requireCondition(dense.stats.overBudget, 'The dense query did not group.');
+    requireCondition(dense.points.length <= 100, 'The dense query exceeded its budget.');
+    requireEqual(dense.stats.totalMatchingCount, LARGE_ROW_COUNT, 'dense match count');
+    assertNoSourceRows(dense, 'dense viewport');
+    const repeatedDense = await dataSource.queryMapView(denseQuery);
+    requireEqual(
+      JSON.stringify(repeatedDense.points),
+      JSON.stringify(dense.points),
+      'stable dense results',
+    );
+
+    const sparse = await dataSource.queryMapView({
+      bounds: { north: 3.1, south: 0.9, east: 3.1, west: 0.9 },
+      renderBudget: 100,
+    });
+    requireCondition(sparse.points.length > 0, 'The sparse query returned no points.');
+    requireCondition(!sparse.stats.overBudget, 'The sparse query grouped unexpectedly.');
+    const empty = await dataSource.queryMapView({
+      bounds: { north: -70, south: -80, east: -10, west: -20 },
+      renderBudget: 100,
+    });
+    requireEqual(empty.points.length, 0, 'empty viewport point count');
+
+    const timelineStartedAt = performance.now();
+    const timeline = await dataSource.queryMapView({
+      bounds: { north: 90, south: -90, east: 180, west: -180 },
+      timeline: { timelineEnabled: true, startYear: 1500, endYear: 1500 },
+      renderBudget: 100,
+    });
+    const timelineDurationMs = performance.now() - timelineStartedAt;
+    requireEqual(timeline.stats.totalMatchingCount, 30, 'timeline match count');
+
+    const details = await dataSource.getFeatureDetails({
+      sourceRef: exact.points[0].sourceRef,
+    });
+    requireCondition(details.row?.name, 'Exact detail lookup returned no row.');
+    requireEqual(details.latField, 'lat', 'detail latitude mapping');
+    requireEqual(details.lonField, 'lon', 'detail longitude mapping');
+
+    const groupedPoint = dense.points.find((point) => point.count > 30);
+    requireCondition(groupedPoint?.groupRef, 'No pageable dense group was returned.');
+    const firstGroupPage = await dataSource.getGroupRows({
+      groupRef: groupedPoint.groupRef,
+    });
+    const secondGroupPage = await dataSource.getGroupRows({
+      groupRef: groupedPoint.groupRef,
+      offset: firstGroupPage.limit,
+    });
+    clearInterval(queryHeartbeat);
+    clearTimeout(queryHeartbeatSafety);
+    requireEqual(firstGroupPage.rows.length, 30, 'first group page size');
+    requireCondition(secondGroupPage.rows.length > 0, 'The later group page was empty.');
+    requireEqual(
+      new Set([
+        ...firstGroupPage.rows.map((row) => row.name),
+        ...secondGroupPage.rows.map((row) => row.name),
+      ]).size,
+      firstGroupPage.rows.length + secondGroupPage.rows.length,
+      'unique rows across group pages',
+    );
+    requireCondition(queryHeartbeatCount > 0, 'The main thread stalled during queries.');
 
     let cancelPromise = null;
     const cancellationProgress = [];
@@ -134,14 +234,31 @@ async function runRealBrowserValidation() {
       previewRows: preview.rows.length,
       progressEventCount: progress.length,
       heartbeatCount,
+      queryHeartbeatCount,
+      queryResults: {
+        exact: exact.points.length,
+        dense: dense.points.length,
+        sparse: sparse.points.length,
+        empty: empty.points.length,
+        timeline: timeline.points.length,
+        denseGroups: dense.points.length,
+        groupTotalRows: firstGroupPage.totalRows,
+        groupPagesRead: 2,
+        detailFound: details.row != null,
+      },
       canceledImportRolledBack: true,
       restartVerifiedEmpty: await verifyRestartIsEmpty(dataSource),
       timingsMs: {
         largeImport: Math.round(largeImportDurationMs),
+        exactQuery: Math.round(exactDurationMs),
+        denseQuery: Math.round(denseDurationMs),
+        timelineQuery: Math.round(timelineDurationMs),
         total: Math.round(performance.now() - startedAt),
       },
     };
   } finally {
+    clearInterval(queryHeartbeat);
+    clearTimeout(queryHeartbeatSafety);
     dataSource.dispose();
   }
 }

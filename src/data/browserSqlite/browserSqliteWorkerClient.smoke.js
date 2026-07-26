@@ -90,7 +90,7 @@ respondSuccess(worker, worker.posted.at(-1), {
   initialized: true,
   reused: false,
   databaseStorage: 'memory',
-  schemaVersion: 1,
+  schemaVersion: 2,
 });
 assert.equal((await initializePromise).initialized, true);
 
@@ -218,6 +218,60 @@ assert.equal(
   worker.posted.at(-1).operation,
   BROWSER_SQLITE_OPERATIONS.UPDATE_DATASET_MAPPING,
 );
+
+const mapQuery = {
+  bounds: { north: 10, south: 0, east: 10, west: 0 },
+  renderBudget: 10,
+};
+await completeSuccess(worker, client.queryMapView(mapQuery), {
+  points: [],
+  lines: [],
+  regions: [],
+  stats: {},
+  timelineIndex: { entries: [] },
+});
+assert.deepEqual(worker.posted.at(-1), {
+  requestId: worker.posted.at(-1).requestId,
+  operation: BROWSER_SQLITE_OPERATIONS.QUERY_MAP_VIEW,
+  payload: {
+    ...mapQuery,
+    zoom: null,
+    timeline: null,
+    datasetIds: null,
+  },
+});
+await completeSuccess(worker, client.getFeatureDetails({
+  sourceRef: { datasetId: 'dataset-1', rowIndex: 0 },
+}), {
+  featureId: 'dataset-1:0',
+  row: { name: 'One' },
+  latField: 'lat',
+  lonField: 'lon',
+});
+assert.equal(
+  worker.posted.at(-1).operation,
+  BROWSER_SQLITE_OPERATIONS.GET_FEATURE_DETAILS,
+);
+await completeSuccess(worker, client.getGroupRows({
+  groupRef: {
+    groupId: 'grid:1:2',
+    bounds: { north: 10, south: 0, east: 10, west: 0 },
+    datasetIds: ['dataset-1'],
+    timeline: null,
+    grid: { cellLat: 1, cellLon: 2, cellHeight: 1, cellWidth: 1 },
+    sortOrder: 'dataset-source-row',
+  },
+}), {
+  rows: [],
+  offset: 0,
+  limit: 30,
+  totalRows: 0,
+});
+assert.equal(
+  worker.posted.at(-1).operation,
+  BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS,
+);
+await assertClientError(client.queryMapView([]), 'invalid-request');
 
 const removeFailurePromise = client.removeDataset('missing-dataset');
 const removeFailureRequest = worker.posted.at(-1);

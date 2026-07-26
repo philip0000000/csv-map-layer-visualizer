@@ -76,6 +76,8 @@ try {
     rowCount: 3,
     totalParsedRowCount: 4,
     skippedRowCount: 1,
+    pointFeatureCount: 2,
+    skippedPointCount: 1,
     importedAt: '2026-07-26T14:00:00.000Z',
   });
   assert.equal(freedInsertStatementCount, 1);

@@ -9,14 +9,4 @@ export default defineConfig(({ mode }) => ({
   worker: {
     format: "es",
   },
-  build: {
-    rollupOptions: {
-      input: mode === "desktop"
-        ? { app: "index.html" }
-        : {
-            app: "index.html",
-            sqliteWasmPrototype: "sqlite-wasm-prototype.html",
-          },
-    },
-  },
 }));

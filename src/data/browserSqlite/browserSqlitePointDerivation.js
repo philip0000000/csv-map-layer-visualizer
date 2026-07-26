@@ -8,9 +8,8 @@ import {
   getRowFeatureType,
 } from '../../components/featureTypes.js';
 import {
-  parseDateValue,
-  parseYearValue,
-} from '../../components/timeline.js';
+  getBrowserSqliteTimelineExtent,
+} from './browserSqliteTimeline.js';
 
 const DEFAULT_IMAGE_SIZE_METERS = 100;
 const MIN_IMAGE_SIZE_METERS = 1;
@@ -102,7 +101,7 @@ export function rebuildBrowserSqlitePointFeatures(database, datasetId) {
           continue;
         }
 
-        const timeline = getTimelineExtent(row, detectedFields);
+        const timeline = getBrowserSqliteTimelineExtent(row, detectedFields);
         insertPoint.run([
           normalizedId,
           normalizeSourceRowIndex(stored.source_row_index),
@@ -128,47 +127,6 @@ export function rebuildBrowserSqlitePointFeatures(database, datasetId) {
   `, [pointFeatureCount, skippedPointCount, normalizedId]);
 
   return { pointFeatureCount, skippedPointCount };
-}
-
-function getTimelineExtent(row, fields) {
-  const yearFrom = getRangeYear(
-    row,
-    normalizeNullableString(fields.yearFromField),
-    normalizeNullableString(fields.dateFromField),
-  );
-  const yearTo = getRangeYear(
-    row,
-    normalizeNullableString(fields.yearToField),
-    normalizeNullableString(fields.dateToField),
-  );
-
-  if (yearFrom != null || yearTo != null) {
-    const first = yearFrom ?? yearTo;
-    const last = yearTo ?? yearFrom;
-    return {
-      startYear: Math.min(first, last),
-      endYear: Math.max(first, last),
-    };
-  }
-
-  const year = getRangeYear(
-    row,
-    normalizeNullableString(fields.yearField),
-    normalizeNullableString(fields.dateField),
-  );
-  return year == null ? null : { startYear: year, endYear: year };
-}
-
-function getRangeYear(row, yearField, dateField) {
-  if (yearField) {
-    const year = parseYearValue(row[yearField]);
-    if (year != null) return year;
-  }
-  if (dateField) {
-    const date = parseDateValue(row[dateField]);
-    if (date) return date.getUTCFullYear();
-  }
-  return null;
 }
 
 function getCompactFields(row, mapping) {

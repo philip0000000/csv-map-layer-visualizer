@@ -78,6 +78,10 @@ try {
     skippedRowCount: 1,
     pointFeatureCount: 2,
     skippedPointCount: 1,
+    lineFeatureCount: 0,
+    skippedLineCount: 0,
+    regionFeatureCount: 0,
+    skippedRegionCount: 0,
     importedAt: '2026-07-26T14:00:00.000Z',
   });
   assert.equal(freedInsertStatementCount, 1);

@@ -4,6 +4,9 @@ import {
 import {
   rebuildBrowserSqlitePointFeatures,
 } from './browserSqlitePointDerivation.js';
+import {
+  rebuildBrowserSqliteGeometryFeatures,
+} from './browserSqliteGeometryDerivation.js';
 
 /**
  * Enable or disable one completely imported dataset.
@@ -54,7 +57,10 @@ export function setBrowserSqliteDatasetEnabled(
  *
  * Omitted fields retain their current value. Explicit null or blank values
  * clear one side of the mapping. Non-null fields must match normalized stored
- * headers. Detected coordinate and timeline metadata remains unchanged.
+ * headers. Points, lines, and regions rebuild inside the same transaction as
+ * the metadata update, so callers never observe mixed mappings. Any failure
+ * rolls the affected dataset back to its previous working mapping and features;
+ * detected coordinate and timeline metadata remains unchanged.
  *
  * @param {{ prepare: (sql: string) => object, run: Function }} database sql.js database.
  * @param {string} datasetId Stable dataset identifier.
@@ -95,6 +101,7 @@ export function updateBrowserSqliteDatasetMapping(
       WHERE id = ? AND import_state = 'complete'
     `, [JSON.stringify({ latField, lonField }), normalizedId]);
     rebuildBrowserSqlitePointFeatures(database, normalizedId);
+    rebuildBrowserSqliteGeometryFeatures(database, normalizedId);
     database.run('COMMIT');
   } catch (error) {
     safeRollback(database);

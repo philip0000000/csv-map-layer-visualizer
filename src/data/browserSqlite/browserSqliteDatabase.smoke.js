@@ -26,7 +26,7 @@ try {
     FROM sqlite_schema
     WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
     ORDER BY name
-  `), ['datasets', 'point_features', 'source_rows']);
+  `), ['datasets', 'geometry_features', 'point_features', 'source_rows']);
   assert.deepEqual(
     readColumn(database, 'PRAGMA table_info(datasets)', 'name'),
     [
@@ -41,6 +41,10 @@ try {
       'skipped_row_count',
       'point_feature_count',
       'skipped_point_count',
+      'line_feature_count',
+      'skipped_line_count',
+      'region_feature_count',
+      'skipped_region_count',
       'enabled',
       'detected_fields_json',
       'coordinate_mapping_json',
@@ -66,12 +70,34 @@ try {
     ],
   );
   assert.deepEqual(
+    readColumn(database, 'PRAGMA table_info(geometry_features)', 'name'),
+    [
+      'dataset_id',
+      'geometry_type',
+      'feature_id',
+      'part',
+      'source_row_index',
+      'feature_order_index',
+      'part_order_index',
+      'min_lat',
+      'max_lat',
+      'min_lon',
+      'max_lon',
+      'timeline_start_year',
+      'timeline_end_year',
+      'coordinates_json',
+      'style_json',
+      'arrow_mode',
+    ],
+  );
+  assert.deepEqual(
     readColumn(database, 'PRAGMA index_list(datasets)', 'name'),
     ['idx_datasets_imported_order', 'sqlite_autoindex_datasets_1'],
   );
   assert.equal(readScalar(database, 'SELECT COUNT(*) FROM datasets'), 0);
   assert.equal(readScalar(database, 'SELECT COUNT(*) FROM source_rows'), 0);
   assert.equal(readScalar(database, 'SELECT COUNT(*) FROM point_features'), 0);
+  assert.equal(readScalar(database, 'SELECT COUNT(*) FROM geometry_features'), 0);
   assert.equal(persistenceAccessCount, 0);
   assert.equal(closeBrowserSqliteDatabase(database), true);
   assert.equal(closeBrowserSqliteDatabase(database), false);

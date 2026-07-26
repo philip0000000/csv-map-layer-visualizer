@@ -34,7 +34,8 @@
     "smoke:sqlite-detail": "node desktop/sqliteDetailQuery.smoke.cjs",
     "validate:desktop-large-file": "node desktop/largeFileValidation.cjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "smoke:browser-sqlite-geometries": "node src/data/browserSqlite/browserSqliteGeometryQueries.smoke.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",

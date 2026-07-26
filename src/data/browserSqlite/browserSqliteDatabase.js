@@ -4,7 +4,7 @@
  * The version describes databases created during the current page session. It
  * does not imply that database bytes are persisted or migrated across sessions.
  */
-export const BROWSER_SQLITE_SCHEMA_VERSION = 2;
+export const BROWSER_SQLITE_SCHEMA_VERSION = 3;
 
 const closedDatabases = new WeakSet();
 
@@ -39,6 +39,8 @@ export function createBrowserSqliteDatabase(SQL) {
  * Foreign keys are enabled before the schema transaction so dataset deletion
  * can safely cascade to original source rows. The composite source-row primary
  * key preserves deterministic row order without a separate imported array.
+ * Compact geometry rows store only render data, source references, timeline
+ * extents, and indexed bounding boxes; complete rows remain in `source_rows`.
  *
  * @param {{ run: (sql: string) => void }} database Fresh sql.js database.
  */
@@ -71,6 +73,14 @@ export function initializeBrowserSqliteSchema(database) {
           CHECK (point_feature_count >= 0),
         skipped_point_count INTEGER NOT NULL DEFAULT 0
           CHECK (skipped_point_count >= 0),
+        line_feature_count INTEGER NOT NULL DEFAULT 0
+          CHECK (line_feature_count >= 0),
+        skipped_line_count INTEGER NOT NULL DEFAULT 0
+          CHECK (skipped_line_count >= 0),
+        region_feature_count INTEGER NOT NULL DEFAULT 0
+          CHECK (region_feature_count >= 0),
+        skipped_region_count INTEGER NOT NULL DEFAULT 0
+          CHECK (skipped_region_count >= 0),
         enabled INTEGER NOT NULL DEFAULT 1
           CHECK (enabled IN (0, 1)),
         detected_fields_json TEXT NOT NULL DEFAULT '{}'
@@ -132,6 +142,60 @@ export function initializeBrowserSqliteSchema(database) {
         )
       ) WITHOUT ROWID;
 
+      CREATE TABLE geometry_features (
+        dataset_id TEXT NOT NULL,
+        geometry_type TEXT NOT NULL
+          CHECK (geometry_type IN ('line', 'region')),
+        feature_id TEXT NOT NULL
+          CHECK (length(trim(feature_id)) > 0),
+        part TEXT NOT NULL DEFAULT '',
+        source_row_index INTEGER NOT NULL
+          CHECK (source_row_index >= 0),
+        feature_order_index INTEGER NOT NULL
+          CHECK (feature_order_index >= 0),
+        part_order_index INTEGER NOT NULL
+          CHECK (part_order_index >= 0),
+        min_lat REAL NOT NULL
+          CHECK (min_lat >= -90 AND min_lat <= 90),
+        max_lat REAL NOT NULL
+          CHECK (max_lat >= -90 AND max_lat <= 90),
+        min_lon REAL NOT NULL
+          CHECK (min_lon >= -180 AND min_lon <= 180),
+        max_lon REAL NOT NULL
+          CHECK (max_lon >= -180 AND max_lon <= 180),
+        timeline_start_year INTEGER,
+        timeline_end_year INTEGER,
+        coordinates_json TEXT NOT NULL DEFAULT '[]'
+          CHECK (json_valid(coordinates_json)),
+        style_json TEXT NOT NULL DEFAULT '{}'
+          CHECK (json_valid(style_json)),
+        arrow_mode TEXT
+          CHECK (
+            arrow_mode IS NULL
+            OR arrow_mode IN ('none', 'start', 'end', 'both')
+          ),
+        PRIMARY KEY (dataset_id, geometry_type, feature_id, part),
+        FOREIGN KEY (dataset_id, source_row_index)
+          REFERENCES source_rows(dataset_id, source_row_index)
+          ON DELETE CASCADE,
+        CHECK (min_lat <= max_lat),
+        CHECK (min_lon <= max_lon),
+        CHECK (
+          (geometry_type = 'line' AND part = '' AND arrow_mode IS NOT NULL)
+          OR
+          (geometry_type = 'region' AND arrow_mode IS NULL)
+        ),
+        CHECK (
+          (timeline_start_year IS NULL AND timeline_end_year IS NULL)
+          OR
+          (
+            timeline_start_year IS NOT NULL
+            AND timeline_end_year IS NOT NULL
+            AND timeline_start_year <= timeline_end_year
+          )
+        )
+      ) WITHOUT ROWID;
+
       CREATE INDEX idx_datasets_imported_order
         ON datasets(imported_at DESC, id);
 
@@ -145,7 +209,24 @@ export function initializeBrowserSqliteSchema(database) {
           timeline_end_year
         );
 
-      PRAGMA user_version = 2;
+      CREATE INDEX idx_geometry_features_dataset_bounds
+        ON geometry_features(
+          dataset_id,
+          geometry_type,
+          min_lat,
+          max_lat,
+          min_lon,
+          max_lon
+        );
+
+      CREATE INDEX idx_geometry_features_dataset_timeline
+        ON geometry_features(
+          dataset_id,
+          timeline_start_year,
+          timeline_end_year
+        );
+
+      PRAGMA user_version = 3;
     `);
     database.run('COMMIT');
   } catch (error) {

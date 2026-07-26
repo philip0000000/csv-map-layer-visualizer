@@ -90,7 +90,7 @@ respondSuccess(worker, worker.posted.at(-1), {
   initialized: true,
   reused: false,
   databaseStorage: 'memory',
-  schemaVersion: 2,
+  schemaVersion: 3,
 });
 assert.equal((await initializePromise).initialized, true);
 

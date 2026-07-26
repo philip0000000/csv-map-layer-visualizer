@@ -205,6 +205,8 @@ assert.equal(initialized.capabilities.droppedFileImport, true);
 assert.equal(initialized.capabilities.datasetSelection, true);
 assert.equal(initialized.capabilities.previewPaging, true);
 assert.equal(initialized.capabilities.points, true);
+assert.equal(initialized.capabilities.lines, true);
+assert.equal(initialized.capabilities.regions, true);
 assert.equal(initialized.capabilities.groupedViewportResults, true);
 assert.deepEqual(dataSource.getCapabilities(), initialized.capabilities);
 

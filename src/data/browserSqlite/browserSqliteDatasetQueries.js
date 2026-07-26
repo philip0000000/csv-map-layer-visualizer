@@ -23,6 +23,8 @@ export function getBrowserSqliteDatasetSummary(database) {
       stored_row_count,
       skipped_row_count,
       point_feature_count,
+      line_feature_count,
+      region_feature_count,
       enabled,
       detected_fields_json,
       coordinate_mapping_json,
@@ -34,13 +36,24 @@ export function getBrowserSqliteDatasetSummary(database) {
   `);
 
   const timelineExtent = readOne(database, `
-    SELECT
-      MIN(point_features.timeline_start_year) AS year_min,
-      MAX(point_features.timeline_end_year) AS year_max
-    FROM point_features
-    INNER JOIN datasets ON datasets.id = point_features.dataset_id
-    WHERE datasets.import_state = 'complete'
-      AND datasets.enabled = 1
+    SELECT MIN(start_year) AS year_min, MAX(end_year) AS year_max
+    FROM (
+      SELECT
+        point_features.timeline_start_year AS start_year,
+        point_features.timeline_end_year AS end_year
+      FROM point_features
+      INNER JOIN datasets ON datasets.id = point_features.dataset_id
+      WHERE datasets.import_state = 'complete'
+        AND datasets.enabled = 1
+      UNION ALL
+      SELECT
+        geometry_features.timeline_start_year AS start_year,
+        geometry_features.timeline_end_year AS end_year
+      FROM geometry_features
+      INNER JOIN datasets ON datasets.id = geometry_features.dataset_id
+      WHERE datasets.import_state = 'complete'
+        AND datasets.enabled = 1
+    )
   `);
   const yearMin = normalizeStoredYear(timelineExtent?.year_min);
   const yearMax = normalizeStoredYear(timelineExtent?.year_max);
@@ -57,7 +70,10 @@ export function getBrowserSqliteDatasetSummary(database) {
         rowCount: normalizeStoredCount(row.stored_row_count),
         totalRows: normalizeStoredCount(row.total_parsed_row_count),
         sizeBytes: normalizeNullableStoredCount(row.size_bytes),
-        importedFeatureCount: normalizeStoredCount(row.point_feature_count),
+        importedFeatureCount:
+          normalizeStoredCount(row.point_feature_count) +
+          normalizeStoredCount(row.line_feature_count) +
+          normalizeStoredCount(row.region_feature_count),
         skippedRowCount: normalizeStoredCount(row.skipped_row_count),
         importedAt: normalizeNullableString(row.imported_at),
         latField: normalizeNullableString(mapping.latField),

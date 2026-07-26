@@ -2,6 +2,9 @@ import { MAX_CSV_PARSE_WARNINGS } from '../csvParsingCompatibility.js';
 import {
   rebuildBrowserSqlitePointFeatures,
 } from './browserSqlitePointDerivation.js';
+import {
+  rebuildBrowserSqliteGeometryFeatures,
+} from './browserSqliteGeometryDerivation.js';
 
 /** Maximum already-normalized rows accepted by one storage call. */
 export const MAX_BROWSER_SQLITE_IMPORT_BATCH_ROWS = 1_000;
@@ -186,6 +189,10 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
       state.database,
       state.datasetId,
     );
+    const geometryResult = rebuildBrowserSqliteGeometryFeatures(
+      state.database,
+      state.datasetId,
+    );
     state.database.run('COMMIT');
     finishActiveImport(state, 'complete');
 
@@ -196,6 +203,10 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
       skippedRowCount: normalized.skippedRowCount,
       pointFeatureCount: pointResult.pointFeatureCount,
       skippedPointCount: pointResult.skippedPointCount,
+      lineFeatureCount: geometryResult.lineFeatureCount,
+      skippedLineCount: geometryResult.skippedLineCount,
+      regionFeatureCount: geometryResult.regionFeatureCount,
+      skippedRegionCount: geometryResult.skippedRegionCount,
       importedAt: normalized.importedAt,
     };
   } catch (error) {

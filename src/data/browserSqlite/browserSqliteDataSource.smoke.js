@@ -141,6 +141,46 @@ class FakeWorkerClient {
     });
   }
 
+  queryMapView(query) {
+    this.calls.push(['queryMapView', query]);
+    return this.result({
+      points: [{
+        id: 'dataset-1:0',
+        renderType: 'exact',
+        lat: 1,
+        lon: 2,
+        count: 1,
+        sourceRef: { datasetId: 'dataset-1', rowIndex: 0 },
+        marker: 'blue',
+        row: { mustNotEscape: true },
+      }],
+      lines: [],
+      regions: [],
+      stats: { totalMatchingCount: 1, returnedCount: 1 },
+      timelineIndex: { entries: [] },
+    });
+  }
+
+  getFeatureDetails(query) {
+    this.calls.push(['getFeatureDetails', query]);
+    return this.result({
+      featureId: 'dataset-1:0',
+      row: { name: 'One', count: 2 },
+      latField: 'lat',
+      lonField: 'lon',
+    });
+  }
+
+  getGroupRows(query) {
+    this.calls.push(['getGroupRows', query]);
+    return this.result({
+      rows: [{ name: 'One', count: 2 }],
+      offset: query.offset ?? 0,
+      limit: query.limit ?? 30,
+      totalRows: 1,
+    });
+  }
+
   dispose() {
     this.disposeCount += 1;
   }
@@ -164,7 +204,8 @@ assert.equal(initialized.capabilities.browserFileImport, true);
 assert.equal(initialized.capabilities.droppedFileImport, true);
 assert.equal(initialized.capabilities.datasetSelection, true);
 assert.equal(initialized.capabilities.previewPaging, true);
-assert.equal(initialized.capabilities.points, false);
+assert.equal(initialized.capabilities.points, true);
+assert.equal(initialized.capabilities.groupedViewportResults, true);
 assert.deepEqual(dataSource.getCapabilities(), initialized.capabilities);
 
 const observedProgress = [];
@@ -246,12 +287,21 @@ assert.equal(summary.selectedDatasetId, 'dataset-1');
 const missingRemoval = await dataSource.removeDataset('dataset-2');
 assert.equal(missingRemoval.error.category, 'dataset-not-found');
 
-for (const method of ['queryMapView', 'getFeatureDetails', 'getGroupRows']) {
-  assert.throws(() => dataSource[method](), (error) => (
-    error.category === 'backend-unavailable' &&
-    error.operation === DATA_SOURCE_METHODS[method]
-  ));
-}
+const mapView = await dataSource.queryMapView({
+  bounds: { north: 10, south: 0, east: 10, west: 0 },
+});
+assert.equal(mapView.points.length, 1);
+assert.equal(Object.hasOwn(mapView.points[0], 'row'), false);
+assert.deepEqual(client.calls.at(-1), [
+  'queryMapView',
+  { bounds: { north: 10, south: 0, east: 10, west: 0 } },
+]);
+const featureDetails = await dataSource.getFeatureDetails({
+  sourceRef: { datasetId: 'dataset-1', rowIndex: 0 },
+});
+assert.deepEqual(featureDetails.row, { name: 'One', count: '2' });
+const groupRows = await dataSource.getGroupRows({ offset: 0, limit: 1 });
+assert.deepEqual(groupRows.rows, [{ name: 'One', count: '2' }]);
 
 client.failure = { code: 'invalid-mapping', message: 'private detail' };
 const invalidMapping = await dataSource.updateDatasetMapping('dataset-1', {
@@ -276,7 +326,7 @@ client.failure = null;
 dataSource.dispose();
 dataSource.dispose();
 assert.equal(client.disposeCount, 1);
-assert.throws(() => dataSource.queryMapView(), (error) => (
+await assert.rejects(dataSource.queryMapView(), (error) => (
   error.category === 'backend-unavailable'
 ));
 const disposedInitialization = await dataSource.initialize();

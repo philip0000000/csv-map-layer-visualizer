@@ -72,7 +72,7 @@ try {
   assert.equal(result.totalParsedRowCount, 3);
   assert.equal(result.skippedRowCount, 0);
   assert.equal(result.storedBatchCount, 2);
-  assert.equal(result.importedFeatureCount, 0);
+  assert.equal(result.importedFeatureCount, 2);
   assert.deepEqual(result.detectedFields, {
     latField: 'latitude',
     lonField: 'longitude',

@@ -419,6 +419,9 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @typedef {object} GroupRef
  * @property {string} groupId
  * @property {MapBounds} bounds
+ * @property {string[]} [datasetIds]
+ *   Enabled dataset snapshot captured by grouped backends so later paging
+ *   cannot broaden when the current UI selection or visibility changes.
  * @property {TimelineFilter|null} timeline
  * @property {GroupGridRef} grid
  * @property {GroupRowsSortOrder} sortOrder

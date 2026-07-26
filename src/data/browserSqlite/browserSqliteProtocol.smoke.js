@@ -124,6 +124,72 @@ assert.deepEqual(validateBrowserSqliteRequest({
   operation: 'get-preview-page',
   payload: { datasetId: 'dataset-1', offset: 10, limit: 25 },
 });
+assert.deepEqual(validateBrowserSqliteRequest({
+  requestId: 'request-map-view',
+  operation: BROWSER_SQLITE_OPERATIONS.QUERY_MAP_VIEW,
+  payload: {
+    bounds: { north: 10, south: -10, east: -170, west: 170 },
+    zoom: 5,
+    timeline: {
+      timelineEnabled: true,
+      startYear: 2002,
+      endYear: 2000,
+    },
+    renderBudget: 50,
+    datasetIds: ['dataset-2', 'dataset-1', 'dataset-1'],
+  },
+}), {
+  requestId: 'request-map-view',
+  operation: 'query-map-view',
+  payload: {
+    bounds: { north: 10, south: -10, east: -170, west: 170 },
+    zoom: 5,
+    timeline: {
+      timelineEnabled: true,
+      startYear: 2002,
+      endYear: 2000,
+      yearMin: null,
+      yearMax: null,
+      dayFilterEnabled: false,
+      startDay: null,
+      endDay: null,
+    },
+    renderBudget: 50,
+    datasetIds: ['dataset-1', 'dataset-2'],
+  },
+});
+assert.deepEqual(validateBrowserSqliteRequest({
+  requestId: 'request-details',
+  operation: BROWSER_SQLITE_OPERATIONS.GET_FEATURE_DETAILS,
+  payload: {
+    featureId: 'dataset-1:4',
+    sourceRef: { datasetId: 'dataset-1', rowIndex: 4 },
+  },
+}), {
+  requestId: 'request-details',
+  operation: 'get-feature-details',
+  payload: {
+    featureId: 'dataset-1:4',
+    sourceRef: { datasetId: 'dataset-1', rowIndex: 4 },
+  },
+});
+const groupRef = {
+  groupId: 'grid:4:5',
+  bounds: { north: 10, south: 0, east: 10, west: 0 },
+  datasetIds: ['dataset-1'],
+  timeline: null,
+  grid: { cellLat: 4, cellLon: 5, cellHeight: 1, cellWidth: 2 },
+  sortOrder: 'dataset-source-row',
+};
+assert.deepEqual(validateBrowserSqliteRequest({
+  requestId: 'request-group',
+  operation: BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS,
+  payload: { groupRef, offset: 10, limit: 500 },
+}), {
+  requestId: 'request-group',
+  operation: 'get-group-rows',
+  payload: { groupRef, offset: 10, limit: 100 },
+});
 
 assertProtocolError(() => validateBrowserSqliteRequest(null), 'invalid-request');
 assertProtocolError(() => validateBrowserSqliteRequest([]), 'invalid-request');
@@ -247,6 +313,26 @@ assertProtocolError(() => validateBrowserSqliteRequest({
   requestId: 'request-preview-limit',
   operation: 'get-preview-page',
   payload: { datasetId: 'dataset-1', limit: 0 },
+}), 'invalid-request');
+assertProtocolError(() => validateBrowserSqliteRequest({
+  requestId: 'request-map-sql',
+  operation: 'query-map-view',
+  payload: { sql: 'SELECT row_json FROM source_rows' },
+}), 'invalid-request');
+assertProtocolError(() => validateBrowserSqliteRequest({
+  requestId: 'request-map-bounds',
+  operation: 'query-map-view',
+  payload: { bounds: { north: 1, south: 0, east: 1, west: Infinity } },
+}), 'invalid-request');
+assertProtocolError(() => validateBrowserSqliteRequest({
+  requestId: 'request-group-id',
+  operation: 'get-group-rows',
+  payload: { groupRef: { ...groupRef, groupId: 'grid:unsafe' } },
+}), 'invalid-request');
+assertProtocolError(() => validateBrowserSqliteRequest({
+  requestId: 'request-group-datasets',
+  operation: 'get-group-rows',
+  payload: { groupRef: { ...groupRef, datasetIds: [] } },
 }), 'invalid-request');
 
 assert.deepEqual(createBrowserSqliteSuccessResponse('request-1', {
@@ -397,6 +483,9 @@ assert.deepEqual(
     'remove-dataset',
     'update-dataset-mapping',
     'get-preview-page',
+    'query-map-view',
+    'get-feature-details',
+    'get-group-rows',
     'close',
   ]),
 );

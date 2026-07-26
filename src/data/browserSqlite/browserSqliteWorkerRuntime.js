@@ -18,6 +18,13 @@ import {
   importBrowserSqliteCsvBatch,
 } from './browserSqliteImportBatch.js';
 import {
+  getBrowserSqliteGroupRows,
+  getBrowserSqlitePointDetails,
+} from './browserSqlitePointDetails.js';
+import {
+  queryBrowserSqliteMapView,
+} from './browserSqlitePointQueries.js';
+import {
   BROWSER_SQLITE_OPERATIONS,
   BrowserSqliteProtocolError,
   createBrowserSqliteFailureResponse,
@@ -147,6 +154,21 @@ export function createBrowserSqliteWorkerRuntime({
         );
       case BROWSER_SQLITE_OPERATIONS.GET_PREVIEW_PAGE:
         return getBrowserSqlitePreviewPage(
+          requireDatabase(database),
+          request.payload,
+        );
+      case BROWSER_SQLITE_OPERATIONS.QUERY_MAP_VIEW:
+        return queryBrowserSqliteMapView(
+          requireDatabase(database),
+          request.payload,
+        );
+      case BROWSER_SQLITE_OPERATIONS.GET_FEATURE_DETAILS:
+        return getBrowserSqlitePointDetails(
+          requireDatabase(database),
+          request.payload,
+        );
+      case BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS:
+        return getBrowserSqliteGroupRows(
           requireDatabase(database),
           request.payload,
         );

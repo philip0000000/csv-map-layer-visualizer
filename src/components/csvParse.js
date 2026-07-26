@@ -1,4 +1,12 @@
 import Papa from "papaparse";
+import {
+  collectCsvParserWarnings,
+  csvRowToObject,
+  isCsvRowEmpty,
+  normalizeCsvHeaders,
+  pushCsvWarning,
+  warnForExtraCsvCells,
+} from "../data/csvParsingCompatibility.js";
 
 /**
  * Maximum number of rows shown in the preview table.
@@ -6,11 +14,6 @@ import Papa from "papaparse";
  */
 const MAX_PREVIEW_ROWS = 25;
 
-/**
- * Maximum number of error messages we keep.
- * Prevents flooding the UI if a file is very broken.
- */
-const MAX_ERRORS = 200;
 
 /**
  * Size of each CSV chunk PapaParse reads at a time.
@@ -76,17 +79,6 @@ export async function parseCsvBlob(blob, { rowCap = null } = {}) {
 }
 
 
-/**
- * Add PapaParse errors to our user-facing warning list.
- * The list is capped so a broken file cannot flood the UI.
- */
-function collectParserErrors(parseErrors, errors) {
-  if (!errors?.length) return;
-
-  for (const e of errors.slice(0, MAX_ERRORS)) {
-    pushErr(parseErrors, `Parser: ${e.message} (row ${e.row ?? "?"})`);
-  }
-}
 
 /**
  * Create the shared state used while PapaParse sends file chunks.
@@ -110,7 +102,7 @@ function createChunkParserState({ rowCap = null } = {}) {
  * Each chunk may contain parser errors and many CSV rows.
  */
 function processParsedChunk(state, result) {
-  collectParserErrors(state.parseErrors, result.errors);
+  collectCsvParserWarnings(state.parseErrors, result.errors);
 
   const data = Array.isArray(result.data) ? result.data : [];
   for (const rowArr of data) {
@@ -128,22 +120,21 @@ function processParsedChunkRow(state, rowArr, lineNumber) {
   if (!Array.isArray(rowArr)) {
     if (state.headers) {
       state.skipped++;
-      pushErr(state.parseErrors, `Skipped non-row at line ${lineNumber}.`);
+      pushCsvWarning(state.parseErrors, `Skipped non-row at line ${lineNumber}.`);
     }
     return;
   }
 
-  if (isEmptyRow(rowArr)) {
+  if (isCsvRowEmpty(rowArr)) {
     return;
   }
 
   // The first non-empty row becomes the header row.
   if (!state.headers) {
-    const rawHeaders = rowArr.map((h) => String(h ?? "").trim());
-    const headers = normalizeHeaders(rawHeaders);
+    const headers = normalizeCsvHeaders(rowArr);
 
     if (headers.length === 0) {
-      pushErr(state.parseErrors, "Header row is empty.");
+      pushCsvWarning(state.parseErrors, "Header row is empty.");
       return;
     }
 
@@ -151,19 +142,19 @@ function processParsedChunkRow(state, rowArr, lineNumber) {
     return;
   }
 
-  if (rowArr.length > state.headers.length) {
-    pushErr(
-      state.parseErrors,
-      `Line ${lineNumber}: had ${rowArr.length} values; truncated to ${state.headers.length}.`
-    );
-  }
+  warnForExtraCsvCells(
+    rowArr,
+    state.headers,
+    lineNumber,
+    state.parseErrors,
+  );
 
   // Count every usable data row, even if mobile safety stops storing later rows.
   state.usableRowCount += 1;
 
   // rows is what the preview and map use, so cap only this stored array.
   if (state.rowCap == null || state.rows.length < state.rowCap) {
-    state.rows.push(rowArrayToObject(rowArr, state.headers));
+    state.rows.push(csvRowToObject(rowArr, state.headers));
   }
 }
 
@@ -181,18 +172,21 @@ function finalizeChunkedCsvResult(state) {
   }
 
   if (state.usableRowCount === 0) {
-    pushErr(state.parseErrors, "No usable data rows were parsed.");
+    pushCsvWarning(state.parseErrors, "No usable data rows were parsed.");
   }
 
   if (state.skipped > 0) {
-    pushErr(state.parseErrors, `Skipped ${state.skipped} malformed row(s).`);
+    pushCsvWarning(
+      state.parseErrors,
+      `Skipped ${state.skipped} malformed row(s).`,
+    );
   }
 
   // Show the cap as a normal parse warning instead of interrupting the user.
   if (state.rowCap != null && state.usableRowCount > state.rows.length) {
-    pushErr(
+    pushCsvWarning(
       state.parseErrors,
-      `Mobile safety: this large CSV was limited to the first ${state.rowCap} usable rows on this device. Use a desktop browser for the full dataset.`
+      `Mobile safety: this large CSV was limited to the first ${state.rowCap} usable rows on this device. Use a desktop browser for the full dataset.`,
     );
   }
 
@@ -251,62 +245,4 @@ function shouldApplyMobileRowCap(file) {
   const lowMemory = Number(nav?.deviceMemory) > 0 && nav.deviceMemory <= 4;
 
   return hasCoarsePointer || narrowScreen || lowMemory;
-}
-
-
-/**
- * True when every cell in a parsed row is blank after trimming.
- */
-function isEmptyRow(row) {
-  return row.every((v) => String(v ?? "").trim() === "");
-}
-
-/**
- * Convert one parsed row into an object using normalized headers.
- * Missing cells become empty strings; extra cells are ignored after warning.
- */
-function rowArrayToObject(rowArr, headers) {
-  const obj = {};
-
-  for (let c = 0; c < headers.length; c++) {
-    obj[headers[c]] = String(rowArr[c] ?? "").trim();
-  }
-
-  return obj;
-}
-
-/**
- * Normalize header names:
- * - Trim whitespace
- * - Remove empty names
- * - Ensure uniqueness
- *
- * Example:
- * ["lat", "lon", "lat"] -> ["lat", "lon", "lat_2"]
- */
-function normalizeHeaders(raw) {
-  const seen = new Map();
-  const out = [];
-
-  for (let i = 0; i < raw.length; i++) {
-    const base = raw[i].trim();
-    if (!base) continue;
-
-    const count = (seen.get(base) ?? 0) + 1;
-    seen.set(base, count);
-
-    out.push(count === 1 ? base : `${base}_${count}`);
-  }
-
-  return out;
-}
-
-/**
- * Add an error message if limit is not reached.
- * Prevents memory and UI overload.
- */
-function pushErr(list, msg) {
-  if (list.length < MAX_ERRORS) {
-    list.push(msg);
-  }
 }

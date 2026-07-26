@@ -16,16 +16,22 @@ import { CsvPanelOverlay } from "./components/CsvPanelOverlay";
 import { useCsvFileDrop } from "./components/useCsvFileDrop";
 import { useExampleCsvFilesFromUrl } from "./components/useExampleCsvFilesFromUrl";
 import { useTimelinePlayback } from "./components/useTimelinePlayback";
-import { createDesktopSqliteDataSource } from "./data/desktopSqliteDataSource";
 import { MarkerDetailsPanel } from "./components/MarkerDetailsPanel";
+import { useRuntimeDataSource } from "./components/useRuntimeDataSource";
 
 const LARGE_RAW_MARKER_WARNING_THRESHOLD = 3000;
 const SQLITE_RENDER_BUDGET = 1000;
 
 export default function App() {
-  // Electron exposes this object in desktop mode only. Browser builds will not have it.
-  const desktopApi = useMemo(() => globalThis.csvMapDesktop ?? null, []);
-  const isDesktop = desktopApi?.isDesktop === true;
+  const {
+    dataSource,
+    dataRevision,
+    initialization,
+    capabilities: desktopCapabilities,
+    workflow,
+  } = useRuntimeDataSource();
+  const usesBrowserFiles = workflow.browserFiles;
+  const usesViewportQueries = workflow.viewportQueries;
 
   /**
    * CSV file state and actions.
@@ -44,12 +50,17 @@ export default function App() {
     selected,
     setSelectedId,
     importFiles,
+    importDroppedFiles,
     unloadSelected,
     updateFileMapping,
     importExampleFile,
     unloadFile,
     updateFileEnabled,
-  } = useCsvFiles();
+  } = useCsvFiles({
+    dataSource,
+    dataRevision,
+    enabled: usesBrowserFiles,
+  });
 
   const {
     state: timelineState,
@@ -63,17 +74,21 @@ export default function App() {
   });
 
   const derivedMapFeatures = useDerivedMapFeatures({
-    files,
+    dataSource,
+    dataRevision,
+    enabled: usesBrowserFiles,
     timeline: timelineState,
   });
 
   useExampleCsvFilesFromUrl({
-    importExampleFile: isDesktop ? null : importExampleFile,
+    importExampleFile: desktopCapabilities.exampleImport
+      ? importExampleFile
+      : null,
   });
   const desktopImportAvailable =
-    isDesktop && typeof desktopApi.importCsvToSqlite === "function";
+    desktopCapabilities.nativeFilePickerImport;
   const desktopDroppedImportAvailable =
-    isDesktop && typeof desktopApi.importDroppedCsvFiles === "function";
+    usesViewportQueries && desktopCapabilities.droppedFileImport;
   const [desktopImportState, setDesktopImportState] = useState({
     status: "idle",
     summary: null,
@@ -84,7 +99,7 @@ export default function App() {
   // after any desktop database mutation.
   const [desktopDataRevision, setDesktopDataRevision] = useState(0);
   const [desktopDatasetState, setDesktopDatasetState] = useState({
-    status: isDesktop ? "loading" : "idle",
+    status: usesViewportQueries ? "loading" : "idle",
     datasets: [],
     error: null,
   });
@@ -99,23 +114,20 @@ export default function App() {
   const [mapViewport, setMapViewport] = useState(null);
 
   useEffect(() => {
-    if (!isDesktop || typeof desktopApi?.onCsvImportProgress !== "function") {
+    if (!desktopImportAvailable || !desktopCapabilities.importProgress) {
       return undefined;
     }
 
-    const unsubscribe = desktopApi.onCsvImportProgress((progress) => {
-      const normalizedProgress = normalizeDesktopImportProgress(progress);
-      if (!normalizedProgress) return;
-
+    const unsubscribe = dataSource.subscribeImportProgress((progress) => {
       setDesktopImportState((current) => (
         current.status === "importing"
-          ? { ...current, progress: normalizedProgress }
+          ? { ...current, progress }
           : current
       ));
     });
 
     return typeof unsubscribe === "function" ? unsubscribe : undefined;
-  }, [desktopApi, isDesktop]);
+  }, [dataSource, desktopCapabilities.importProgress, desktopImportAvailable]);
 
   // App owns marker selection so the map and details panel share one lifecycle.
   const [selectedMarker, setSelectedMarker] = useState(null);
@@ -129,24 +141,35 @@ export default function App() {
     error: null,
   });
   const desktopSqliteMapAvailable =
-    isDesktop && typeof desktopApi?.queryMapView === "function";
+    usesViewportQueries && desktopCapabilities.points;
   const desktopDatasetSummaryAvailable =
-    isDesktop && typeof desktopApi?.getDatasetSummary === "function";
+    usesViewportQueries;
   const desktopDatasetVisibilityAvailable =
-    isDesktop && typeof desktopApi?.setDatasetEnabled === "function";
+    usesViewportQueries && desktopCapabilities.datasetVisibility;
   const desktopDatasetRemovalAvailable =
-    isDesktop && typeof desktopApi?.removeDataset === "function";
-  const desktopSqliteDataSource = useMemo(
-    () => createDesktopSqliteDataSource({ desktopApi }),
-    [desktopApi],
-  );
+    usesViewportQueries && desktopCapabilities.datasetRemoval;
 
   useEffect(() => {
-    if (!isDesktop || !desktopDatasetSummaryAvailable) return undefined;
+    if (
+      !usesViewportQueries ||
+      !desktopDatasetSummaryAvailable ||
+      initialization == null
+    ) {
+      return undefined;
+    }
+
+    if (!initialization.ok) {
+      setDesktopDatasetState((current) => ({
+        ...current,
+        status: "error",
+        error: initialization.error?.message ?? "Could not initialize desktop data.",
+      }));
+      return undefined;
+    }
 
     let canceled = false;
 
-    desktopSqliteDataSource.getDatasetSummary().then((summary) => {
+    dataSource.getDatasetSummary().then((summary) => {
       if (canceled) return;
       setDesktopDatasetState({
         status: "loaded",
@@ -170,8 +193,9 @@ export default function App() {
   }, [
     desktopDataRevision,
     desktopDatasetSummaryAvailable,
-    desktopSqliteDataSource,
-    isDesktop,
+    dataSource,
+    initialization,
+    usesViewportQueries,
   ]);
   const desktopDatasetListState = desktopDatasetSummaryAvailable
     ? {
@@ -218,11 +242,11 @@ export default function App() {
     }));
 
     try {
-      const result = await desktopSqliteDataSource.setDatasetEnabled(
+      const result = await dataSource.setDatasetEnabled(
         datasetId,
         enabled,
       );
-      if (!result.updated) {
+      if (!result.ok) {
         throw new Error("The selected CSV dataset is no longer available.");
       }
 
@@ -253,7 +277,7 @@ export default function App() {
           : "Could not update dataset visibility.",
       }));
     }
-  }, [desktopDatasetVisibilityAvailable, desktopSqliteDataSource]);
+  }, [dataSource, desktopDatasetVisibilityAvailable]);
 
   const removeDesktopDataset = useCallback(async (datasetId) => {
     if (!desktopDatasetRemovalAvailable) return;
@@ -283,8 +307,8 @@ export default function App() {
     }));
 
     try {
-      const result = await desktopSqliteDataSource.removeDataset(datasetId);
-      if (!result.removed) {
+      const result = await dataSource.removeDataset(datasetId);
+      if (!result.ok) {
         throw new Error("The selected CSV dataset is no longer available.");
       }
 
@@ -314,7 +338,7 @@ export default function App() {
   }, [
     desktopDatasetRemovalAvailable,
     desktopDatasetState.datasets,
-    desktopSqliteDataSource,
+    dataSource,
   ]);
 
   // Picker and drop imports share state handling while the main process owns
@@ -369,24 +393,24 @@ export default function App() {
 
   const importCsvToSqlite = useCallback(() => {
     if (!desktopImportAvailable) return undefined;
-    return runDesktopImport(() => desktopApi.importCsvToSqlite());
-  }, [desktopApi, desktopImportAvailable, runDesktopImport]);
+    return runDesktopImport(() => dataSource.importFromPicker());
+  }, [dataSource, desktopImportAvailable, runDesktopImport]);
 
   const importDroppedCsvFiles = useCallback((droppedFiles) => {
     if (!desktopDroppedImportAvailable) return undefined;
     return runDesktopImport(
-      () => desktopApi.importDroppedCsvFiles(droppedFiles),
+      () => dataSource.importDroppedFiles({ files: droppedFiles }),
     );
-  }, [desktopApi, desktopDroppedImportAvailable, runDesktopImport]);
+  }, [dataSource, desktopDroppedImportAvailable, runDesktopImport]);
 
   const desktopDropEnabled =
     desktopDroppedImportAvailable && desktopImportState.status !== "importing";
   const csvFileDrop = useCsvFileDrop({
-    onImportFiles: isDesktop
-      ? (desktopDropEnabled ? importDroppedCsvFiles : null)
-      : importFiles,
+    onImportFiles: usesBrowserFiles
+      ? importDroppedFiles
+      : (desktopDropEnabled ? importDroppedCsvFiles : null),
   });
-  const fileDropAvailable = !isDesktop || desktopDropEnabled;
+  const fileDropAvailable = usesBrowserFiles || desktopDropEnabled;
 
   const desktopImport = useMemo(() => ({
     isAvailable: desktopImportAvailable,
@@ -411,7 +435,7 @@ export default function App() {
 
     let canceled = false;
 
-    desktopSqliteDataSource.queryMapView({
+    dataSource.queryMapView({
       bounds: mapViewport.bounds,
       zoom: mapViewport.zoom ?? null,
       timeline: timelineState,
@@ -434,7 +458,7 @@ export default function App() {
       canceled = true;
     };
   }, [
-    desktopSqliteDataSource,
+    dataSource,
     desktopSqliteMapAvailable,
     desktopDataRevision,
     mapViewport,
@@ -446,21 +470,23 @@ export default function App() {
     [desktopMapViewState.result],
   );
   // Desktop never falls back to the renderer's in-memory CSV data source.
-  const activeMapFeatures = isDesktop ? desktopMapFeatures : derivedMapFeatures;
-  const viewportQueryStats = isDesktop
+  const activeMapFeatures = usesViewportQueries
+    ? desktopMapFeatures
+    : derivedMapFeatures;
+  const viewportQueryStats = usesViewportQueries
     ? desktopMapViewState.result?.stats ?? null
     : null;
   // Detail loaders are desktop-only, so browser and in-memory maps keep their old path.
   const getDesktopFeatureDetails = useCallback(
-    (query) => desktopSqliteDataSource.getFeatureDetails(query),
-    [desktopSqliteDataSource],
+    (query) => dataSource.getFeatureDetails(query),
+    [dataSource],
   );
   const activeFeatureDetailsLoader = desktopSqliteMapAvailable
     ? getDesktopFeatureDetails
     : null;
   const getDesktopGroupRows = useCallback(
-    (query) => desktopSqliteDataSource.getGroupRows(query),
-    [desktopSqliteDataSource],
+    (query) => dataSource.getGroupRows(query),
+    [dataSource],
   );
   const activeGroupRowsLoader = desktopSqliteMapAvailable
     ? getDesktopGroupRows
@@ -600,26 +626,28 @@ export default function App() {
 
         <CsvPanelOverlay onVisibleWidthChange={setCsvPanelVisibleWidth}>
           <CsvPanel
-            files={isDesktop ? desktopDatasetListState.datasets : files}
-            selectedId={isDesktop ? null : selectedId}
-            onSelect={isDesktop ? undefined : setSelectedId}
-            onImportFiles={isDesktop ? undefined : importFiles}
+            files={usesViewportQueries ? desktopDatasetListState.datasets : files}
+            selectedId={usesViewportQueries ? null : selectedId}
+            onSelect={usesViewportQueries ? undefined : setSelectedId}
+            onImportFiles={usesBrowserFiles ? importFiles : undefined}
             desktopImport={desktopImport}
-            datasetListState={isDesktop ? desktopDatasetListState : null}
+            datasetListState={usesViewportQueries ? desktopDatasetListState : null}
             viewportQueryStats={viewportQueryStats}
-            onUnloadSelected={isDesktop ? undefined : unloadSelected}
-            onUnloadFile={isDesktop
+            onUnloadSelected={usesViewportQueries ? undefined : unloadSelected}
+            onUnloadFile={usesViewportQueries
               ? (desktopDatasetRemovalAvailable
                   ? removeDesktopDataset
                   : undefined)
               : unloadFile}
-            removeActionLabel={isDesktop ? "Remove" : "Unload"}
-            onToggleEnabled={isDesktop
+            removeActionLabel={usesViewportQueries ? "Remove" : "Unload"}
+            onToggleEnabled={usesViewportQueries
               ? (desktopDatasetVisibilityAvailable
                   ? updateDesktopDatasetEnabled
                   : undefined)
               : updateFileEnabled}
-            onUpdateMapping={isDesktop ? undefined : updateFileMapping}
+            onUpdateMapping={desktopCapabilities.datasetMapping
+              ? updateFileMapping
+              : undefined}
             timelineState={timelineState}
             timelineFields={timelineFields}
             onTimelinePatch={patchTimeline}
@@ -674,34 +702,6 @@ function toLegacyMapFeatures(mapView) {
   };
 }
 
-function normalizeDesktopImportProgress(progress) {
-  if (!progress || typeof progress !== "object") return null;
-  if (progress.state !== "started" && progress.state !== "completed") return null;
-
-  const fileNumber = normalizePositiveInteger(progress.fileNumber);
-  const totalFiles = normalizePositiveInteger(progress.totalFiles);
-  const fileName = getDisplayFileName(progress.fileName);
-  if (!fileNumber || !totalFiles || fileNumber > totalFiles || !fileName) return null;
-
-  return {
-    state: progress.state,
-    fileName,
-    fileNumber,
-    totalFiles,
-    ok: progress.state === "completed" ? progress.ok === true : null,
-  };
-}
-
-function normalizePositiveInteger(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) return null;
-  return Math.trunc(number);
-}
-
-function getDisplayFileName(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  return value.trim().split(/[\\/]/).pop() || null;
-}
 /**
  * Compute the year extent of a CSV row for timeline domain detection.
  *

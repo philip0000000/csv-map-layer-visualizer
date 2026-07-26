@@ -1,327 +1,95 @@
-import { useMemo, useState } from "react";
-import { parseCsvBlob, parseCsvFile } from "./csvParse";
-import { autoDetectLatLon } from "./geoColumns";
+import { useCallback, useMemo } from 'react';
+
+const EMPTY_SUMMARY = Object.freeze({
+  datasets: Object.freeze([]),
+  selectedDatasetId: null,
+  timeline: null,
+});
 
 /**
- * React hook that manages loaded CSV files (in-memory only).
- * - Allows importing multiple CSV files
- * - Keeps track of the currently selected file
- * - Lets the user enable or disable file visibility on the map
- *
- * Notes:
- * - Parsed CSV rows are intentionally NOT persisted to sessionStorage/localStorage.
- *   Large datasets can exceed browser storage quotas.
- * - Demo/example loading is handled via importExampleFile() (e.g. ?example=books.csv).
- *
- * - Auto-detect latitude/longitude columns on import (when possible)
- * - Provide updateFileMapping() so UI can change mapping later
+ * Browser view controller over the already-selected session DataSource.
+ * It never creates a second backend and remains inactive in desktop sessions.
  */
-export function useCsvFiles() {
-  // List of loaded CSV files.
-  const [files, setFiles] = useState([]); // Empty defaults
-  // ID requested by the UI. The public selectedId below is derived from files
-  // so removed files cannot leave the app with an invalid selection.
-  const [requestedSelectedId, setSelectedId] = useState(null);
+export function useCsvFiles({ dataSource, dataRevision, enabled }) {
+  const summary = useMemo(() => {
+    if (!enabled) return EMPTY_SUMMARY;
+    // The selected in-memory adapter mutates internally; revision invalidates reads.
+    void dataRevision;
+    return dataSource.getDatasetSummary();
+  }, [dataRevision, dataSource, enabled]);
+  const selectedId = summary.selectedDatasetId;
 
-  // The currently selected CSV file object.
-  // Returns null if nothing is selected.
+  // Preserve the panel's current view model while sourcing the selected preview
+  // through the contract. Non-selected complete rows stay out of React state.
+  const files = useMemo(() => summary.datasets.map((dataset) => {
+    const isSelected = dataset.id === selectedId;
+    const preview = isSelected
+      ? dataSource.getPreviewPage({
+          datasetId: dataset.id,
+          offset: 0,
+          limit: Math.max(dataset.rowCount, 30),
+        })
+      : null;
+
+    return {
+      ...dataset,
+      size: dataset.sizeBytes,
+      rows: preview?.rows ?? [],
+    };
+  }), [dataSource, selectedId, summary.datasets]);
+
   const selected = useMemo(
-    () => files.find((f) => f.id === requestedSelectedId) || files[0] || null,
-    [files, requestedSelectedId]
+    () => files.find((file) => file.id === selectedId) ?? null,
+    [files, selectedId],
   );
 
-  const selectedId = selected?.id ?? null;
-  /**
-   * Import one or more CSV files.
-   * Files are parsed client-side only.
-   *
-   * On import we also try to auto-detect the lat/lon columns
-   * based on common header names.
-   */
-  async function importFiles(fileList) {
-    // Hard limit to avoid memory issues with huge imports.
-    const MAX_FILES = 100;
+  const setSelectedId = useCallback((datasetId) => (
+    enabled ? dataSource.selectDataset(datasetId) : null
+  ), [dataSource, enabled]);
 
-    // Calculate how many files we can still accept.
-    const remainingSlots = Math.max(0, MAX_FILES - files.length);
+  const importFiles = useCallback((fileList) => (
+    enabled
+      ? dataSource.importBrowserFiles({ files: Array.from(fileList ?? []) })
+      : null
+  ), [dataSource, enabled]);
 
-    // Ignore extra files if limit is exceeded.
-    const toAdd = fileList.slice(0, remainingSlots);
+  const importDroppedFiles = useCallback((fileList) => (
+    enabled
+      ? dataSource.importDroppedFiles({ files: Array.from(fileList ?? []) })
+      : null
+  ), [dataSource, enabled]);
 
-    const newItems = [];
+  const importExampleFile = useCallback((name) => (
+    enabled ? dataSource.importExample({ name }) : null
+  ), [dataSource, enabled]);
 
-    for (const file of toAdd) {
-      // Parse CSV content into structured data.
-      const parsed = await parseCsvFile(file);
+  const unloadFile = useCallback((datasetId) => (
+    enabled ? dataSource.removeDataset(datasetId) : null
+  ), [dataSource, enabled]);
 
-      // Auto-detect mapping from headers.
-      // This does not change parsing; it only saves suggested column names.
-      const { latField, lonField } = autoDetectLatLon(parsed.headers);
+  const unloadSelected = useCallback(() => (
+    enabled && selectedId ? dataSource.removeDataset(selectedId) : null
+  ), [dataSource, enabled, selectedId]);
 
-      // Keep parse warnings, and add a warning if mapping could not be detected.
-      const parseErrors = Array.isArray(parsed.parseErrors)
-        ? [...parsed.parseErrors]
-        : [];
+  const updateFileEnabled = useCallback((datasetId, visible) => (
+    enabled ? dataSource.setDatasetEnabled(datasetId, !!visible) : null
+  ), [dataSource, enabled]);
 
-      if (!latField || !lonField) {
-        parseErrors.push(
-          "Geo: Could not auto-detect latitude/longitude columns. Choose them manually."
-        );
-      }
+  const updateFileMapping = useCallback((datasetId, mapping) => (
+    enabled ? dataSource.updateDatasetMapping(datasetId, mapping) : null
+  ), [dataSource, enabled]);
 
-      // Build internal representation of the CSV file.
-      const item = {
-        // Use crypto.randomUUID if available, fallback otherwise.
-        id: crypto.randomUUID
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random()}`,
-
-        name: file.name,
-        size: file.size,
-        lastModified: file.lastModified,
-
-        headers: parsed.headers,
-        rows: parsed.rows,
-        previewRows: parsed.previewRows,
-        totalRows: parsed.totalRows,
-        parseErrors,
-
-        // Stored per file for the current session.
-        latField: latField ?? null,
-        lonField: lonField ?? null,
-
-        // Visibility flag used by the map layer list.
-        enabled: true,
-      };
-
-      newItems.push(item);
-    }
-
-    // Add new files to the front of the list.
-    // Newest files appear first in the UI.
-    setFiles((prev) => [...newItems, ...prev]);
-
-    // Automatically select the most recently imported file.
-    if (newItems.length > 0) {
-      setSelectedId(newItems[0].id);
-    }
-  }
-
-  /**
-   * Load an example CSV file from /public/examples.
-   * Supports both direct paths and filename lookup via examples-index.json.
-   * Keeps old URLs working (e.g. ?example=books.csv).
-   */
-  async function importExampleFile(exampleFileName) {
-    const requested = String(exampleFileName ?? "").trim();
-    if (!requested) return;
-
-    // Allow:
-    // - books.csv
-    // - present-day/books.csv
-    // - debug/test_case.csv
-    const isSafeExamplePath =
-      /^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.csv$/.test(requested) &&
-      !requested.includes("..");
-
-    if (!isSafeExamplePath) return;
-
-    const baseUrl = `${import.meta.env.BASE_URL}examples/`;
-
-    let resolvedRelativePath = null;
-
-    // Case 1:
-    // Explicit subfolder path was provided in the URL.
-    // Example: ?example=present-day/books.csv
-    if (requested.includes("/")) {
-      resolvedRelativePath = requested;
-    } else {
-      // Case 2:
-      // Bare filename was provided.
-      // Preserve backward compatibility:
-      // 1) Try old flat examples/<name>
-      // 2) If not found, use examples-index.json and pick first basename match
-
-      const legacyUrl = `${baseUrl}${requested}`;
-      const legacyBlob = await fetchExampleCsvBlob(legacyUrl);
-
-      if (legacyBlob != null) {
-        return addParsedExampleFile({
-          displayName: requested,
-          blob: legacyBlob,
-        });
-      }
-
-      // Fall back to manifest lookup
-      const indexUrl = `${baseUrl}examples-index.json`;
-      const indexRes = await fetch(indexUrl, { cache: "no-cache" });
-      if (!indexRes.ok) {
-        return;
-      }
-
-      // Read examples-index.json and find a file with the same name.
-      // If found, use the first matching file path.
-      let indexJson = null;
-      try {
-        indexJson = await indexRes.json();
-      } catch {
-        return;
-      }
-
-      const indexedFiles = Array.isArray(indexJson?.files) ? indexJson.files : [];
-      const normalizedRequested = requested.toLowerCase();
-
-      // Find the first file in the index that has the same name as requested.
-      // Only allow safe paths and ignore invalid entries.
-      const match = indexedFiles.find((relativePath) => {
-        const s = String(relativePath ?? "").trim();
-        if (!/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.csv$/.test(s)) return false;
-        if (s.includes("..")) return false;
-
-        const basename = s.split("/").pop()?.toLowerCase() ?? "";
-        return basename === normalizedRequested;
-      });
-
-      // If no file was found, stop here.
-      if (!match) {
-        return;
-      }
-
-      resolvedRelativePath = match;
-    }
-
-    const fileUrl = `${baseUrl}${resolvedRelativePath}`;
-    const blob = await fetchExampleCsvBlob(fileUrl);
-    if (blob == null) {
-      return;
-    }
-
-    return addParsedExampleFile({
-      displayName: requested,
-      blob,
-    });
-  }
-
-  /**
-   * Remove the currently selected CSV file.
-   */
-  function unloadSelected() {
-    if (!selectedId) return;
-
-    setFiles((prev) => prev.filter((f) => f.id !== selectedId));
-  }
-
-  /**
-   * Remove a single CSV file by ID.
-   */
-  function unloadFile(fileId) {
-    if (!fileId) return;
-    setFiles((prev) => prev.filter((f) => f.id !== fileId));
-  }
-
-  /**
-   * Update one file's visibility flag.
-   */
-  function updateFileEnabled(fileId, enabled) {
-    if (!fileId) return;
-    setFiles((prev) =>
-      prev.map((f) => (f.id === fileId ? { ...f, enabled: !!enabled } : f))
-    );
-  }
-
-  /**
-   * Update one file with a small patch object.
-   * This is used when the user chooses lat/lon columns manually.
-   *
-   * Example patch:
-   * { latField: "latitude", lonField: "longitude" }
-   */
-  function updateFileMapping(fileId, patch) {
-    if (!fileId || !patch) return;
-
-    setFiles((prev) =>
-      prev.map((f) => {
-        if (f.id !== fileId) return f;
-        return { ...f, ...patch };
-      })
-    );
-  }
-
-  /**
-   * Parse a fetched example CSV and add it as a new file in state.
-   * Also auto-detects latitude/longitude fields.
-   */
-  async function addParsedExampleFile({ displayName, blob }) {
-    const parsed = await parseCsvBlob(blob);
-
-    const { latField, lonField } = autoDetectLatLon(parsed.headers);
-
-    const parseErrors = Array.isArray(parsed.parseErrors)
-      ? [...parsed.parseErrors]
-      : [];
-
-    if (!latField || !lonField) {
-      parseErrors.push(
-        "Geo: Could not auto-detect latitude/longitude columns. Choose them manually."
-      );
-    }
-
-    const item = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-
-      // Keep what the user requested visible in the UI.
-      name: displayName,
-      size: blob.size,
-      lastModified: null,
-
-      headers: parsed.headers,
-      rows: parsed.rows,
-      previewRows: parsed.previewRows,
-      totalRows: parsed.totalRows,
-      parseErrors,
-
-      latField: latField ?? null,
-      lonField: lonField ?? null,
-      enabled: true,
-    };
-
-    setFiles((prev) => [item, ...prev]);
-    setSelectedId(item.id);
-  }
-
-  async function fetchExampleCsvBlob(url) {
-    const res = await fetch(url, { cache: "no-cache" });
-    if (!res.ok) return null;
-
-    // Vite/GitHub Pages may return index.html for missing files.
-    // Reject HTML before handing the response to the chunked CSV parser.
-    const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
-    if (contentType.includes("text/html")) {
-      return null;
-    }
-
-    const blob = await res.blob();
-    const prefix = await blob.slice(0, 512).text();
-    const trimmed = prefix.trimStart().toLowerCase();
-    if (trimmed.startsWith("<!doctype html") || trimmed.startsWith("<html")) {
-      return null;
-    }
-
-    return blob;
-  }
-
-  // Public API of this hook.
   return {
-    files, // all loaded CSV files
-    selectedId, // ID of selected CSV
-    selected, // selected CSV object (or null)
-    setSelectedId, // allow UI to change selection
-    importFiles, // import new CSV files
-    importExampleFile, // import one CSV from /public/examples via URL
-    unloadSelected, // remove selected CSV
-    unloadFile, // remove a CSV by ID
-    updateFileEnabled, // set file visibility for the map
-    updateFileMapping, // update lat/lon mapping for a file
+    files,
+    selectedId,
+    selected,
+    setSelectedId,
+    importFiles,
+    importDroppedFiles,
+    importExampleFile,
+    unloadSelected,
+    unloadFile,
+    updateFileEnabled,
+    updateFileMapping,
   };
 }
-

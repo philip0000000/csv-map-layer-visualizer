@@ -1,14 +1,20 @@
-import { useMemo } from "react";
-import { createInMemoryDataSource } from "../data/inMemoryDataSource";
+import { useMemo } from 'react';
 
 /**
  * Bridge hook for the current React UI.
- * Internally queries the in-memory DataSource, but preserves the old return
- * shape expected by App/GeoMap until those components are migrated.
+ * Queries the selected DataSource while preserving the old return shape
+ * expected by App and GeoMap.
  */
-export function useDerivedMapFeatures({ files, timeline }) {
+export function useDerivedMapFeatures({
+  dataSource,
+  dataRevision,
+  enabled,
+  timeline,
+}) {
   return useMemo(() => {
-    const dataSource = createInMemoryDataSource({ files });
+    if (!enabled) return createEmptyLegacyMapFeatures();
+    // The stable adapter mutates internally, so revision invalidates the query.
+    void dataRevision;
     const mapView = dataSource.queryMapView({ timeline });
 
     const getSourceRow = (sourceFileId, sourceRowIndex) => (
@@ -39,5 +45,15 @@ export function useDerivedMapFeatures({ files, timeline }) {
       getSourceRow,
       timelineIndex: mapView.timelineIndex,
     };
-  }, [files, timeline]);
+  }, [dataRevision, dataSource, enabled, timeline]);
+}
+
+function createEmptyLegacyMapFeatures() {
+  return {
+    points: { points: [], skipped: 0, skippedByTimeline: 0 },
+    lines: { lines: [], skipped: 0, skippedByTimeline: 0 },
+    regions: { polygons: [], skipped: 0, skippedByTimeline: 0 },
+    getSourceRow: () => null,
+    timelineIndex: { entries: [] },
+  };
 }

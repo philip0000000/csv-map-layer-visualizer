@@ -36,8 +36,8 @@ const CAPABILITIES = normalizeBackendCapabilities({
   datasetMapping: true,
   previewPaging: true,
   points: true,
-  lines: false,
-  regions: false,
+  lines: true,
+  regions: true,
   groupedViewportResults: true,
 });
 

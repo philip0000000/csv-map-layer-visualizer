@@ -441,6 +441,13 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {number} [returnedCount]
  * @property {number} [hiddenByRenderBudget]
  * @property {boolean} [overBudget]
+ * @property {number} [totalMatchingLineCount]
+ * @property {number} [totalMatchingRegionCount]
+ * @property {number} [returnedLineCount]
+ * @property {number} [returnedRegionCount]
+ * @property {number} [hiddenGeometryCount]
+ * @property {number|null} [geometryLimit]
+ * @property {boolean} [geometryOverLimit]
  */
 
 /**

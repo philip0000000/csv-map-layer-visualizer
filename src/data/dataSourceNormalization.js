@@ -516,6 +516,21 @@ function normalizeMapViewStats(value, returnedCount) {
   const skippedPointsByTimeline = normalizeNonNegativeInteger(source.skippedPointsByTimeline);
   const skippedLinesByTimeline = normalizeNonNegativeInteger(source.skippedLinesByTimeline);
   const skippedRegionsByTimeline = normalizeNonNegativeInteger(source.skippedRegionsByTimeline);
+  const totalMatchingLineCount = normalizeNonNegativeInteger(
+    source.totalMatchingLineCount,
+  );
+  const totalMatchingRegionCount = normalizeNonNegativeInteger(
+    source.totalMatchingRegionCount,
+  );
+  const returnedLineCount = normalizeNonNegativeInteger(
+    source.returnedLineCount,
+  );
+  const returnedRegionCount = normalizeNonNegativeInteger(
+    source.returnedRegionCount,
+  );
+  const hiddenGeometryCount = normalizeNonNegativeInteger(
+    source.hiddenGeometryCount,
+  );
 
   return {
     skippedPoints: normalizeNonNegativeInteger(source.skippedPoints),
@@ -533,6 +548,14 @@ function normalizeMapViewStats(value, returnedCount) {
     returnedCount: normalizedReturnedCount,
     hiddenByRenderBudget,
     overBudget: source.overBudget === true || hiddenByRenderBudget > 0,
+    totalMatchingLineCount,
+    totalMatchingRegionCount,
+    returnedLineCount,
+    returnedRegionCount,
+    hiddenGeometryCount,
+    geometryLimit: normalizeOptionalNonNegativeInteger(source.geometryLimit),
+    geometryOverLimit:
+      source.geometryOverLimit === true || hiddenGeometryCount > 0,
   };
 }
 

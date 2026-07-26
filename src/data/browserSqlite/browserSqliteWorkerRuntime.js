@@ -19,7 +19,7 @@ import {
 } from './browserSqliteImportBatch.js';
 import {
   getBrowserSqliteGroupRows,
-  getBrowserSqlitePointDetails,
+  getBrowserSqliteFeatureDetails,
 } from './browserSqlitePointDetails.js';
 import {
   queryBrowserSqliteMapView,
@@ -163,7 +163,7 @@ export function createBrowserSqliteWorkerRuntime({
           request.payload,
         );
       case BROWSER_SQLITE_OPERATIONS.GET_FEATURE_DETAILS:
-        return getBrowserSqlitePointDetails(
+        return getBrowserSqliteFeatureDetails(
           requireDatabase(database),
           request.payload,
         );

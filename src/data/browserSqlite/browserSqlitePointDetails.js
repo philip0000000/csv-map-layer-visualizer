@@ -4,43 +4,61 @@ export const MAX_BROWSER_SQLITE_GROUP_ROWS_LIMIT = 100;
 const GROUP_ROWS_SORT_ORDER = 'dataset-source-row';
 
 /**
- * Fetch one original source row for an exact point reference.
+ * Fetch one original source row for an exact map-feature reference.
  *
- * Full row JSON is read only for this explicit lookup, never for viewport work.
+ * The reference must belong to a currently derived point, line, or region, so
+ * this operation cannot expose arbitrary stored rows. Full row JSON is read
+ * only for this explicit lookup, never for viewport work. Multipart regions
+ * deliberately carry the same derivation-selected reference, so every part
+ * resolves the same logical metadata row.
  *
  * @param {{ prepare: Function }} database sql.js database.
  * @param {{ sourceRef?: object }} [query] Exact detail request.
  * @returns {object} Normalized detail input or a defined empty result.
  */
-export function getBrowserSqlitePointDetails(database, query = {}) {
+export function getBrowserSqliteFeatureDetails(database, query = {}) {
   requireDatabase(database);
   const sourceRef = normalizeSourceRef(query.sourceRef);
   if (!sourceRef) return createEmptyDetailsResult();
 
   const row = readOne(database, `
-    SELECT
-      source_rows.row_json,
-      datasets.coordinate_mapping_json
-    FROM point_features
-    INNER JOIN source_rows
-      ON source_rows.dataset_id = point_features.dataset_id
-      AND source_rows.source_row_index = point_features.source_row_index
-    INNER JOIN datasets ON datasets.id = point_features.dataset_id
-    WHERE point_features.dataset_id = ?
-      AND point_features.source_row_index = ?
+    SELECT source_rows.row_json, datasets.coordinate_mapping_json
+    FROM source_rows
+    INNER JOIN datasets ON datasets.id = source_rows.dataset_id
+    WHERE source_rows.dataset_id = ?
+      AND source_rows.source_row_index = ?
       AND datasets.import_state = 'complete'
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM point_features
+          WHERE point_features.dataset_id = source_rows.dataset_id
+            AND point_features.source_row_index = source_rows.source_row_index
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM geometry_features
+          WHERE geometry_features.dataset_id = source_rows.dataset_id
+            AND geometry_features.source_row_index = source_rows.source_row_index
+        )
+      )
     LIMIT 1
   `, [sourceRef.datasetId, sourceRef.rowIndex]);
   if (!row) return createEmptyDetailsResult();
 
   const mapping = parseJsonObject(row.coordinate_mapping_json);
   return {
-    featureId: `${sourceRef.datasetId}:${sourceRef.rowIndex}`,
+    featureId: normalizeNullableString(query.featureId) ??
+      `${sourceRef.datasetId}:${sourceRef.rowIndex}`,
     row: parseJsonObject(row.row_json),
     latField: normalizeNullableString(mapping.latField),
     lonField: normalizeNullableString(mapping.lonField),
   };
 }
+
+// Keep the issue-#105 export available to focused point-query tests and any
+// temporary callers while the worker runtime uses the feature-neutral name.
+export const getBrowserSqlitePointDetails = getBrowserSqliteFeatureDetails;
 
 /**
  * Return a stable page of source rows represented by one grouped point.

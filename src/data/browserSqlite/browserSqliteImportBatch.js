@@ -249,7 +249,7 @@ function normalizeSuccessfulFileResult(value, fileName) {
     fileName,
     datasetId: normalizeNullableId(value.datasetId),
     rowCount: normalizeCount(value.rowCount),
-    importedFeatureCount: 0,
+    importedFeatureCount: normalizeCount(value.importedFeatureCount),
     skippedRowCount: normalizeCount(value.skippedRowCount),
     warnings: Array.isArray(value.warnings) ? [...value.warnings] : [],
     detectedFields: isRecord(value.detectedFields)

@@ -244,7 +244,10 @@ function finalizeParsedFile(state) {
     datasetId: committed.datasetId,
     rowCount: committed.rowCount,
     totalParsedRowCount: committed.totalParsedRowCount,
-    importedFeatureCount: committed.pointFeatureCount,
+    importedFeatureCount:
+      committed.pointFeatureCount +
+      committed.lineFeatureCount +
+      committed.regionFeatureCount,
     skippedRowCount: committed.skippedRowCount,
     warnings: [...state.warnings],
     detectedFields,

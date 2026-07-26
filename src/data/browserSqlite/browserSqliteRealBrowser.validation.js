@@ -43,6 +43,10 @@ async function runRealBrowserValidation() {
       initialization.capabilities.persistence === 'temporary',
       'The browser SQLite adapter did not report temporary storage.',
     );
+    requireCondition(
+      initialization.capabilities.lines && initialization.capabilities.regions,
+      'The browser SQLite adapter did not report geometry parity.',
+    );
 
     const unsubscribeProgress = dataSource.subscribeImportProgress((event) => {
       progress.push(event);
@@ -189,6 +193,65 @@ async function runRealBrowserValidation() {
     );
     requireCondition(queryHeartbeatCount > 0, 'The main thread stalled during queries.');
 
+    const geometryImport = await dataSource.importBrowserFiles({
+      files: [createGeometryCsvFile()],
+    });
+    requireCondition(geometryImport.ok, 'The geometry CSV import failed.');
+    requireEqual(
+      geometryImport.results[0]?.importedFeatureCount,
+      3,
+      'geometry derived feature count',
+    );
+    const geometryDatasetId = geometryImport.results[0]?.datasetId;
+    const geometry = await dataSource.queryMapView({
+      bounds: { north: 0.5, south: -0.5, east: 0.5, west: -0.5 },
+      datasetIds: [geometryDatasetId],
+      renderBudget: 10,
+    });
+    requireEqual(geometry.lines.length, 1, 'real-worker line count');
+    requireEqual(geometry.regions.length, 1, 'real-worker crossing region count');
+    requireEqual(geometry.lines[0].arrow, 'end', 'real-worker line arrow');
+    requireEqual(
+      geometry.regions[0].coordinates.length,
+      4,
+      'real-worker closed region coordinate count',
+    );
+    assertNoSourceRows(geometry, 'geometry viewport');
+
+    const geometryTimeline = await dataSource.queryMapView({
+      bounds: { north: 90, south: -90, east: 180, west: -180 },
+      datasetIds: [geometryDatasetId],
+      timeline: { timelineEnabled: true, startYear: 2001, endYear: 2001 },
+      renderBudget: 10,
+    });
+    requireEqual(geometryTimeline.lines.length, 1, 'timeline line count');
+    requireEqual(geometryTimeline.regions.length, 2, 'timeline region count');
+
+    const geometryDetails = await dataSource.getFeatureDetails({
+      featureId: geometryTimeline.regions[1].id,
+      sourceRef: geometryTimeline.regions[1].sourceRef,
+    });
+    requireEqual(
+      geometryDetails.row?.name,
+      'Region detail',
+      'multipart region detail source',
+    );
+
+    const limitedGeometry = await dataSource.queryMapView({
+      bounds: { north: 90, south: -90, east: 180, west: -180 },
+      datasetIds: [geometryDatasetId],
+      renderBudget: 1,
+    });
+    requireCondition(
+      limitedGeometry.stats.geometryOverLimit,
+      'The real-worker geometry query did not enforce its limit.',
+    );
+    requireEqual(
+      limitedGeometry.lines.length + limitedGeometry.regions.length,
+      1,
+      'limited real-worker geometry count',
+    );
+
     let cancelPromise = null;
     const cancellationProgress = [];
     const unsubscribeCancellation = dataSource.subscribeImportProgress((event) => {
@@ -218,13 +281,18 @@ async function runRealBrowserValidation() {
     const summaryAfterCancellation = await dataSource.getDatasetSummary();
     requireEqual(
       summaryAfterCancellation.datasets.length,
-      1,
+      2,
       'dataset count after canceled rollback',
     );
-    requireEqual(
-      summaryAfterCancellation.datasets[0].id,
-      datasetId,
-      'preserved committed dataset',
+    requireCondition(
+      summaryAfterCancellation.datasets.some((dataset) => dataset.id === datasetId),
+      'The committed point dataset was not preserved.',
+    );
+    requireCondition(
+      summaryAfterCancellation.datasets.some(
+        (dataset) => dataset.id === geometryDatasetId,
+      ),
+      'The committed geometry dataset was not preserved.',
     );
 
     return {
@@ -245,6 +313,9 @@ async function runRealBrowserValidation() {
         groupTotalRows: firstGroupPage.totalRows,
         groupPagesRead: 2,
         detailFound: details.row != null,
+        lines: geometry.lines.length,
+        regions: geometryTimeline.regions.length,
+        geometryDetailFound: geometryDetails.row != null,
       },
       canceledImportRolledBack: true,
       restartVerifiedEmpty: await verifyRestartIsEmpty(dataSource),
@@ -286,6 +357,24 @@ function createCsvFile(rowCount, name) {
   return new File([lines.join('\n')], name, {
     type: 'text/csv',
     lastModified: 1_750_000_000_000,
+  });
+}
+
+function createGeometryCsvFile() {
+  const csv = [
+    'name,featureType,featureId,part,order,lat,lon,year,color,weight,fillColor,arrow',
+    'Line end,line,route,,2,0,10,2002,#123456,5,,end',
+    'Line detail,line,route,,1,0,-10,2001,,,,',
+    'Region detail,region,area,south,2,-5,5,2001,,,#abcdef,',
+    'Region south first,region,area,south,1,-5,-5,2020,,,,',
+    'Region south top,region,area,south,3,5,0,,,,,',
+    'Region north first,region,area,north,1,10,10,,,,,',
+    'Region north second,region,area,north,2,11,10,,,,,',
+    'Region north third,region,area,north,3,10,11,,,,,',
+  ].join('\n');
+  return new File([csv], 'geometry.csv', {
+    type: 'text/csv',
+    lastModified: 1_750_000_000_001,
   });
 }
 

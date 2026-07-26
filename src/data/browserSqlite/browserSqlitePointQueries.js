@@ -1,3 +1,7 @@
+import {
+  queryBrowserSqliteGeometries,
+} from './browserSqliteGeometryQueries.js';
+
 export const DEFAULT_BROWSER_SQLITE_RENDER_BUDGET = 1_000;
 export const MAX_BROWSER_SQLITE_RENDER_BUDGET = 10_000;
 
@@ -13,13 +17,17 @@ export const MAX_BROWSER_SQLITE_RENDER_BUDGET = 10_000;
  */
 export function queryBrowserSqliteMapView(database, query = {}) {
   requireDatabase(database);
+  const geometryResult = queryBrowserSqliteGeometries(database, query);
   const bounds = normalizeBounds(query.bounds);
   const renderBudget = normalizeRenderBudget(query.renderBudget);
   const datasetIds = resolveEnabledDatasetIds(database, query.datasetIds);
   const skippedPoints = sumSkippedPoints(database, datasetIds);
 
   if (!bounds || datasetIds.length === 0) {
-    return createEmptyResult({ skippedPoints });
+    return mergeGeometryResult(
+      createEmptyResult({ skippedPoints }),
+      geometryResult,
+    );
   }
 
   const filter = buildPointFilter({ bounds, datasetIds, timeline: query.timeline });
@@ -48,7 +56,7 @@ export function queryBrowserSqliteMapView(database, query = {}) {
     ? points.reduce((sum, point) => sum + point.count, 0)
     : points.length;
 
-  return {
+  return mergeGeometryResult({
     points,
     lines: [],
     regions: [],
@@ -72,6 +80,49 @@ export function queryBrowserSqliteMapView(database, query = {}) {
     // Dataset-wide extent is returned by getDatasetSummary; per-row entries
     // would defeat the compact viewport contract.
     timelineIndex: { entries: [] },
+  }, geometryResult);
+}
+
+function mergeGeometryResult(pointResult, geometryResult) {
+  const geometryStats = geometryResult.stats;
+  const skippedLinesByTimeline = geometryStats.skippedLinesByTimeline;
+  const skippedRegionsByTimeline = geometryStats.skippedRegionsByTimeline;
+  const geometryOverLimit = geometryStats.geometryOverLimit;
+
+  return {
+    ...pointResult,
+    lines: geometryResult.lines,
+    regions: geometryResult.regions,
+    stats: {
+      ...pointResult.stats,
+      skippedLines: geometryStats.skippedLines,
+      skippedRegions: geometryStats.skippedRegions,
+      skippedLinesByTimeline,
+      skippedRegionsByTimeline,
+      skippedByTimeline:
+        pointResult.stats.skippedPointsByTimeline +
+        skippedLinesByTimeline +
+        skippedRegionsByTimeline,
+      limitedToRenderBudget:
+        pointResult.stats.limitedToRenderBudget ?? geometryStats.geometryLimit,
+      totalMatchingCount:
+        pointResult.stats.totalMatchingCount +
+        geometryStats.totalMatchingGeometryCount,
+      returnedCount:
+        pointResult.points.length +
+        geometryStats.returnedGeometryCount,
+      hiddenByRenderBudget:
+        pointResult.stats.hiddenByRenderBudget +
+        geometryStats.hiddenGeometryCount,
+      overBudget: pointResult.stats.overBudget || geometryOverLimit,
+      totalMatchingLineCount: geometryStats.totalMatchingLineCount,
+      totalMatchingRegionCount: geometryStats.totalMatchingRegionCount,
+      returnedLineCount: geometryStats.returnedLineCount,
+      returnedRegionCount: geometryStats.returnedRegionCount,
+      hiddenGeometryCount: geometryStats.hiddenGeometryCount,
+      geometryLimit: geometryStats.geometryLimit,
+      geometryOverLimit,
+    },
   };
 }
 

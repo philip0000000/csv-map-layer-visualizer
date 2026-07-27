@@ -28,12 +28,16 @@ export default function CsvPanel({
   desktopImport,
   datasetListState,
   viewportQueryStats,
+  initialization,
+  mappingState,
+  onLoadMorePreview,
   onUnloadFile,     // Callback to unload a CSV by ID
   removeActionLabel,
   onToggleEnabled,  // Callback to toggle file visibility
   onUpdateMapping,  // Callback when user changes latitude/longitude fields
 
   timelineState,
+  timelineAvailable = true,
   timelineFields,
   onTimelinePatch,
   onTimelinePlaybackStart,
@@ -130,6 +134,7 @@ export default function CsvPanel({
         ========================= */}
       <MapToolsMenu
         timelineState={timelineState}
+        timelineAvailable={timelineAvailable}
         onTimelinePatch={onTimelinePatch}
         mapToolsState={mapToolsState}
         onMapToolsPatch={onMapToolsPatch}
@@ -161,7 +166,7 @@ export default function CsvPanel({
           />
 
           {/* Timeline UI lives inside the panel header (NOT in the dropdown). */}
-          {timelineState?.timelineEnabled && (
+          {timelineAvailable && timelineState?.timelineEnabled && (
             <div className="csvTimelineBlock" aria-label="Timeline filter">
               <div className="csvTimelineTitleRow">
                 <div className="csvTimelineTitle">Timeline filter</div>
@@ -456,6 +461,16 @@ export default function CsvPanel({
           Panel body
          ========================= */}
       <div className="csvPanelBody">
+        {initialization && initialization.ok !== true && (
+          <div
+            className={initialization.error
+              ? "csvDesktopImportStatus csvDesktopImportStatusError"
+              : "csvEmptyState"}
+            role={initialization.error ? "alert" : "status"}
+          >
+            {initialization.error?.message ?? "Initializing data..."}
+          </div>
+        )}
         {/* No CSV selected */}
         {!selected ? (
           <div className="csvEmptyState">
@@ -496,7 +511,13 @@ export default function CsvPanel({
               latField={selected.latField}
               lonField={selected.lonField}
               onUpdateMapping={onUpdateMapping}
+              disabled={mappingState?.pendingDatasetId === selected.id}
             />
+            {mappingState?.error && (
+              <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+                {mappingState.error}
+              </div>
+            )}
 
             {/* CSV parsing warnings (non-fatal) */}
             <CsvParsingWarnings errors={selected.parseErrors} />
@@ -506,6 +527,11 @@ export default function CsvPanel({
               key={selected.id}
               headers={selected.headers}
               rows={selected.rows}
+              totalRows={selected.previewTotalRows}
+              hasMore={selected.previewHasMore}
+              status={selected.previewStatus}
+              error={selected.previewError}
+              onShowMore={onLoadMorePreview}
             />
 
           </>

@@ -20,13 +20,17 @@ import {
 import {
   createBrowserSqliteWorkerClient,
 } from './browserSqliteWorkerClient.js';
+import {
+  fetchExampleBlob,
+  normalizeExampleName,
+} from '../browserExampleImport.js';
 
 const CAPABILITIES = normalizeBackendCapabilities({
   persistence: 'temporary',
   browserFileImport: true,
   nativeFilePickerImport: false,
   droppedFileImport: true,
-  exampleImport: false,
+  exampleImport: true,
   multipleFileImport: true,
   importProgress: true,
   importCancellation: true,
@@ -42,15 +46,28 @@ const CAPABILITIES = normalizeBackendCapabilities({
 });
 
 /** Create the unselected browser SQLite data-source adapter. */
-export function createBrowserSqliteDataSource({ client } = {}) {
-  const workerClient = client ?? createBrowserSqliteWorkerClient();
+export function createBrowserSqliteDataSource(options = {}) {
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const baseUrl = options.baseUrl ?? import.meta.env?.BASE_URL ?? '/';
+  let workerClient = options.client ?? null;
+  let clientCreationFailed = false;
+  if (!workerClient) {
+    try {
+      workerClient = (options.createClient ?? createBrowserSqliteWorkerClient)();
+    } catch {
+      // Keep selection stable and surface initialization failure to the UI.
+      clientCreationFailed = true;
+    }
+  }
   const progressListeners = new Set();
   let selectedDatasetId = null;
   let disposed = false;
 
   const dataSource = {
     async initialize() {
-      if (disposed) return normalizeInitializationResult(null);
+      if (disposed || clientCreationFailed || !workerClient) {
+        return normalizeInitializationResult(null);
+      }
       try {
         const result = await workerClient.initialize();
         return normalizeInitializationResult({
@@ -79,9 +96,23 @@ export function createBrowserSqliteDataSource({ client } = {}) {
       return runImport(request, DATA_SOURCE_METHODS.importDroppedFiles);
     },
 
-    importExample() {
+    async importExample(request = {}) {
       assertActive(DATA_SOURCE_METHODS.importExample);
-      return unsupportedImport(DATA_SOURCE_METHODS.importExample);
+      const requested = normalizeExampleName(request.name);
+      if (!requested) {
+        return normalizeImportBatchResult(null, {
+          operation: DATA_SOURCE_METHODS.importExample,
+        });
+      }
+      const blob = await fetchExampleBlob({ requested, baseUrl, fetchImpl });
+      if (!blob) {
+        return normalizeImportBatchResult({
+          results: [{ ok: false, fileName: requested }],
+        }, { operation: DATA_SOURCE_METHODS.importExample });
+      }
+      return runImport({
+        files: [createExampleFile(blob, requested.split('/').pop())],
+      }, DATA_SOURCE_METHODS.importExample);
     },
 
     subscribeImportProgress(listener) {
@@ -297,7 +328,8 @@ export function createBrowserSqliteDataSource({ client } = {}) {
       disposed = true;
       selectedDatasetId = null;
       progressListeners.clear();
-      workerClient.dispose();
+      workerClient?.dispose();
+      workerClient = null;
     },
   };
 
@@ -310,7 +342,16 @@ export function createBrowserSqliteDataSource({ client } = {}) {
       });
       importId = task.importId;
       const result = await task.result;
-      return normalizeImportBatchResult(result, { operation });
+      const normalized = normalizeImportBatchResult(result, { operation });
+      const firstImportedDataset = normalized.results.find(
+        (item) => item.ok && item.datasetId,
+      );
+      if (firstImportedDataset) {
+        // Match the raw browser workflow: the first successful file from the
+        // newest batch becomes selected, even when another file failed.
+        selectedDatasetId = firstImportedDataset.datasetId;
+      }
+      return normalized;
     } catch (error) {
       return normalizeImportBatchResult({ importId }, {
         operation,
@@ -337,11 +378,25 @@ export function createBrowserSqliteDataSource({ client } = {}) {
   }
 
   function assertActive(operation) {
-    if (!disposed) return;
+    if (!disposed && workerClient) return;
     throw workerFailure(operation, { code: 'worker-unavailable' });
   }
 
   return dataSource;
+}
+
+function createExampleFile(blob, name) {
+  if (typeof File === 'function') {
+    return new File([blob], name, {
+      type: blob.type || 'text/csv',
+      lastModified: 0,
+    });
+  }
+  Object.defineProperties(blob, {
+    name: { value: name, enumerable: true },
+    lastModified: { value: 0, enumerable: true },
+  });
+  return blob;
 }
 
 function failedDatasetMutation(operation, datasetId, error) {

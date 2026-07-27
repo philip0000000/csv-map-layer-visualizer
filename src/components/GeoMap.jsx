@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 // Import core components from react-leaflet.
 // MapContainer is the main map wrapper.
 // TileLayer is used to load map tiles (images).
@@ -77,41 +77,78 @@ function setClusterIconVisibility(cluster, isVisible) {
   }
 }
 
-function renderRegionPopup(region, latField, lonField, getSourceRow) {
-  const row = getFeaturePopupRow(region, getSourceRow);
-  // Prefer a human-readable name from the CSV row, fall back to featureId, then a generic label
-  const title = String(row?.name ?? region?.featureId ?? "Region");
+function FeaturePopup({ feature, fallbackTitle, getSourceRow, getFeatureDetails }) {
+  const requestRef = useRef(0);
+  const [isOpen, setIsOpen] = useState(false);
+  const [detailState, setDetailState] = useState({
+    status: "idle",
+    details: null,
+  });
+  const loadsFromBackend =
+    typeof getFeatureDetails === "function" && !!feature?.sourceRef;
+  const row = loadsFromBackend
+    ? detailState.details?.row ?? null
+    : getFeaturePopupRow(feature, getSourceRow);
+  const latField = detailState.details?.latField ?? feature.latField;
+  const lonField = detailState.details?.lonField ?? feature.lonField;
 
+  // Opening a popup is the detail boundary. Compact viewport responses never
+  // cause eager source-row reads for every rendered line or region.
+  useEffect(() => {
+    if (!isOpen || !loadsFromBackend) {
+      requestRef.current += 1;
+      return undefined;
+    }
+    const requestId = requestRef.current + 1;
+    requestRef.current = requestId;
+    queueMicrotask(() => {
+      if (requestRef.current !== requestId) return;
+      setDetailState({ status: "loading", details: null });
+      Promise.resolve(getFeatureDetails({
+        featureId: feature.id,
+        sourceRef: feature.sourceRef,
+      })).then((details) => {
+        if (requestRef.current !== requestId) return;
+        setDetailState({
+          status: details?.row ? "loaded" : "empty",
+          details: details?.row ? details : null,
+        });
+      }).catch(() => {
+        if (requestRef.current === requestId) {
+          setDetailState({ status: "error", details: null });
+        }
+      });
+    });
+    return () => {
+      if (requestRef.current === requestId) requestRef.current += 1;
+    };
+  }, [feature.id, feature.sourceRef, getFeatureDetails, isOpen, loadsFromBackend]);
+
+  const title = String(row?.name ?? feature?.featureId ?? fallbackTitle);
   return (
-    <Popup>
+    <Popup
+      eventHandlers={{
+        add: () => setIsOpen(true),
+        remove: () => setIsOpen(false),
+      }}
+    >
       <div style={{ minWidth: 220 }}>
         <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
-
-        {buildMarkerDetailFields(row, latField, lonField).map(([k, v]) => (
-          <div key={k} style={{ marginBottom: 4 }}>
-            <b>{k}:</b> {String(v ?? "")}
-          </div>
-        ))}
-      </div>
-    </Popup>
-  );
-}
-
-
-function renderLinePopup(line, latField, lonField, getSourceRow) {
-  const row = getFeaturePopupRow(line, getSourceRow);
-  const title = String(row?.name ?? line?.featureId ?? "Line");
-
-  return (
-    <Popup>
-      <div style={{ minWidth: 220 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
-
-        {buildMarkerDetailFields(row, latField, lonField).map(([k, v]) => (
-          <div key={k} style={{ marginBottom: 4 }}>
-            <b>{k}:</b> {String(v ?? "")}
-          </div>
-        ))}
+        {loadsFromBackend && detailState.status === "loading" && (
+          <div>Loading details...</div>
+        )}
+        {loadsFromBackend && detailState.status === "empty" && (
+          <div>No details found.</div>
+        )}
+        {loadsFromBackend && detailState.status === "error" && (
+          <div>Could not load details.</div>
+        )}
+        {(!loadsFromBackend || detailState.status === "loaded") &&
+          buildMarkerDetailFields(row, latField, lonField).map(([key, value]) => (
+            <div key={key} style={{ marginBottom: 4 }}>
+              <b>{key}:</b> {String(value ?? "")}
+            </div>
+          ))}
       </div>
     </Popup>
   );
@@ -267,6 +304,7 @@ export default function GeoMap({
   // When true, nearby markers are grouped into clusters (visual-only feature).
   // When false, markers are rendered normally (current behavior).
   getSourceRow,
+  getFeatureDetails,
   clusterMarkersEnabled = false,
   clusterRadius = 80,   // default strength
   onViewportChange,
@@ -464,14 +502,24 @@ export default function GeoMap({
           positions={region.coordinates}
           pathOptions={region.style}
         >
-          {renderRegionPopup(region, region.latField, region.lonField, getSourceRow)}
+          <FeaturePopup
+            feature={region}
+            fallbackTitle="Region"
+            getSourceRow={getSourceRow}
+            getFeatureDetails={getFeatureDetails}
+          />
         </Polygon>
       ))}
 
       {lines.map((line) => (
         <LayerGroup key={line.id}>
           <Polyline positions={line.coordinates} pathOptions={line.style}>
-            {renderLinePopup(line, line.latField, line.lonField, getSourceRow)}
+            <FeaturePopup
+              feature={line}
+              fallbackTitle="Line"
+              getSourceRow={getSourceRow}
+              getFeatureDetails={getFeatureDetails}
+            />
           </Polyline>
           <LineArrowDecorator line={line} />
         </LayerGroup>

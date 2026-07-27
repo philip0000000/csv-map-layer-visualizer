@@ -1,5 +1,7 @@
 ﻿# csv-map-layer-visualizer
 
+Browser SQLite test-mode instructions: [Browser SQLite UI integration](docs/browser-sqlite-ui-integration.md).
+
 A client side web app for visualizing CSV based geodata on an interactive world map.
 It is designed for datasets where entries represent real world things or events that happened at a place and time, and where a timeline helps explore how the data changes over years.
 

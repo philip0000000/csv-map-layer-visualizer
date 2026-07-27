@@ -1,5 +1,9 @@
 # Data contract inventory and gap analysis
 
+
+> Historical parity baseline: this inventory records the pre-cutover state for
+> issue #103. For the final issue #108 runtime, see
+> [SQLite data-source architecture](./browser-sqlite-ui-integration.md).
 This document inventories the data operations currently used by the React and
 Leaflet interface. It compares the browser/in-memory and Electron/SQLite paths
 with the partial contract in `src/data/dataSource.js` and records the contract

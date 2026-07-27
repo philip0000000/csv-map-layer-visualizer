@@ -1,52 +1,95 @@
-# Browser SQLite UI integration
+# SQLite data-source architecture
 
-Issue #107 connects the temporary browser SQLite worker to the existing React
-and Leaflet interface without changing the production browser default.
+GitHub Pages and every other browser build use temporary SQLite WASM as their
+only CSV data backend. The Electron desktop build uses persistent native
+SQLite. A page session creates exactly one backend and never mixes browser and
+desktop data or switches to a fallback.
 
-## Starting the test mode
+## Runtime selection and lifecycle
 
-Use `npm run dev:browser-sqlite` for development and
-`npm run build:browser-sqlite` for a validation build.
+`selectRuntimeDataSource` owns the complete runtime decision:
 
-The `browser-sqlite` Vite mode sets `VITE_BROWSER_DATA_BACKEND=sqlite` at build
-time. Normal `npm run dev` and `npm run build` continue to select the raw
-in-memory browser backend. This flag is not exposed as a user-facing setting.
+```text
+Electron renderer -> persistent desktop SQLite adapter
+Browser renderer  -> temporary browser SQLite WASM adapter
+```
 
-## Selection and lifecycle
+`useRuntimeDataSource` creates the selected adapter once, initializes it before
+imports are enabled, and disposes it when the page session ends. Disposing the
+browser adapter closes and terminates its dedicated worker, which destroys the
+temporary database.
 
-`useRuntimeDataSource` reads the build-time setting once and
-`selectRuntimeDataSource` creates exactly one session data source. Electron
-continues to select persistent desktop SQLite. A browser session selects either
-raw data or temporary SQLite, never both.
+Worker creation or SQLite initialization failure is shown in the CSV panel.
+Imports remain unavailable, loading finishes with an error, and no second
+backend is activated. Users should retry in a current browser or use the
+desktop application.
 
-SQLite initialization must finish before imports are enabled. Worker creation
-or initialization failure is shown in the panel and does not fall back to raw
-data. Disposing the source terminates the worker. No persistence path is
-activated, so reloads and separate tabs receive separate empty databases.
+## Browser storage and worker boundary
 
-## Import and dataset coordination
+The browser database is a fresh `sql.js` in-memory database owned by one module
+worker. The browser path does not create an OPFS or IndexedDB database and does
+not write imported rows to local or session storage. Reloads, closed tabs,
+worker restarts, and new tabs therefore start with empty dataset lists.
 
-The existing picker and drop target pass browser `File` objects through the
-selected data-source boundary. Example URLs use the shared safe resolver and
-feed their fetched CSV into the same SQLite import method. Progress and mixed
-per-file results are normalized before reaching the panel.
+PapaParse and SQLite import work run inside the worker. CSV rows are inserted
+incrementally in bounded batches. Complete datasets are not retained in React
+state and are not returned after import. The worker sends complete rows only
+for bounded preview pages, feature details, and grouped-result pages.
 
-The loaded-files panel reads compact summaries. Selection, visibility, removal,
-and mapping changes call the active adapter and invalidate summary and map
-reads. Preview rows are requested in pages of 30. A request token prevents an
-old or removed dataset response from replacing the current preview.
+The protocol accepts fixed named operations and validated payloads. It never
+accepts SQL, database handles, filesystem paths, or arbitrary worker messages.
 
-## Map, details, and paging
+## UI coordination
 
-Leaflet reports the initial viewport and completed movement. Database-backed
-queries are debounced and contain bounds, zoom, timeline state, enabled dataset
-IDs, and a render budget. Only the latest generation may update the map. The
-last valid result remains visible during refreshes and query errors.
+File-picker, drag-and-drop, and example imports all route through the selected
+SQLite adapter. Progress and mixed per-file results are normalized before they
+reach the panel. Dataset summaries contain metadata only. Preview pages contain
+30 rows and preserve source-row order.
 
-Mapping changes rebuild derived records transactionally. Exact point details
-load after point selection. Line and region rows load only when their popup
-opens. Closing or changing a selection invalidates its detail request.
+Selection, visibility, removal, and coordinate mapping changes invalidate the
+affected summaries and map results. Mapping rebuilds are transactional, so a
+failed rebuild leaves the previous mapping and features active.
 
-Grouped points retain the immutable `groupRef` from their originating viewport
-query. Pages use a fixed size of 30 and deterministic source offsets,
-independent of later map or timeline changes.
+Leaflet viewport queries include bounds, zoom, timeline state, enabled dataset
+IDs, and a render budget of 1,000. Only the latest request generation may
+update the map, preventing stale pan, zoom, or playback responses from
+overwriting newer state. Exact and grouped points, lines, and regions return
+compact render data; complete details are loaded on demand.
+
+Grouped rows keep the immutable viewport, timeline, dataset, and grid context
+captured by the originating query. Pages use a fixed size of 30 and stable
+source ordering.
+
+## Development and validation
+
+Normal commands exercise the production browser backend; no migration mode or
+backend environment flag exists:
+
+```text
+npm run dev
+npm run build
+npm run preview
+```
+
+Relevant automated validation includes:
+
+```text
+npm run lint
+npm run build
+npm run build:desktop
+
+npm run smoke:runtime-data-source
+npm run smoke:browser-sqlite-data-source
+npm run smoke:browser-sqlite-ui
+npm run smoke:browser-sqlite-points
+npm run smoke:browser-sqlite-geometries
+npm run validate:browser-sqlite-worker
+npm run validate:desktop-large-file
+```
+
+Recorded browser versions, timings, counts, and the complete command matrix are
+in [the issue #108 validation record](./issue-108-validation.md).
+
+The supported large-file target is 30,000 rows. Manual browser validation must
+also cover the development server, the production repository base path,
+imports, viewport queries, details, dataset removal, and reload clearing data.

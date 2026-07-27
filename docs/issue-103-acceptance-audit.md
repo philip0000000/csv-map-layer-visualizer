@@ -1,5 +1,9 @@
 # Issue #103 acceptance audit
 
+
+> Historical acceptance record: this audit intentionally predates the issue
+> #108 browser cutover. For the final runtime, see
+> [SQLite data-source architecture](./browser-sqlite-ui-integration.md).
 This record maps the acceptance criteria for issue #103 to implementation,
 documentation, and representative verification. It does not expand browser or
 desktop behavior and does not activate the SQLite WASM prototype.

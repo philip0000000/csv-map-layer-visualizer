@@ -1,5 +1,9 @@
 # Browser parity baseline
 
+
+> Historical parity baseline: this document records behavior before the issue
+> #108 browser cutover. For the final runtime, see
+> [SQLite data-source architecture](./browser-sqlite-ui-integration.md).
 This document records the user-visible behavior of the current GitHub Pages
 browser implementation before the backend-neutral data contract is completed.
 Future browser backends should preserve the required behavior below unless a

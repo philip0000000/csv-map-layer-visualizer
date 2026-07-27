@@ -1,5 +1,9 @@
 # Browser SQLite line and region architecture
 
+
+> Historical design note: this document records the issue #106 implementation
+> stage. Issue #108 later made SQLite WASM the exclusive browser path; see
+> [SQLite data-source architecture](./browser-sqlite-ui-integration.md).
 Issue #106 extends the temporary browser SQLite backend with line and region
 parity. It does not select that backend in the normal browser runtime. GitHub
 Pages continues to use the in-memory data source, and desktop SQLite behavior is

@@ -2,16 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 import GeoMap from "./components/GeoMap";
 import CsvPanel from "./components/CsvPanel";
-import { useCsvFiles } from "./components/useCsvFiles";
 import { useTimelineFilterState } from "./components/useTimelineFilterState";
-import {
-  autoDetectRangeFields,
-  autoDetectTimelineFields,
-  tryGetYear,
-} from "./components/timeline";
-import { getRangeYear } from "./components/csvFeatureValueHelpers";
 import { useMapToolsState } from "./components/useMapToolsState";
-import { useDerivedMapFeatures } from "./components/useDerivedMapFeatures";
 import { CsvPanelOverlay } from "./components/CsvPanelOverlay";
 import { useCsvFileDrop } from "./components/useCsvFileDrop";
 import { useExampleCsvFilesFromUrl } from "./components/useExampleCsvFilesFromUrl";
@@ -23,48 +15,15 @@ import {
   mergeImportBatchResults,
 } from "./data/importBatchAggregation";
 
-const LARGE_RAW_MARKER_WARNING_THRESHOLD = 3000;
 const SQLITE_RENDER_BUDGET = 1000;
 
 export default function App() {
   const {
     dataSource,
-    dataRevision,
     initialization,
     capabilities: desktopCapabilities,
-    workflow,
   } = useRuntimeDataSource();
-  const usesBrowserFiles = workflow.rawBrowserFiles;
-  const usesViewportQueries = workflow.viewportQueries;
-
-  /**
-   * CSV file state and actions.
-   * - files: all loaded CSV files
-   * - selectedId: currently selected CSV file ID
-   * - selected: the selected CSV file object (or null)
-   * - importFiles: load new CSV files
-   * - unloadSelected: remove the selected CSV file
-   * - unloadFile: remove a CSV file by ID
-   * - updateFileEnabled: toggle file visibility on the map
-   * - updateFileMapping: update lat/lon mapping for a file
-   */
-  const {
-    files,
-    selectedId,
-    selected,
-    setSelectedId,
-    importFiles,
-    importDroppedFiles,
-    unloadSelected,
-    updateFileMapping,
-    importExampleFile,
-    unloadFile,
-    updateFileEnabled,
-  } = useCsvFiles({
-    dataSource,
-    dataRevision,
-    enabled: usesBrowserFiles,
-  });
+  const usesViewportQueries = desktopCapabilities.groupedViewportResults;
 
   const {
     state: timelineState,
@@ -77,21 +36,12 @@ export default function App() {
     onTimelinePatch: patchTimeline,
   });
 
-  const derivedMapFeatures = useDerivedMapFeatures({
-    dataSource,
-    dataRevision,
-    enabled: usesBrowserFiles,
-    timeline: timelineState,
-  });
-
   const desktopImportAvailable =
     initialization?.ok === true && desktopCapabilities.nativeFilePickerImport;
   const browserSqliteImportAvailable =
-    usesViewportQueries &&
     initialization?.ok === true &&
     desktopCapabilities.browserFileImport;
   const desktopDroppedImportAvailable =
-    usesViewportQueries &&
     initialization?.ok === true &&
     desktopCapabilities.droppedFileImport;
   const databaseImportAvailable =
@@ -599,7 +549,7 @@ export default function App() {
   }, [dataSource, desktopDroppedImportAvailable, runDesktopImport]);
 
   const importDatabaseExamples = useCallback((names) => {
-    if (!usesViewportQueries || !desktopCapabilities.exampleImport) return undefined;
+    if (!desktopCapabilities.exampleImport) return undefined;
     return runDesktopImport(async () => {
       const batches = [];
       for (const name of names) {
@@ -611,12 +561,10 @@ export default function App() {
     dataSource,
     desktopCapabilities.exampleImport,
     runDesktopImport,
-    usesViewportQueries,
   ]);
 
   useExampleCsvFilesFromUrl({
-    importExampleFile: usesBrowserFiles ? importExampleFile : null,
-    importExampleFiles: !usesBrowserFiles && initialization?.ok === true
+    importExampleFiles: initialization?.ok === true
       ? importDatabaseExamples
       : null,
   });
@@ -624,11 +572,9 @@ export default function App() {
   const desktopDropEnabled =
     desktopDroppedImportAvailable && desktopImportState.status !== "importing";
   const csvFileDrop = useCsvFileDrop({
-    onImportFiles: usesBrowserFiles
-      ? importDroppedFiles
-      : (desktopDropEnabled ? importDroppedCsvFiles : null),
+    onImportFiles: desktopDropEnabled ? importDroppedCsvFiles : null,
   });
-  const fileDropAvailable = usesBrowserFiles || desktopDropEnabled;
+  const fileDropAvailable = desktopDropEnabled;
 
   const desktopImport = useMemo(() => ({
     isAvailable: databaseImportAvailable,
@@ -733,15 +679,9 @@ export default function App() {
     () => toLegacyMapFeatures(desktopMapViewState.result),
     [desktopMapViewState.result],
   );
-  // Database-backed sessions never fall back to renderer in-memory CSV data.
-  const activeMapFeatures = usesViewportQueries
-    ? desktopMapFeatures
-    : derivedMapFeatures;
-  const viewportQueryStats = usesViewportQueries
-    ? desktopMapViewState.result?.stats ?? null
-    : null;
-  // Compact database results load source rows on demand; raw browser data keeps
-  // its existing synchronous row lookup.
+  const activeMapFeatures = desktopMapFeatures;
+  const viewportQueryStats = desktopMapViewState.result?.stats ?? null;
+  // Compact SQLite results load complete source rows only on demand.
   const getDesktopFeatureDetails = useCallback(
     (query) => dataSource.getFeatureDetails(query),
     [dataSource],
@@ -779,70 +719,11 @@ export default function App() {
     () => databaseFiles.find((dataset) => dataset.id === databaseSelectedId) ?? null,
     [databaseFiles, databaseSelectedId],
   );
-  const activeSelected = usesViewportQueries ? databaseSelected : selected;
-  const selectedHeaders = activeSelected?.headers;
-  const selectedRows = usesViewportQueries ? null : selected?.rows;
-  const visibleMarkerPointCount = useMemo(
-    () => activeMapFeatures.points.points.filter((point) => !point.image).length,
-    [activeMapFeatures.points.points],
-  );
-
-  // Warn before disabling clustering when raw marker rendering is likely to be expensive.
-  const patchMapToolsWithSafeguards = useCallback((partial) => {
-    const disablingClusterMarkers =
-      partial?.clusterMarkersEnabled === false &&
-      !!mapToolsApi.state.clusterMarkersEnabled;
-
-    if (
-      disablingClusterMarkers &&
-      visibleMarkerPointCount > LARGE_RAW_MARKER_WARNING_THRESHOLD
-    ) {
-      const confirmed = window.confirm(
-        `This will render ${visibleMarkerPointCount.toLocaleString()} individual markers and may slow down the browser. Continue?`,
-      );
-
-      if (!confirmed) return;
-    }
-
-    mapToolsApi.patch(partial);
-  }, [
-    mapToolsApi,
-    visibleMarkerPointCount,
-  ]);
-
-  const timelineFields = useMemo(() => {
-    if (usesViewportQueries) {
-      return {
-        yearField: activeSelected?.detectedFields?.yearField ?? null,
-        dateField: activeSelected?.detectedFields?.dateField ?? null,
-        dayOfYearField: activeSelected?.detectedFields?.dayOfYearField ?? null,
-      };
-    }
-    if (!selectedHeaders) {
-      return { yearField: null, dateField: null, dayOfYearField: null };
-    }
-    return autoDetectTimelineFields(selectedHeaders);
-  }, [activeSelected?.detectedFields, selectedHeaders, usesViewportQueries]);
-
-  const timelineRangeFields = useMemo(() => {
-    if (usesViewportQueries) {
-      return {
-        yearFromField: activeSelected?.detectedFields?.yearFromField ?? null,
-        yearToField: activeSelected?.detectedFields?.yearToField ?? null,
-        dateFromField: activeSelected?.detectedFields?.dateFromField ?? null,
-        dateToField: activeSelected?.detectedFields?.dateToField ?? null,
-      };
-    }
-    if (!selectedHeaders) {
-      return {
-        yearFromField: null,
-        yearToField: null,
-        dateFromField: null,
-        dateToField: null,
-      };
-    }
-    return autoDetectRangeFields(selectedHeaders);
-  }, [activeSelected?.detectedFields, selectedHeaders, usesViewportQueries]);
+  const timelineFields = useMemo(() => ({
+    yearField: databaseSelected?.detectedFields?.yearField ?? null,
+    dateField: databaseSelected?.detectedFields?.dateField ?? null,
+    dayOfYearField: databaseSelected?.detectedFields?.dayOfYearField ?? null,
+  }), [databaseSelected?.detectedFields]);
 
   // SQLite exposes only a compact enabled-dataset timeline extent; React must
   // not load all source rows merely to initialize the year controls.
@@ -880,65 +761,6 @@ export default function App() {
     usesViewportQueries,
   ]);
 
-  // When timeline is enabled, compute year domain from selected file
-  useEffect(() => {
-    if (usesViewportQueries || !selectedRows) return;
-    if (!timelineState.timelineEnabled) return;
-
-    // if user has set a manual year domain, do not overwrite it from data
-    if (timelineState.yearDomainMode === "manual") return;
-
-    let min = null;
-    let max = null;
-
-    for (const r of selectedRows) {
-      const extent = getRowTimelineExtent(
-        r,
-        timelineFields,
-        timelineRangeFields,
-      );
-      if (!extent) continue;
-
-      if (min == null || extent.min < min) min = extent.min;
-      if (max == null || extent.max > max) max = extent.max;
-    }
-
-    patchTimeline({
-      yearMin: min,
-      yearMax: max,
-      // Keep the Min/Max input boxes in sync while in auto mode
-      yearMinDraft: String(min ?? ""),
-      yearMaxDraft: String(max ?? ""),
-    });
-
-    const s = timelineState.startYear;
-    const e = timelineState.endYear;
-
-    if (min != null && max != null) {
-      const nextStart = s == null ? min : Math.max(min, Math.min(max, s));
-      const nextEnd = e == null ? max : Math.max(min, Math.min(max, e));
-
-      const finalStart = Math.min(nextStart, nextEnd);
-      const finalEnd = Math.max(nextStart, nextEnd);
-
-      if (finalStart !== s || finalEnd !== e) {
-        setYearRange(finalStart, finalEnd);
-      }
-    }
-  }, [
-    selected?.id,
-    selectedRows,
-    timelineState.timelineEnabled,
-    timelineState.yearDomainMode,
-    timelineState.startYear,
-    timelineState.endYear,
-    timelineFields,
-    timelineRangeFields,
-    patchTimeline,
-    setYearRange,
-    usesViewportQueries,
-  ]);
-
   return (
     <div
       className="appRoot"
@@ -968,49 +790,34 @@ export default function App() {
 
         <CsvPanelOverlay onVisibleWidthChange={setCsvPanelVisibleWidth}>
           <CsvPanel
-            files={usesViewportQueries ? databaseFiles : files}
-            selectedId={usesViewportQueries ? databaseSelectedId : selectedId}
-            onSelect={usesViewportQueries
-              ? (desktopCapabilities.datasetSelection
-                  ? selectDatabaseDataset
-                  : undefined)
-              : setSelectedId}
-            onImportFiles={usesBrowserFiles
-              ? importFiles
-              : (browserSqliteImportAvailable
-                  ? importBrowserCsvToSqlite
-                  : undefined)}
+            files={databaseFiles}
+            selectedId={databaseSelectedId}
+            onSelect={desktopCapabilities.datasetSelection
+              ? selectDatabaseDataset
+              : undefined}
+            onImportFiles={browserSqliteImportAvailable
+              ? importBrowserCsvToSqlite
+              : undefined}
             desktopImport={desktopImport}
-            datasetListState={usesViewportQueries ? desktopDatasetListState : null}
+            datasetListState={desktopDatasetListState}
             viewportQueryStats={viewportQueryStats}
-            onUnloadSelected={usesViewportQueries ? undefined : unloadSelected}
-            onUnloadFile={usesViewportQueries
-              ? (desktopDatasetRemovalAvailable
-                  ? removeDesktopDataset
-                  : undefined)
-              : unloadFile}
-            removeActionLabel={usesViewportQueries ? "Remove" : "Unload"}
-            onToggleEnabled={usesViewportQueries
-              ? (desktopDatasetVisibilityAvailable
-                  ? updateDesktopDatasetEnabled
-                  : undefined)
-              : updateFileEnabled}
-            onUpdateMapping={usesViewportQueries
-              ? (desktopCapabilities.datasetMapping
-                  ? updateDatabaseMapping
-                  : undefined)
-              : updateFileMapping}
-            onLoadMorePreview={usesViewportQueries && desktopCapabilities.previewPaging
+            onUnloadFile={desktopDatasetRemovalAvailable
+              ? removeDesktopDataset
+              : undefined}
+            removeActionLabel="Remove"
+            onToggleEnabled={desktopDatasetVisibilityAvailable
+              ? updateDesktopDatasetEnabled
+              : undefined}
+            onUpdateMapping={desktopCapabilities.datasetMapping
+              ? updateDatabaseMapping
+              : undefined}
+            onLoadMorePreview={desktopCapabilities.previewPaging
               ? loadMoreDatabasePreview
               : undefined}
-            initialization={usesViewportQueries
-              ? (initialization ?? { ok: false })
-              : null}
-            mappingState={usesViewportQueries ? databaseMappingState : null}
+            initialization={initialization ?? { ok: false }}
+            mappingState={databaseMappingState}
             timelineState={timelineState}
-            timelineAvailable={usesViewportQueries
-              ? databaseTimelineAvailable
-              : true}
+            timelineAvailable={databaseTimelineAvailable}
             timelineFields={timelineFields}
             onTimelinePatch={patchTimeline}
             onTimelinePlaybackStart={timelinePlaybackApi.startPlayback}
@@ -1022,7 +829,7 @@ export default function App() {
                 (activeMapFeatures.lines.skippedByTimeline ?? 0),
             }}
             mapToolsState={mapToolsApi.state}
-            onMapToolsPatch={patchMapToolsWithSafeguards}
+            onMapToolsPatch={mapToolsApi.patch}
           />
         </CsvPanelOverlay>
 
@@ -1062,44 +869,4 @@ function toLegacyMapFeatures(mapView) {
     timelineIndex: mapView?.timelineIndex ?? { entries: [] },
     stats: mapView?.stats ?? null,
   };
-}
-
-/**
- * Compute the year extent of a CSV row for timeline domain detection.
- *
- * Semantics:
- * - If a range is present (yearFrom/yearTo or dateFrom/dateTo),
- *   the row contributes a [min, max] range.
- * - If only one bound exists, it is treated as a single-year range.
- * - Otherwise, fall back to a single point-in-time year/date field.
- */
-function getRowTimelineExtent(row, timelineFields, rangeFields) {
-  const yearFrom = getRangeYear(
-    row,
-    rangeFields?.yearFromField,
-    rangeFields?.dateFromField,
-  );
-  const yearTo = getRangeYear(
-    row,
-    rangeFields?.yearToField,
-    rangeFields?.dateToField,
-  );
-
-  // Prefer range semantics when any range bound is present
-  if (yearFrom != null || yearTo != null) {
-    const from = yearFrom ?? yearTo;
-    const to = yearTo ?? yearFrom;
-    if (from == null || to == null) return null;
-
-    return {
-      min: Math.min(from, to),
-      max: Math.max(from, to),
-    };
-  }
-
-  // Fall back to point-in-time year/date
-  const year = tryGetYear(row, timelineFields);
-  if (year == null) return null;
-
-  return { min: year, max: year };
 }

@@ -1,5 +1,9 @@
 # Browser SQLite point-query architecture
 
+
+> Historical design note: this document records the issue #105 implementation
+> stage. Issue #108 later made SQLite WASM the exclusive browser path; see
+> [SQLite data-source architecture](./browser-sqlite-ui-integration.md).
 Issue #105 adds point derivation and query operations to the temporary browser
 SQLite backend. It does not select that backend in the normal browser runtime;
 the existing GitHub Pages data path and desktop SQLite implementation remain

@@ -1,5 +1,9 @@
 # Browser SQLite import architecture
 
+
+> Historical design note: this document records the issue #104 implementation
+> stage. Issue #108 later made this backend the exclusive browser path; see
+> [SQLite data-source architecture](./browser-sqlite-ui-integration.md).
 Issue #104 turns the successful SQLite WASM compatibility prototype into a
 reusable, temporary browser storage and import backend. This document fixes the
 architecture and scope before implementation begins.

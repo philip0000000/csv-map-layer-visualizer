@@ -1,11 +1,12 @@
 ﻿# csv-map-layer-visualizer
 
-Browser SQLite test-mode instructions: [Browser SQLite UI integration](docs/browser-sqlite-ui-integration.md).
+Browser and desktop storage architecture: [SQLite data-source architecture](docs/browser-sqlite-ui-integration.md).
+Validation evidence: [Issue #108 validation record](docs/issue-108-validation.md).
 
 A client side web app for visualizing CSV based geodata on an interactive world map.
 It is designed for datasets where entries represent real world things or events that happened at a place and time, and where a timeline helps explore how the data changes over years.
 
-Built with **React (client-side)** + **Vite**, using **Leaflet** with **OpenStreetMap** tiles. CSV parsing is done locally in the browser using **PapaParse**.
+Built with **React (client-side)** + **Vite**, using **Leaflet** with **OpenStreetMap** tiles. Browser imports are parsed with **PapaParse** in a worker and stored in a temporary in-memory **SQLite WASM** database. Desktop imports use persistent native SQLite.
 
 ## Live demo
 
@@ -43,6 +44,23 @@ Some example datasets (e.g. medieval Swedish cities) are derived from Wikipedia 
 ## Scope
 
 This project focuses on **visualizing user provided CSV rows as geographic features** on a map, with a timeline oriented workflow. Everything is client side processing. 
+
+## Data storage and privacy
+
+- CSV processing stays on the user's device; imported CSV data is not uploaded
+  to an application server.
+- GitHub Pages and other browser builds use one temporary SQLite WASM database
+  per tab. Browser imports disappear on reload, when the tab closes, or when
+  the worker is restarted.
+- Browser imports are not written to OPFS, IndexedDB, local storage, or session
+  storage. Session storage is used only for interface preferences such as the
+  timeline controls.
+- The Electron desktop application uses a persistent native SQLite database.
+
+Browser SQLite is validated for a 30,000-row workflow in Chrome and Firefox.
+Larger files may work but are not currently a supported target. If SQLite WASM
+cannot initialize, the browser shows an error and does not fall back to a
+second data backend; use a current browser or the desktop application instead.
 
 ## CSV expectations
 

@@ -4,21 +4,10 @@ import { selectRuntimeDataSource } from '../data/runtimeDataSource.js';
 /** Own the one selected backend for the lifetime of the current page session. */
 export function useRuntimeDataSource() {
   const desktopApi = useMemo(() => globalThis.csvMapDesktop ?? null, []);
-  // Vite resolves this development/test flag at build time. Reading it once
-  // here prevents backend switching after a session has begun importing data.
-  const browserBackend = useMemo(
-    () => import.meta.env.VITE_BROWSER_DATA_BACKEND ?? 'raw',
-    [],
-  );
-  const [dataRevision, setDataRevision] = useState(0);
   const disposeTimerRef = useRef(null);
   const selection = useMemo(() => selectRuntimeDataSource({
     desktopApi,
-    browserBackend,
-    onBrowserStateChange: () => {
-      setDataRevision((current) => current + 1);
-    },
-  }), [browserBackend, desktopApi]);
+  }), [desktopApi]);
   const [initialization, setInitialization] = useState(null);
 
   useEffect(() => {
@@ -62,11 +51,5 @@ export function useRuntimeDataSource() {
   return {
     ...selection,
     initialization,
-    dataRevision,
-    workflow: Object.freeze({
-      rawBrowserFiles: selection.runtime === 'browser',
-      browserFiles: selection.capabilities.browserFileImport,
-      viewportQueries: selection.capabilities.groupedViewportResults,
-    }),
   };
 }

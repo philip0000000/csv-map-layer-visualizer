@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 
-export function useExampleCsvFilesFromUrl({ importExampleFile }) {
+export function useExampleCsvFilesFromUrl({
+  importExampleFile,
+  importExampleFiles,
+}) {
   // Prevent double-loading examples in React StrictMode (dev)
   const didAutoLoadRef = useRef(false);
 
@@ -22,40 +25,41 @@ export function useExampleCsvFilesFromUrl({ importExampleFile }) {
   useEffect(() => {
     // Guard against React 18 StrictMode double-invoking effects in development
     if (didAutoLoadRef.current) return;
-    didAutoLoadRef.current = true;
+    const canImportBatch = typeof importExampleFiles === "function";
+    if (!canImportBatch && typeof importExampleFile !== "function") return;
 
-    const params = new URLSearchParams(window.location.search);
-    const exampleValues = params.getAll("example");
-    const validExamples = [];
-
-    // Only auto-load when the value looks like a safe filename.
-    for (const value of exampleValues) {
-      const trimmed = String(value ?? "").trim();
-
-      // Allow:
-      // - books.csv
-      // - present-day/books.csv
-      // - debug/test_case.csv
-      if (!/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.csv$/.test(trimmed))
-        continue;
-
-      // Reject path traversal defensively
-      if (trimmed.includes("..")) continue;
-
-      validExamples.push(trimmed);
-    }
+    const validExamples = getExampleNamesFromSearch(window.location.search);
 
     if (validExamples.length === 0) return;
+    didAutoLoadRef.current = true;
 
     const loadExamples = async () => {
-      if (typeof importExampleFile !== "function") return;
-
+      if (canImportBatch) {
+        await importExampleFiles(validExamples);
+        return;
+      }
       for (const name of validExamples) {
         await importExampleFile(name);
       }
     };
 
     void loadExamples();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [importExampleFile, importExampleFiles]);
+}
+
+/** Return safe example names in URL order, including repeated parameters. */
+export function getExampleNamesFromSearch(search) {
+  const params = new URLSearchParams(search);
+  const validExamples = [];
+
+  for (const value of params.getAll("example")) {
+    const trimmed = String(value ?? "").trim();
+    if (!/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.csv$/.test(trimmed)) {
+      continue;
+    }
+    if (trimmed.includes("..")) continue;
+    validExamples.push(trimmed);
+  }
+
+  return validExamples;
 }

@@ -191,7 +191,15 @@ class FakeWorkerClient {
 }
 
 const client = new FakeWorkerClient();
-const dataSource = createBrowserSqliteDataSource({ client });
+const dataSource = createBrowserSqliteDataSource({
+  client,
+  baseUrl: '/',
+  fetchImpl: async (url) => ({
+    ok: url === '/examples/present-day/books.csv',
+    headers: { get: () => 'text/csv' },
+    blob: async () => new Blob(['name,lat,lon\nBook,1,2'], { type: 'text/csv' }),
+  }),
+});
 assert.deepEqual(
   new Set(Object.keys(dataSource)),
   new Set(Object.values(DATA_SOURCE_METHODS)),
@@ -202,6 +210,7 @@ assert.equal(initialized.ok, true);
 assert.equal(initialized.capabilities.persistence, 'temporary');
 assert.equal(initialized.capabilities.browserFileImport, true);
 assert.equal(initialized.capabilities.droppedFileImport, true);
+assert.equal(initialized.capabilities.exampleImport, true);
 assert.equal(initialized.capabilities.datasetSelection, true);
 assert.equal(initialized.capabilities.previewPaging, true);
 assert.equal(initialized.capabilities.points, true);
@@ -236,8 +245,13 @@ assert.equal(client.calls.at(-1)[0], 'startImport');
 const picker = dataSource.importFromPicker();
 assert.equal(picker.ok, false);
 assert.equal(picker.error.category, 'backend-unavailable');
-const example = dataSource.importExample();
-assert.equal(example.error.operation, DATA_SOURCE_METHODS.importExample);
+const invalidExample = await dataSource.importExample();
+assert.equal(invalidExample.error.operation, DATA_SOURCE_METHODS.importExample);
+const example = await dataSource.importExample({
+  name: 'present-day/books.csv',
+});
+assert.equal(example.ok, true);
+assert.equal(client.calls.at(-1)[1][0].name, 'books.csv');
 
 const canceled = await dataSource.cancelImport('active-import');
 assert.equal(canceled.ok, true);
@@ -333,6 +347,99 @@ await assert.rejects(dataSource.queryMapView(), (error) => (
 ));
 const disposedInitialization = await dataSource.initialize();
 assert.equal(disposedInitialization.ok, false);
+
+const failedCreation = createBrowserSqliteDataSource({
+  createClient: () => {
+    throw new Error('private worker construction failure');
+  },
+});
+const failedInitialization = await failedCreation.initialize();
+assert.equal(failedInitialization.ok, false);
+assert.equal(failedInitialization.error.category, 'initialization-failed');
+assert.equal(
+  JSON.stringify(failedInitialization).includes('private worker construction failure'),
+  false,
+);
+failedCreation.dispose();
+
+class SelectionWorkerClient {
+  constructor() {
+    this.datasets = [dataset('existing-dataset', 'existing.csv')];
+    this.queuedResults = [];
+    this.importSequence = 0;
+  }
+
+  enqueue(results) {
+    this.queuedResults.push(results);
+  }
+
+  startImport() {
+    const results = this.queuedResults.shift() ?? [];
+    for (const result of results) {
+      if (result.ok && result.datasetId) {
+        this.datasets.push(dataset(result.datasetId, result.fileName));
+      }
+    }
+    const importId = `selection-import-${this.importSequence += 1}`;
+    return {
+      importId,
+      result: Promise.resolve({ importId, results }),
+    };
+  }
+
+  getDatasetSummary() {
+    return Promise.resolve({ datasets: this.datasets });
+  }
+
+  dispose() {}
+}
+
+function importedFile(datasetId, fileName) {
+  return {
+    ok: true,
+    datasetId,
+    fileName,
+    rowCount: 1,
+  };
+}
+
+function failedFile(fileName) {
+  return {
+    ok: false,
+    fileName,
+  };
+}
+
+const selectionClient = new SelectionWorkerClient();
+const selectionDataSource = createBrowserSqliteDataSource({
+  client: selectionClient,
+});
+let selectionSummary = await selectionDataSource.getDatasetSummary();
+assert.equal(selectionSummary.selectedDatasetId, 'existing-dataset');
+
+selectionClient.enqueue([
+  importedFile('new-first', 'new-first.csv'),
+  importedFile('new-second', 'new-second.csv'),
+]);
+await selectionDataSource.importBrowserFiles({ files: [{}, {}] });
+selectionSummary = await selectionDataSource.getDatasetSummary();
+assert.equal(selectionSummary.selectedDatasetId, 'new-first');
+
+selectionClient.enqueue([
+  failedFile('broken.csv'),
+  importedFile('mixed-success', 'working.csv'),
+]);
+await selectionDataSource.importBrowserFiles({ files: [{}, {}] });
+selectionSummary = await selectionDataSource.getDatasetSummary();
+assert.equal(selectionSummary.selectedDatasetId, 'mixed-success');
+
+selectionClient.enqueue([
+  failedFile('still-broken.csv'),
+]);
+await selectionDataSource.importBrowserFiles({ files: [{}] });
+selectionSummary = await selectionDataSource.getDatasetSummary();
+assert.equal(selectionSummary.selectedDatasetId, 'mixed-success');
+selectionDataSource.dispose();
 
 console.log('Browser SQLite data-source adapter contract smoke test passed.');
 

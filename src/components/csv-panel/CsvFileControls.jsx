@@ -68,15 +68,17 @@ export default function CsvFileControls({
       {/* Desktop uses the native picker; browser mode uses the hidden input above. */}
       {desktopImport?.isAvailable && (
         <div className="csvDesktopImportBlock">
-          <button
-            type="button"
-            className="csvBtnPrimary csvDesktopImportButton"
-            onClick={desktopImport.onImport}
-            disabled={isDesktopImporting}
-            aria-label="Import CSV files"
-          >
-            {isDesktopImporting ? "Importing..." : "Import..."}
-          </button>
+          {desktopImport.usesNativePicker && (
+            <button
+              type="button"
+              className="csvBtnPrimary csvDesktopImportButton"
+              onClick={desktopImport.onImport}
+              disabled={isDesktopImporting}
+              aria-label="Import CSV files"
+            >
+              {isDesktopImporting ? "Importing..." : "Import..."}
+            </button>
+          )}
 
           {isDesktopImporting && desktopProgress && (
             <div className="csvDesktopImportStatus" role="status">
@@ -106,7 +108,7 @@ export default function CsvFileControls({
                       )}
                     </>
                   ) : (
-                    <div>{result.error ?? "Import failed."}</div>
+                    <div>{getImportErrorMessage(result.error)}</div>
                   )}
                 </div>
               ))}
@@ -155,7 +157,7 @@ export default function CsvFileControls({
 
         {datasetListState?.status === "error" && (
           <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
-            {datasetListState.error ?? "Could not load desktop datasets."}
+            {datasetListState.error ?? "Could not load datasets."}
           </div>
         )}
         {datasetListState?.mutationError && (
@@ -166,6 +168,11 @@ export default function CsvFileControls({
         {datasetListState?.removalError && (
           <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
             {datasetListState.removalError}
+          </div>
+        )}
+        {datasetListState?.queryError && (
+          <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+            {datasetListState.queryError}
           </div>
         )}
 
@@ -248,6 +255,14 @@ function normalizeCount(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return 0;
   return Math.max(0, Math.trunc(number));
+}
+
+function getImportErrorMessage(error) {
+  if (typeof error === "string" && error.trim()) return error;
+  if (typeof error?.message === "string" && error.message.trim()) {
+    return error.message;
+  }
+  return "Import failed.";
 }
 
 function getDisplayedRowCount(file) {

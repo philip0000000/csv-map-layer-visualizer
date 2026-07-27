@@ -4,6 +4,7 @@ export default function CoordinateMapping({
   latField,
   lonField,
   onUpdateMapping,
+  disabled = false,
 }) {
   return (
     <div className="csvMeta" style={{ marginTop: 10 }}>
@@ -16,6 +17,7 @@ export default function CoordinateMapping({
           className="csvSelect"
           // Current selected latitude column (or empty)
           value={latField || ""}
+          disabled={disabled || typeof onUpdateMapping !== "function"}
           // Update the selected file when user changes the value
           onChange={(e) =>
             onUpdateMapping?.(fileId, { latField: e.target.value || null })
@@ -44,6 +46,7 @@ export default function CoordinateMapping({
           className="csvSelect"
           // Current selected longitude column (or empty)
           value={lonField || ""}
+          disabled={disabled || typeof onUpdateMapping !== "function"}
           // Update the selected file when user changes the value
           onChange={(e) =>
             onUpdateMapping?.(fileId, { lonField: e.target.value || null })

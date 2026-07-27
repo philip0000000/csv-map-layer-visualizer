@@ -30,6 +30,34 @@ try {
   browser.dataSource.selectDataset(null);
   assert.equal(browserStateChanges, 1);
 
+  let browserSqliteCreations = 0;
+  const sqliteCapabilities = {
+    ...browser.capabilities,
+    groupedViewportResults: true,
+  };
+  const browserSqliteDataSource = {
+    getCapabilities: () => sqliteCapabilities,
+    initialize: async () => ({
+      ok: true,
+      capabilities: sqliteCapabilities,
+      error: null,
+    }),
+    dispose: () => {},
+  };
+  const browserSqlite = selectRuntimeDataSource({
+    desktopApi: null,
+    browserBackend: 'sqlite',
+    createBrowserSqlite: () => {
+      browserSqliteCreations += 1;
+      return browserSqliteDataSource;
+    },
+  });
+  assert.equal(browserSqlite.runtime, 'browser-sqlite');
+  assert.equal(browserSqlite.browserBackend, 'sqlite');
+  assert.equal(browserSqlite.dataSource, browserSqliteDataSource);
+  assert.equal(browserSqliteCreations, 1);
+  assert.equal((await browserSqlite.dataSource.initialize()).ok, true);
+
   const desktopApi = {
     isDesktop: true,
     getStatus: async () => ({ ok: true }),
@@ -52,6 +80,7 @@ try {
   assert.equal((await desktop.dataSource.initialize()).ok, true);
 
   browser.dataSource.dispose();
+  browserSqlite.dataSource.dispose();
   desktop.dataSource.dispose();
   console.log('Runtime DataSource selection smoke test passed.');
 } finally {

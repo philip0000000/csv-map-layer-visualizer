@@ -18,6 +18,10 @@ import { useExampleCsvFilesFromUrl } from "./components/useExampleCsvFilesFromUr
 import { useTimelinePlayback } from "./components/useTimelinePlayback";
 import { MarkerDetailsPanel } from "./components/MarkerDetailsPanel";
 import { useRuntimeDataSource } from "./components/useRuntimeDataSource";
+import {
+  getFirstImportedDatasetId,
+  mergeImportBatchResults,
+} from "./data/importBatchAggregation";
 
 const LARGE_RAW_MARKER_WARNING_THRESHOLD = 3000;
 const SQLITE_RENDER_BUDGET = 1000;
@@ -30,7 +34,7 @@ export default function App() {
     capabilities: desktopCapabilities,
     workflow,
   } = useRuntimeDataSource();
-  const usesBrowserFiles = workflow.browserFiles;
+  const usesBrowserFiles = workflow.rawBrowserFiles;
   const usesViewportQueries = workflow.viewportQueries;
 
   /**
@@ -80,15 +84,18 @@ export default function App() {
     timeline: timelineState,
   });
 
-  useExampleCsvFilesFromUrl({
-    importExampleFile: desktopCapabilities.exampleImport
-      ? importExampleFile
-      : null,
-  });
   const desktopImportAvailable =
-    desktopCapabilities.nativeFilePickerImport;
+    initialization?.ok === true && desktopCapabilities.nativeFilePickerImport;
+  const browserSqliteImportAvailable =
+    usesViewportQueries &&
+    initialization?.ok === true &&
+    desktopCapabilities.browserFileImport;
   const desktopDroppedImportAvailable =
-    usesViewportQueries && desktopCapabilities.droppedFileImport;
+    usesViewportQueries &&
+    initialization?.ok === true &&
+    desktopCapabilities.droppedFileImport;
+  const databaseImportAvailable =
+    desktopImportAvailable || browserSqliteImportAvailable;
   const [desktopImportState, setDesktopImportState] = useState({
     status: "idle",
     summary: null,
@@ -103,6 +110,17 @@ export default function App() {
     datasets: [],
     error: null,
   });
+  const [databaseSelectedId, setDatabaseSelectedId] = useState(null);
+  const [databasePreviewState, setDatabasePreviewState] = useState({
+    status: "idle",
+    datasetId: null,
+    rows: [],
+    totalRows: 0,
+    hasMore: false,
+    error: null,
+  });
+  const previewRequestRef = React.useRef(0);
+  const mapQueryRequestRef = React.useRef(0);
   const [desktopVisibilityState, setDesktopVisibilityState] = useState({
     pendingDatasetIds: [],
     error: null,
@@ -111,10 +129,14 @@ export default function App() {
     pendingDatasetIds: [],
     error: null,
   });
+  const [databaseMappingState, setDatabaseMappingState] = useState({
+    pendingDatasetId: null,
+    error: null,
+  });
   const [mapViewport, setMapViewport] = useState(null);
 
   useEffect(() => {
-    if (!desktopImportAvailable || !desktopCapabilities.importProgress) {
+    if (!databaseImportAvailable || !desktopCapabilities.importProgress) {
       return undefined;
     }
 
@@ -127,7 +149,7 @@ export default function App() {
     });
 
     return typeof unsubscribe === "function" ? unsubscribe : undefined;
-  }, [dataSource, desktopCapabilities.importProgress, desktopImportAvailable]);
+  }, [dataSource, databaseImportAvailable, desktopCapabilities.importProgress]);
 
   // App owns marker selection so the map and details panel share one lifecycle.
   const [selectedMarker, setSelectedMarker] = useState(null);
@@ -162,7 +184,7 @@ export default function App() {
       setDesktopDatasetState((current) => ({
         ...current,
         status: "error",
-        error: initialization.error?.message ?? "Could not initialize desktop data.",
+        error: initialization.error?.message ?? "Could not initialize the selected data backend.",
       }));
       return undefined;
     }
@@ -174,7 +196,15 @@ export default function App() {
       setDesktopDatasetState({
         status: "loaded",
         datasets: summary.datasets,
+        timeline: summary.timeline ?? null,
         error: null,
+      });
+      setDatabaseSelectedId((current) => {
+        if (!desktopCapabilities.datasetSelection) return null;
+        if (summary.datasets.some((dataset) => dataset.id === current)) {
+          return current;
+        }
+        return summary.selectedDatasetId ?? summary.datasets[0]?.id ?? null;
       });
     }).catch((error) => {
       if (canceled) return;
@@ -183,7 +213,7 @@ export default function App() {
         status: "error",
         error: error?.message
           ? String(error.message)
-          : "Could not load desktop datasets.",
+          : "Could not load datasets.",
       }));
     });
 
@@ -193,6 +223,7 @@ export default function App() {
   }, [
     desktopDataRevision,
     desktopDatasetSummaryAvailable,
+    desktopCapabilities.datasetSelection,
     dataSource,
     initialization,
     usesViewportQueries,
@@ -204,16 +235,130 @@ export default function App() {
         mutationError: desktopVisibilityState.error,
         pendingRemovalDatasetIds: desktopRemovalState.pendingDatasetIds,
         removalError: desktopRemovalState.error,
+        queryError: desktopMapViewState.error,
       }
     : {
         status: "error",
         datasets: [],
-        error: "The desktop dataset list is unavailable.",
+        error: "The dataset list is unavailable.",
         pendingDatasetIds: [],
         mutationError: null,
         pendingRemovalDatasetIds: [],
         removalError: null,
+        queryError: null,
       };
+
+  /** Select one database dataset and invalidate preview requests for the old one. */
+  const selectDatabaseDataset = useCallback(async (datasetId) => {
+    if (!usesViewportQueries || !desktopCapabilities.datasetSelection) return;
+    const requestId = previewRequestRef.current + 1;
+    previewRequestRef.current = requestId;
+    const result = await dataSource.selectDataset(datasetId);
+    if (result?.ok && previewRequestRef.current === requestId) {
+      setDatabaseSelectedId(result.datasetId);
+    }
+  }, [dataSource, desktopCapabilities.datasetSelection, usesViewportQueries]);
+
+  /** Load the first bounded preview page and reject stale dataset responses. */
+  useEffect(() => {
+    if (
+      !usesViewportQueries ||
+      !desktopCapabilities.previewPaging ||
+      initialization?.ok !== true ||
+      !databaseSelectedId
+    ) {
+      setDatabasePreviewState({
+        status: "idle",
+        datasetId: null,
+        rows: [],
+        totalRows: 0,
+        hasMore: false,
+        error: null,
+      });
+      return undefined;
+    }
+
+    const requestId = previewRequestRef.current + 1;
+    previewRequestRef.current = requestId;
+    setDatabasePreviewState({
+      status: "loading",
+      datasetId: databaseSelectedId,
+      rows: [],
+      totalRows: 0,
+      hasMore: false,
+      error: null,
+    });
+
+    dataSource.getPreviewPage({
+      datasetId: databaseSelectedId,
+      offset: 0,
+      limit: 30,
+    }).then((page) => {
+      if (previewRequestRef.current !== requestId) return;
+      setDatabasePreviewState({
+        status: "loaded",
+        datasetId: databaseSelectedId,
+        rows: page.rows,
+        totalRows: page.totalRows,
+        hasMore: page.hasMore,
+        error: null,
+      });
+    }).catch((error) => {
+      if (previewRequestRef.current !== requestId) return;
+      setDatabasePreviewState({
+        status: "error",
+        datasetId: databaseSelectedId,
+        rows: [],
+        totalRows: 0,
+        hasMore: false,
+        error: error?.message ? String(error.message) : "Could not load preview rows.",
+      });
+    });
+
+    return () => {
+      if (previewRequestRef.current === requestId) {
+        previewRequestRef.current += 1;
+      }
+    };
+  }, [
+    dataSource,
+    databaseSelectedId,
+    desktopCapabilities.previewPaging,
+    initialization,
+    usesViewportQueries,
+  ]);
+
+  /** Append one deterministic preview page without reloading earlier rows. */
+  const loadMoreDatabasePreview = useCallback(async () => {
+    const current = databasePreviewState;
+    if (current.status !== "loaded" || !current.hasMore || !current.datasetId) return;
+    const requestId = previewRequestRef.current + 1;
+    previewRequestRef.current = requestId;
+    setDatabasePreviewState((state) => ({ ...state, status: "loading-more" }));
+    try {
+      const page = await dataSource.getPreviewPage({
+        datasetId: current.datasetId,
+        offset: current.rows.length,
+        limit: 30,
+      });
+      if (previewRequestRef.current !== requestId) return;
+      setDatabasePreviewState({
+        status: "loaded",
+        datasetId: current.datasetId,
+        rows: [...current.rows, ...page.rows],
+        totalRows: page.totalRows,
+        hasMore: page.hasMore,
+        error: null,
+      });
+    } catch (error) {
+      if (previewRequestRef.current !== requestId) return;
+      setDatabasePreviewState({
+        ...current,
+        status: "loaded",
+        error: error?.message ? String(error.message) : "Could not load more preview rows.",
+      });
+    }
+  }, [dataSource, databasePreviewState]);
 
   const handleMarkerSelect = useCallback((marker) => {
     // Selecting a marker always reveals its details, even after a collapse.
@@ -318,6 +463,10 @@ export default function App() {
       }));
       setSelectedMarker(null);
       setIsMarkerPanelCollapsed(false);
+      if (databaseSelectedId === datasetId) {
+        previewRequestRef.current += 1;
+        setDatabaseSelectedId(null);
+      }
       setDesktopDataRevision((revision) => revision + 1);
       setDesktopRemovalState((current) => ({
         pendingDatasetIds: current.pendingDatasetIds.filter(
@@ -339,10 +488,44 @@ export default function App() {
     desktopDatasetRemovalAvailable,
     desktopDatasetState.datasets,
     dataSource,
+    databaseSelectedId,
   ]);
 
-  // Picker and drop imports share state handling while the main process owns
-  // file access and per-file database transactions.
+  /** Rebuild one dataset mapping while retaining its last valid UI state on failure. */
+  const updateDatabaseMapping = useCallback(async (datasetId, mapping) => {
+    if (!usesViewportQueries || !desktopCapabilities.datasetMapping) return;
+    setDatabaseMappingState({ pendingDatasetId: datasetId, error: null });
+    try {
+      const result = await dataSource.updateDatasetMapping(datasetId, mapping);
+      if (!result?.ok) {
+        throw new Error(result?.error?.message ?? "Could not update coordinate mapping.");
+      }
+      setDesktopDatasetState((current) => ({
+        ...current,
+        datasets: current.datasets.map((dataset) => (
+          dataset.id === datasetId ? { ...dataset, ...result.dataset } : dataset
+        )),
+      }));
+      setSelectedMarker(null);
+      setIsMarkerPanelCollapsed(false);
+      setDesktopDataRevision((revision) => revision + 1);
+      setDatabaseMappingState({ pendingDatasetId: null, error: null });
+    } catch (error) {
+      setDatabaseMappingState({
+        pendingDatasetId: null,
+        error: error?.message
+          ? String(error.message)
+          : "Could not update coordinate mapping.",
+      });
+    }
+  }, [
+    dataSource,
+    desktopCapabilities.datasetMapping,
+    usesViewportQueries,
+  ]);
+
+  // Native picker, browser picker, drop, and example imports share normalized
+  // progress/results while the selected adapter owns its safe file boundary.
   const runDesktopImport = useCallback(async (importOperation) => {
     setDesktopImportState({
       status: "importing",
@@ -365,6 +548,10 @@ export default function App() {
       }
 
       if (result?.ok) {
+        const firstImportedDatasetId = getFirstImportedDatasetId(result);
+        if (firstImportedDatasetId) {
+          setDatabaseSelectedId(firstImportedDatasetId);
+        }
         setDesktopImportState({
           status: "imported",
           summary: result,
@@ -396,12 +583,43 @@ export default function App() {
     return runDesktopImport(() => dataSource.importFromPicker());
   }, [dataSource, desktopImportAvailable, runDesktopImport]);
 
+  /** Route browser File objects only to the already-selected SQLite backend. */
+  const importBrowserCsvToSqlite = useCallback((browserFiles) => {
+    if (!browserSqliteImportAvailable) return undefined;
+    return runDesktopImport(() => dataSource.importBrowserFiles({
+      files: Array.from(browserFiles ?? []),
+    }));
+  }, [browserSqliteImportAvailable, dataSource, runDesktopImport]);
+
   const importDroppedCsvFiles = useCallback((droppedFiles) => {
     if (!desktopDroppedImportAvailable) return undefined;
     return runDesktopImport(
       () => dataSource.importDroppedFiles({ files: droppedFiles }),
     );
   }, [dataSource, desktopDroppedImportAvailable, runDesktopImport]);
+
+  const importDatabaseExamples = useCallback((names) => {
+    if (!usesViewportQueries || !desktopCapabilities.exampleImport) return undefined;
+    return runDesktopImport(async () => {
+      const batches = [];
+      for (const name of names) {
+        batches.push(await dataSource.importExample({ name }));
+      }
+      return mergeImportBatchResults(batches);
+    });
+  }, [
+    dataSource,
+    desktopCapabilities.exampleImport,
+    runDesktopImport,
+    usesViewportQueries,
+  ]);
+
+  useExampleCsvFilesFromUrl({
+    importExampleFile: usesBrowserFiles ? importExampleFile : null,
+    importExampleFiles: !usesBrowserFiles && initialization?.ok === true
+      ? importDatabaseExamples
+      : null,
+  });
 
   const desktopDropEnabled =
     desktopDroppedImportAvailable && desktopImportState.status !== "importing";
@@ -413,13 +631,15 @@ export default function App() {
   const fileDropAvailable = usesBrowserFiles || desktopDropEnabled;
 
   const desktopImport = useMemo(() => ({
-    isAvailable: desktopImportAvailable,
+    isAvailable: databaseImportAvailable,
+    usesNativePicker: desktopImportAvailable,
     status: desktopImportState.status,
     summary: desktopImportState.summary,
     error: desktopImportState.error,
     progress: desktopImportState.progress,
     onImport: importCsvToSqlite,
   }), [
+    databaseImportAvailable,
     desktopImportAvailable,
     desktopImportState.error,
     desktopImportState.progress,
@@ -428,55 +648,100 @@ export default function App() {
     importCsvToSqlite,
   ]);
 
+  const enabledDatabaseIds = useMemo(
+    () => desktopDatasetState.datasets
+      .filter((dataset) => dataset.enabled)
+      .map((dataset) => dataset.id),
+    [desktopDatasetState.datasets],
+  );
+  const databaseTimelineAvailable = !!desktopDatasetState.timeline;
+  const databaseTimelineQuery = useMemo(() => ({
+    timelineEnabled:
+      databaseTimelineAvailable && !!timelineState.timelineEnabled,
+    startYear: timelineState.startYear ?? null,
+    endYear: timelineState.endYear ?? null,
+    yearMin: timelineState.yearMin ?? null,
+    yearMax: timelineState.yearMax ?? null,
+    dayFilterEnabled: !!timelineState.dayFilterEnabled,
+    startDay: timelineState.startDay ?? null,
+    endDay: timelineState.endDay ?? null,
+  }), [
+    databaseTimelineAvailable,
+    timelineState.dayFilterEnabled,
+    timelineState.endDay,
+    timelineState.endYear,
+    timelineState.startDay,
+    timelineState.startYear,
+    timelineState.timelineEnabled,
+    timelineState.yearMax,
+    timelineState.yearMin,
+  ]);
+
+  /** Debounce viewport work and allow only the newest query to update the map. */
   useEffect(() => {
-    if (!desktopSqliteMapAvailable || !mapViewport?.bounds) {
+    if (
+      !desktopSqliteMapAvailable ||
+      initialization?.ok !== true ||
+      !mapViewport?.bounds
+    ) {
       return undefined;
     }
 
-    let canceled = false;
-
-    dataSource.queryMapView({
-      bounds: mapViewport.bounds,
-      zoom: mapViewport.zoom ?? null,
-      timeline: timelineState,
-      renderBudget: SQLITE_RENDER_BUDGET,
-    }).then((result) => {
-      if (!canceled) {
-        setDesktopMapViewState({ status: "loaded", result, error: null });
-      }
-    }).catch((error) => {
-      if (!canceled) {
-        setDesktopMapViewState({
-          status: "error",
-          result: null,
-          error: error?.message ? String(error.message) : "Map query failed.",
-        });
-      }
-    });
+    const requestId = mapQueryRequestRef.current + 1;
+    mapQueryRequestRef.current = requestId;
+    setDesktopMapViewState((current) => ({
+      ...current,
+      status: current.result ? "refreshing" : "loading",
+      error: null,
+    }));
+    const timerId = globalThis.setTimeout(() => {
+      dataSource.queryMapView({
+        bounds: mapViewport.bounds,
+        zoom: mapViewport.zoom ?? null,
+        timeline: databaseTimelineQuery,
+        renderBudget: SQLITE_RENDER_BUDGET,
+        datasetIds: enabledDatabaseIds,
+      }).then((result) => {
+        if (mapQueryRequestRef.current === requestId) {
+          setDesktopMapViewState({ status: "loaded", result, error: null });
+        }
+      }).catch((error) => {
+        if (mapQueryRequestRef.current === requestId) {
+          setDesktopMapViewState((current) => ({
+            ...current,
+            status: "error",
+            error: error?.message ? String(error.message) : "Map query failed.",
+          }));
+        }
+      });
+    }, 100);
 
     return () => {
-      canceled = true;
+      globalThis.clearTimeout(timerId);
     };
   }, [
     dataSource,
     desktopSqliteMapAvailable,
     desktopDataRevision,
+    databaseTimelineQuery,
+    enabledDatabaseIds,
+    initialization,
     mapViewport,
-    timelineState,
   ]);
 
   const desktopMapFeatures = useMemo(
     () => toLegacyMapFeatures(desktopMapViewState.result),
     [desktopMapViewState.result],
   );
-  // Desktop never falls back to the renderer's in-memory CSV data source.
+  // Database-backed sessions never fall back to renderer in-memory CSV data.
   const activeMapFeatures = usesViewportQueries
     ? desktopMapFeatures
     : derivedMapFeatures;
   const viewportQueryStats = usesViewportQueries
     ? desktopMapViewState.result?.stats ?? null
     : null;
-  // Detail loaders are desktop-only, so browser and in-memory maps keep their old path.
+  // Compact database results load source rows on demand; raw browser data keeps
+  // its existing synchronous row lookup.
   const getDesktopFeatureDetails = useCallback(
     (query) => dataSource.getFeatureDetails(query),
     [dataSource],
@@ -491,8 +756,32 @@ export default function App() {
   const activeGroupRowsLoader = desktopSqliteMapAvailable
     ? getDesktopGroupRows
     : null;
-  const selectedHeaders = selected?.headers;
-  const selectedRows = selected?.rows;
+  const databaseFiles = useMemo(() => desktopDatasetState.datasets.map((dataset) => ({
+    ...dataset,
+    size: dataset.sizeBytes,
+    rows: dataset.id === databaseSelectedId ? databasePreviewState.rows : [],
+    previewStatus: dataset.id === databaseSelectedId
+      ? databasePreviewState.status
+      : "idle",
+    previewError: dataset.id === databaseSelectedId
+      ? databasePreviewState.error
+      : null,
+    previewHasMore: dataset.id === databaseSelectedId && databasePreviewState.hasMore,
+    previewTotalRows: dataset.id === databaseSelectedId
+      ? databasePreviewState.totalRows
+      : dataset.rowCount,
+  })), [
+    databasePreviewState,
+    databaseSelectedId,
+    desktopDatasetState.datasets,
+  ]);
+  const databaseSelected = useMemo(
+    () => databaseFiles.find((dataset) => dataset.id === databaseSelectedId) ?? null,
+    [databaseFiles, databaseSelectedId],
+  );
+  const activeSelected = usesViewportQueries ? databaseSelected : selected;
+  const selectedHeaders = activeSelected?.headers;
+  const selectedRows = usesViewportQueries ? null : selected?.rows;
   const visibleMarkerPointCount = useMemo(
     () => activeMapFeatures.points.points.filter((point) => !point.image).length,
     [activeMapFeatures.points.points],
@@ -522,13 +811,28 @@ export default function App() {
   ]);
 
   const timelineFields = useMemo(() => {
+    if (usesViewportQueries) {
+      return {
+        yearField: activeSelected?.detectedFields?.yearField ?? null,
+        dateField: activeSelected?.detectedFields?.dateField ?? null,
+        dayOfYearField: activeSelected?.detectedFields?.dayOfYearField ?? null,
+      };
+    }
     if (!selectedHeaders) {
       return { yearField: null, dateField: null, dayOfYearField: null };
     }
     return autoDetectTimelineFields(selectedHeaders);
-  }, [selectedHeaders]);
+  }, [activeSelected?.detectedFields, selectedHeaders, usesViewportQueries]);
 
   const timelineRangeFields = useMemo(() => {
+    if (usesViewportQueries) {
+      return {
+        yearFromField: activeSelected?.detectedFields?.yearFromField ?? null,
+        yearToField: activeSelected?.detectedFields?.yearToField ?? null,
+        dateFromField: activeSelected?.detectedFields?.dateFromField ?? null,
+        dateToField: activeSelected?.detectedFields?.dateToField ?? null,
+      };
+    }
     if (!selectedHeaders) {
       return {
         yearFromField: null,
@@ -538,11 +842,47 @@ export default function App() {
       };
     }
     return autoDetectRangeFields(selectedHeaders);
-  }, [selectedHeaders]);
+  }, [activeSelected?.detectedFields, selectedHeaders, usesViewportQueries]);
+
+  // SQLite exposes only a compact enabled-dataset timeline extent; React must
+  // not load all source rows merely to initialize the year controls.
+  useEffect(() => {
+    if (!usesViewportQueries || !timelineState.timelineEnabled) return;
+    if (timelineState.yearDomainMode === "manual") return;
+    const min = desktopDatasetState.timeline?.yearMin ?? null;
+    const max = desktopDatasetState.timeline?.yearMax ?? null;
+    patchTimeline({
+      yearMin: min,
+      yearMax: max,
+      yearMinDraft: String(min ?? ""),
+      yearMaxDraft: String(max ?? ""),
+    });
+    if (min == null || max == null) return;
+    const nextStart = timelineState.startYear == null
+      ? min
+      : Math.max(min, Math.min(max, timelineState.startYear));
+    const nextEnd = timelineState.endYear == null
+      ? max
+      : Math.max(min, Math.min(max, timelineState.endYear));
+    const start = Math.min(nextStart, nextEnd);
+    const end = Math.max(nextStart, nextEnd);
+    if (start !== timelineState.startYear || end !== timelineState.endYear) {
+      setYearRange(start, end);
+    }
+  }, [
+    desktopDatasetState.timeline,
+    patchTimeline,
+    setYearRange,
+    timelineState.endYear,
+    timelineState.startYear,
+    timelineState.timelineEnabled,
+    timelineState.yearDomainMode,
+    usesViewportQueries,
+  ]);
 
   // When timeline is enabled, compute year domain from selected file
   useEffect(() => {
-    if (!selectedRows) return;
+    if (usesViewportQueries || !selectedRows) return;
     if (!timelineState.timelineEnabled) return;
 
     // if user has set a manual year domain, do not overwrite it from data
@@ -596,6 +936,7 @@ export default function App() {
     timelineRangeFields,
     patchTimeline,
     setYearRange,
+    usesViewportQueries,
   ]);
 
   return (
@@ -617,6 +958,7 @@ export default function App() {
           regions={activeMapFeatures.regions.polygons}
           lines={activeMapFeatures.lines.lines}
           getSourceRow={activeMapFeatures.getSourceRow}
+          getFeatureDetails={activeFeatureDetailsLoader}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
           clusterRadius={mapToolsApi.state.clusterRadius}
           onViewportChange={setMapViewport}
@@ -626,10 +968,18 @@ export default function App() {
 
         <CsvPanelOverlay onVisibleWidthChange={setCsvPanelVisibleWidth}>
           <CsvPanel
-            files={usesViewportQueries ? desktopDatasetListState.datasets : files}
-            selectedId={usesViewportQueries ? null : selectedId}
-            onSelect={usesViewportQueries ? undefined : setSelectedId}
-            onImportFiles={usesBrowserFiles ? importFiles : undefined}
+            files={usesViewportQueries ? databaseFiles : files}
+            selectedId={usesViewportQueries ? databaseSelectedId : selectedId}
+            onSelect={usesViewportQueries
+              ? (desktopCapabilities.datasetSelection
+                  ? selectDatabaseDataset
+                  : undefined)
+              : setSelectedId}
+            onImportFiles={usesBrowserFiles
+              ? importFiles
+              : (browserSqliteImportAvailable
+                  ? importBrowserCsvToSqlite
+                  : undefined)}
             desktopImport={desktopImport}
             datasetListState={usesViewportQueries ? desktopDatasetListState : null}
             viewportQueryStats={viewportQueryStats}
@@ -645,10 +995,22 @@ export default function App() {
                   ? updateDesktopDatasetEnabled
                   : undefined)
               : updateFileEnabled}
-            onUpdateMapping={desktopCapabilities.datasetMapping
-              ? updateFileMapping
+            onUpdateMapping={usesViewportQueries
+              ? (desktopCapabilities.datasetMapping
+                  ? updateDatabaseMapping
+                  : undefined)
+              : updateFileMapping}
+            onLoadMorePreview={usesViewportQueries && desktopCapabilities.previewPaging
+              ? loadMoreDatabasePreview
               : undefined}
+            initialization={usesViewportQueries
+              ? (initialization ?? { ok: false })
+              : null}
+            mappingState={usesViewportQueries ? databaseMappingState : null}
             timelineState={timelineState}
+            timelineAvailable={usesViewportQueries
+              ? databaseTimelineAvailable
+              : true}
             timelineFields={timelineFields}
             onTimelinePatch={patchTimeline}
             onTimelinePlaybackStart={timelinePlaybackApi.startPlayback}

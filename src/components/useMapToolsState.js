@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 
 const DEFAULT_CLUSTER_RADIUS = 80;
 
-function getInitialState() {
+/** Create the shared, non-persisted default state used by every runtime mode. */
+export function getInitialMapToolsState() {
   return {
-    clusterMarkersEnabled: true,
+    clusterMarkersEnabled: false,
     clusterRadius: DEFAULT_CLUSTER_RADIUS,
     clusterRadiusDraft: DEFAULT_CLUSTER_RADIUS,
   };
@@ -12,7 +13,7 @@ function getInitialState() {
 
 export function useMapToolsState() {
   // Initialize ONCE on first render (no persistence)
-  const initial = useMemo(() => getInitialState(), []);
+  const initial = useMemo(() => getInitialMapToolsState(), []);
   const [state, setState] = useState(initial);
 
   function patch(partial) {

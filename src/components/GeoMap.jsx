@@ -27,6 +27,10 @@ import "leaflet-polylinedecorator";
 
 import { getClusterMarkerIcon, getMarkerIcon } from "./markerIcons";
 import { buildMarkerDetailFields } from "./markerDetailFields";
+import {
+  findMarkersNearClickedMarker,
+  MARKER_PROXIMITY_RADIUS_PIXELS,
+} from "./markerProximitySelection";
 
 function getFeaturePopupRow(feature, getSourceRow) {
   return feature?.row ?? getSourceRow?.(feature?.sourceFileId, feature?.sourceRowIndex) ?? null;
@@ -259,6 +263,79 @@ function ViewportChangeReporter({ onViewportChange }) {
 
   return null;
 }
+
+/**
+ * Render exact point markers and keep proximity selection separate from clustering.
+ * The points prop is already scoped by active dataset visibility and timeline filters.
+ */
+function ExactPointMarkers({
+  points,
+  clusterMarkersEnabled,
+  clusterRadius,
+  markerClusterGroupRef,
+  onMarkerSelect,
+}) {
+  const map = useMap();
+
+  /** Project from the clicked marker anchor and forward its ordered nearby matches. */
+  function selectWithProximity(clickedMarker) {
+    const nearbyMarkers = findMarkersNearClickedMarker(
+      points,
+      clickedMarker,
+      // Container-point projection measures from each marker's map anchor,
+      // rather than from the mouse pointer inside the marker icon.
+      (marker) => map.latLngToContainerPoint([marker.lat, marker.lon]),
+    );
+    onMarkerSelect?.(clickedMarker, nearbyMarkers);
+  }
+
+  if (clusterMarkersEnabled) {
+    return (
+      <MarkerClusterGroup
+        ref={markerClusterGroupRef}
+        // Force a re-init when clustering settings change.
+        // Leaflet.markercluster does not always apply maxClusterRadius updates dynamically.
+        key={`cluster:${clusterMarkersEnabled ? 1 : 0}:${clusterRadius}`}
+        // chunkedLoading improves responsiveness when there are many markers.
+        // It progressively adds markers to the map instead of blocking the UI.
+        chunkedLoading
+        iconCreateFunction={createMarkerClusterIcon}
+        maxClusterRadius={clusterRadius}
+      >
+        {points.map((point) => {
+          const icon = getMarkerIcon(point.marker);
+
+          return (
+            <Marker
+              key={point.id}
+              ref={(marker) => setCsvMarkerValue(marker, point.marker)}
+              position={[point.lat, point.lon]}
+              {...(icon ? { icon } : {})}
+              // Cluster mode deliberately bypasses proximity selection so
+              // expansion and spiderfying retain their existing behavior.
+              eventHandlers={{
+                click: () => onMarkerSelect?.(point, [point]),
+              }}
+            />
+          );
+        })}
+      </MarkerClusterGroup>
+    );
+  }
+
+  return points.map((point) => {
+    const icon = getMarkerIcon(point.marker);
+
+    return (
+      <Marker
+        key={point.id}
+        position={[point.lat, point.lon]}
+        {...(icon ? { icon } : {})}
+        eventHandlers={{ click: () => selectWithProximity(point) }}
+      />
+    );
+  });
+}
 /**
  * Map tile providers.
  * We expose:
@@ -412,7 +489,7 @@ export default function GeoMap({
       {selectedMarker && (
         <CircleMarker
           center={[selectedMarker.lat, selectedMarker.lon]}
-          radius={18}
+          radius={MARKER_PROXIMITY_RADIUS_PIXELS}
           pathOptions={{
             color: "#facc15",
             weight: 4,
@@ -431,46 +508,13 @@ export default function GeoMap({
         - Clicking a cluster zooms in and reveals the markers inside.
         - When disabled, markers are shown normally (current behavior).
       */}
-      {clusterMarkersEnabled ? (
-        <MarkerClusterGroup
-          ref={markerClusterGroupRef}
-          // Force a re-init when clustering settings change.
-          // Leaflet.markercluster does not always apply maxClusterRadius updates dynamically.
-          key={`cluster:${clusterMarkersEnabled ? 1 : 0}:${clusterRadius}`}
-          // chunkedLoading improves responsiveness when there are many markers.
-          // It progressively adds markers to the map instead of blocking the UI.
-          chunkedLoading
-          iconCreateFunction={createMarkerClusterIcon}
-          maxClusterRadius={clusterRadius}
-        >
-          {exactMarkerPoints.map((p) => {
-            const icon = getMarkerIcon(p.marker);
-
-            return (
-              <Marker
-                key={p.id}
-                ref={(marker) => setCsvMarkerValue(marker, p.marker)}
-                position={[p.lat, p.lon]}
-                {...(icon ? { icon } : {})}
-                eventHandlers={{ click: () => onMarkerSelect?.(p) }}
-              />
-            );
-          })}
-        </MarkerClusterGroup>
-      ) : (
-        exactMarkerPoints.map((p) => {
-          const icon = getMarkerIcon(p.marker);
-
-          return (
-            <Marker
-              key={p.id}
-              position={[p.lat, p.lon]}
-              {...(icon ? { icon } : {})}
-              eventHandlers={{ click: () => onMarkerSelect?.(p) }}
-            />
-          );
-        })
-      )}
+      <ExactPointMarkers
+        points={exactMarkerPoints}
+        clusterMarkersEnabled={clusterMarkersEnabled}
+        clusterRadius={clusterRadius}
+        markerClusterGroupRef={markerClusterGroupRef}
+        onMarkerSelect={onMarkerSelect}
+      />
 
       {/* Render grouped SQLite summaries as count markers, separate from exact marker clustering. */}
       {groupedMarkerPoints.map((p) => {

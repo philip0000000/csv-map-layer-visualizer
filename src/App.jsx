@@ -103,6 +103,7 @@ export default function App() {
 
   // App owns marker selection so the map and details panel share one lifecycle.
   const [selectedMarker, setSelectedMarker] = useState(null);
+  const [selectedMarkers, setSelectedMarkers] = useState([]);
   const [isMarkerPanelCollapsed, setIsMarkerPanelCollapsed] = useState(false);
 
   // The details panel uses the CSV panel's visible edge as its left position.
@@ -310,9 +311,14 @@ export default function App() {
     }
   }, [dataSource, databasePreviewState]);
 
-  const handleMarkerSelect = useCallback((marker) => {
+  const handleMarkerSelect = useCallback((marker, nearbyMarkers) => {
     // Selecting a marker always reveals its details, even after a collapse.
     setSelectedMarker(marker);
+    setSelectedMarkers(
+      Array.isArray(nearbyMarkers) && nearbyMarkers.length > 0
+        ? nearbyMarkers
+        : [marker],
+    );
     setIsMarkerPanelCollapsed(false);
   }, []);
 
@@ -323,6 +329,7 @@ export default function App() {
   const handleMarkerPanelClose = useCallback(() => {
     // Clearing the selection unmounts both the panel and its collapsed control.
     setSelectedMarker(null);
+    setSelectedMarkers([]);
     setIsMarkerPanelCollapsed(false);
   }, []);
 
@@ -354,6 +361,7 @@ export default function App() {
         )),
       }));
       setSelectedMarker(null);
+      setSelectedMarkers([]);
       setIsMarkerPanelCollapsed(false);
       setDesktopDataRevision((revision) => revision + 1);
       setDesktopVisibilityState((current) => ({
@@ -412,6 +420,7 @@ export default function App() {
         datasets: current.datasets.filter((item) => item.id !== datasetId),
       }));
       setSelectedMarker(null);
+      setSelectedMarkers([]);
       setIsMarkerPanelCollapsed(false);
       if (databaseSelectedId === datasetId) {
         previewRequestRef.current += 1;
@@ -457,6 +466,7 @@ export default function App() {
         )),
       }));
       setSelectedMarker(null);
+      setSelectedMarkers([]);
       setIsMarkerPanelCollapsed(false);
       setDesktopDataRevision((revision) => revision + 1);
       setDatabaseMappingState({ pendingDatasetId: null, error: null });
@@ -835,6 +845,7 @@ export default function App() {
 
         <MarkerDetailsPanel
           marker={selectedMarker}
+          markers={selectedMarkers}
           leftOffset={csvPanelVisibleWidth}
           getSourceRow={activeMapFeatures.getSourceRow}
           getFeatureDetails={activeFeatureDetailsLoader}

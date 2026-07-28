@@ -94,6 +94,64 @@ try {
 
   assert.match(singleMarkup, />Point</);
   assert.doesNotMatch(singleMarkup, /Markers near this location/);
+  assert.match(singleMarkup, /aria-label="Marker details"/);
+  assert.doesNotMatch(singleMarkup, />Marker details</);
+
+  for (const renderType of ['grouped', 'representative']) {
+    const groupedMarkup = renderToStaticMarkup(React.createElement(
+      MarkerDetailsPanel,
+      {
+        marker: {
+          ...clicked,
+          renderType,
+          count: 2,
+          groupRef: { queryId: 'group-query' },
+        },
+        markers: [],
+        leftOffset: 420,
+        getGroupRows() {},
+        isCollapsed: false,
+        onToggleCollapse() {},
+        onClose() {},
+      },
+    ));
+
+    assert.match(groupedMarkup, /class="groupedMarkerDetails"/);
+    assert.match(groupedMarkup, /class="groupedMarkerDetailsHeading"/);
+    assert.match(groupedMarkup, /class="groupedMarkerRowsSection"/);
+    assert.doesNotMatch(groupedMarkup, /class="groupedMarkerShowMore"/);
+    assert.doesNotMatch(groupedMarkup, /max-width:420px/);
+  }
+
+  const collapsedMarkup = renderToStaticMarkup(React.createElement(
+    MarkerDetailsPanel,
+    {
+      marker: clicked,
+      markers: [clicked],
+      leftOffset: 420,
+      isCollapsed: true,
+      onToggleCollapse() {},
+      onClose() {},
+    },
+  ));
+
+  assert.match(
+    collapsedMarkup,
+    /class="markerDetailsPanelClose markerDetailsPanelCollapsedClose"/,
+  );
+  assert.match(
+    collapsedMarkup,
+    /class="markerDetailsPanelExpandRail"[^>]*aria-label="Expand marker details"/,
+  );
+  assert.doesNotMatch(collapsedMarkup, /&gt;/);
+  assert.match(
+    collapsedMarkup,
+    /class="markerDetailsPanelHeader" hidden=""/,
+  );
+  assert.match(
+    collapsedMarkup,
+    /class="markerDetailsPanelContent" hidden=""/,
+  );
 } finally {
   await vite.close();
 }

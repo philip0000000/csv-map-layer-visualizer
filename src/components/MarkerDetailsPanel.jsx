@@ -83,19 +83,27 @@ export function MarkerDetailsPanel({
       }}
       aria-label='Marker details'
     >
+      {/* Keep Close visible while the remaining collapsed rail expands. */}
       <button
         type='button'
-        className='markerDetailsPanelExpand'
-        onClick={onToggleCollapse}
-        aria-label='Expand marker details'
-        title='Expand'
+        className='markerDetailsPanelClose markerDetailsPanelCollapsedClose'
+        onClick={onClose}
+        aria-label='Close marker details'
+        title='Close'
         hidden={!isCollapsed}
       >
-        &gt;
+        &times;
       </button>
+      <button
+        type='button'
+        className='markerDetailsPanelExpandRail'
+        onClick={onToggleCollapse}
+        aria-label='Expand marker details'
+        title='Expand marker details'
+        hidden={!isCollapsed}
+      />
 
       <div className='markerDetailsPanelHeader' hidden={isCollapsed}>
-        <div className='markerDetailsPanelTitle'>Marker details</div>
         <div className='markerDetailsPanelHeaderActions'>
           <button
             type='button'

@@ -257,8 +257,10 @@ export function GroupedMarkerDetails({ point, getGroupRows, isActive }) {
     : 'Grouped markers';
 
   return (
-    <div style={{ minWidth: 280, maxWidth: 420 }}>
-      <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+    <div className='groupedMarkerDetails'>
+      <div className='groupedMarkerDetailsHeading'>
+        {title}
+      </div>
       <div>
         <b>count:</b> {point.count ?? 1}
       </div>
@@ -271,6 +273,7 @@ export function GroupedMarkerDetails({ point, getGroupRows, isActive }) {
 
       {canLoadGroupRows && (
         <div
+          className='groupedMarkerRowsSection'
           style={{
             borderTop: '1px solid rgba(0, 0, 0, 0.15)',
             marginTop: 8,
@@ -294,9 +297,8 @@ export function GroupedMarkerDetails({ point, getGroupRows, isActive }) {
                 {pagingState.totalRows ?? pagingState.rows.length} rows
               </div>
               <div
+                className='groupedMarkerRowsList'
                 style={{
-                  maxHeight: 260,
-                  overflowY: 'auto',
                   paddingRight: 4,
                 }}
               >
@@ -317,23 +319,24 @@ export function GroupedMarkerDetails({ point, getGroupRows, isActive }) {
                     </div>
                   </details>
                 ))}
+                {/* Keep paging after loaded rows so it scrolls with the list. */}
+                {canShowMore && (
+                  <button
+                    type='button'
+                    className='groupedMarkerShowMore'
+                    onClick={handleShowMore}
+                    disabled={pagingState.status === 'loading-more'}
+                  >
+                    {pagingState.status === 'loading-more'
+                      ? 'Loading...'
+                      : 'Show 30 more'}
+                  </button>
+                )}
               </div>
             </>
           )}
           {pagingState.rows.length > 0 && pagingState.error && (
             <div style={{ marginTop: 6 }}>{pagingState.error}</div>
-          )}
-          {canShowMore && (
-            <button
-              type='button'
-              onClick={handleShowMore}
-              disabled={pagingState.status === 'loading-more'}
-              style={{ marginTop: 8 }}
-            >
-              {pagingState.status === 'loading-more'
-                ? 'Loading...'
-                : 'Show 30 more'}
-            </button>
           )}
         </div>
       )}

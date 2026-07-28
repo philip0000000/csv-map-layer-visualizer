@@ -135,16 +135,10 @@
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
-}
-
-.markerDetailsPanelTitle {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
 }
 
 .markerDetailsPanelHeaderActions {
@@ -171,32 +165,87 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
-.markerDetailsPanelExpand {
+.markerDetailsPanelCollapsedClose {
   position: absolute;
-  top: 50%;
-  left: 0;
-  transform: translateY(-50%);
-  width: 34px;
-  height: 64px;
-  padding: 0;
-  border-radius: 0 12px 12px 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(15, 23, 42, 0.95);
-  color: #e2e8f0;
-  cursor: pointer;
-  font-size: 18px;
-  font-weight: 800;
+  /* Match the expanded header controls while the CSV handle stays centered. */
+  top: 8px;
+  left: 1px;
+  z-index: 1;
+  border-radius: 8px;
 }
 
-.markerDetailsPanelExpand:hover {
-  background: rgba(15, 23, 42, 1);
+/* The blank rail expands the panel without competing visually with Close. */
+.markerDetailsPanelExpandRail {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.markerDetailsPanelExpandRail:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.markerDetailsPanelExpandRail:focus-visible {
+  outline: 2px solid rgba(226, 232, 240, 0.9);
+  outline-offset: -2px;
 }
 
 .markerDetailsPanelContent {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   padding: 12px;
+}
+
+/* Flex display rules must not override the panel's collapsed hidden state. */
+.markerDetailsPanelHeader[hidden],
+.markerDetailsPanelContent[hidden] {
+  display: none;
+}
+
+.groupedMarkerDetails {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+
+.groupedMarkerDetailsHeading {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.groupedMarkerShowMore {
+  margin-top: 2px;
+}
+
+.groupedMarkerRowsSection,
+.groupedMarkerRowsList {
+  min-height: 0;
+}
+
+/* Give represented rows the remaining panel height and keep scrolling local. */
+.groupedMarkerRowsSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.groupedMarkerRowsList {
+  flex: 1;
+  overflow-y: auto;
 }
 
 /* Right-edge drag target for changing the marker panel width. */

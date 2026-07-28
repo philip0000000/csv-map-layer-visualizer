@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import {
   GroupedMarkerDetails,
+  NearbyMarkerDetails,
   PointMarkerDetails,
 } from './MarkerDetails';
 
@@ -11,6 +12,7 @@ const COLLAPSED_PANEL_WIDTH = 34;
 
 export function MarkerDetailsPanel({
   marker,
+  markers = [],
   leftOffset,
   getSourceRow,
   getFeatureDetails,
@@ -64,8 +66,11 @@ export function MarkerDetailsPanel({
   if (!marker) return null;
 
   const grouped = isGroupedMarker(marker);
+  const showsProximityResults = !grouped && markers.length > 1;
   // Remount details when selection changes so old loading/paging state cannot leak.
-  const detailKey = `${marker.renderType ?? 'exact'}:${marker.id}`;
+  const detailKey = showsProximityResults
+    ? `nearby:${marker.id}:${markers.length}`
+    : `${marker.renderType ?? 'exact'}:${marker.id}`;
 
   return (
     <aside
@@ -115,7 +120,14 @@ export function MarkerDetailsPanel({
 
       {/* hidden keeps detail state mounted while the panel is collapsed. */}
       <div className='markerDetailsPanelContent' hidden={isCollapsed}>
-        {grouped ? (
+        {showsProximityResults ? (
+          <NearbyMarkerDetails
+            key={detailKey}
+            points={markers}
+            getSourceRow={getSourceRow}
+            getFeatureDetails={getFeatureDetails}
+          />
+        ) : grouped ? (
           <GroupedMarkerDetails
             key={detailKey}
             point={marker}

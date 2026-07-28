@@ -108,6 +108,66 @@ export function PointMarkerDetails({
   );
 }
 
+/**
+ * Show every marker in an ordered proximity result while loading details on expansion.
+ * The first item is the originally clicked marker and starts expanded.
+ */
+export function NearbyMarkerDetails({
+  points,
+  getSourceRow,
+  getFeatureDetails,
+}) {
+  return (
+    <div style={{ minWidth: 280 }}>
+      <div style={{ fontWeight: 700, marginBottom: 8 }}>
+        Markers near this location
+      </div>
+
+      {points.map((point, index) => (
+        <NearbyMarkerDetailsItem
+          key={`${point.id}:${index}`}
+          point={point}
+          index={index}
+          getSourceRow={getSourceRow}
+          getFeatureDetails={getFeatureDetails}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Render one expandable nearby-marker item and load backend details only when open. */
+function NearbyMarkerDetailsItem({
+  point,
+  index,
+  getSourceRow,
+  getFeatureDetails,
+}) {
+  const [isOpen, setIsOpen] = useState(index === 0);
+
+  return (
+    <details
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      style={{ marginBottom: 8 }}
+    >
+      <summary>
+        Marker {index + 1}{index === 0 ? ' (selected)' : ''}
+      </summary>
+      <div style={{ padding: '6px 0 2px 12px' }}>
+        <PointMarkerDetails
+          point={point}
+          latField={point.latField}
+          lonField={point.lonField}
+          getSourceRow={getSourceRow}
+          getFeatureDetails={getFeatureDetails}
+          isActive={isOpen}
+        />
+      </div>
+    </details>
+  );
+}
+
 export function GroupedMarkerDetails({ point, getGroupRows, isActive }) {
   const requestVersionRef = useRef(0);
   const [pagingState, setPagingState] = useState({

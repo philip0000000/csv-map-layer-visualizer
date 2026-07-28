@@ -15,10 +15,9 @@ export function useExampleCsvFilesFromUrl({
    * Behavior:
    * - If one or more valid ?example=*.csv values are present:
    *   - The files are auto-loaded from /public/examples
-   *   - Marker clustering is enabled by default to reduce visual noise
    * - Otherwise:
    *   - No file is auto-loaded
-   *   - Clustering remains off by default
+   * - Marker clustering keeps the shared Map tools default in either case
    *
    * This is intended for the live demo and shareable links.
    */

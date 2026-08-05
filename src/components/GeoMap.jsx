@@ -300,6 +300,7 @@ function ExactPointMarkers({
         // It progressively adds markers to the map instead of blocking the UI.
         chunkedLoading
         iconCreateFunction={createMarkerClusterIcon}
+        // Radius zero deliberately limits clustering to exact coordinate matches.
         maxClusterRadius={clusterRadius}
       >
         {points.map((point) => {
@@ -378,7 +379,8 @@ export default function GeoMap({
   regions = [],
   lines = [],
 
-  // When true, nearby markers are grouped into clusters (visual-only feature).
+  // When true, markers within the configured radius are clustered visually;
+  // radius zero limits clustering to markers with identical coordinates.
   // When false, markers are rendered normally (current behavior).
   getSourceRow,
   getFeatureDetails,

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useSessionStorageState } from "../useSessionStorageState";
+import {
+  DEFAULT_CLUSTER_RADIUS,
+  MAX_CLUSTER_RADIUS,
+  MIN_CLUSTER_RADIUS,
+  normalizeClusterRadius,
+} from "../useMapToolsState";
 
 // Persisted UI tool state for the CSV panel.
 // - open: whether the dropdown is expanded
@@ -160,8 +166,8 @@ export default function MapToolsMenu({
                 <input
                   className="csvSelect"
                   type="number"
-                  min={1}
-                  max={300}
+                  min={MIN_CLUSTER_RADIUS}
+                  max={MAX_CLUSTER_RADIUS}
                   step={1}
                   // Draft value: can be edited freely without changing the map yet
                   value={mapToolsState?.clusterRadiusDraft ?? ""}
@@ -169,25 +175,19 @@ export default function MapToolsMenu({
                     onMapToolsPatch?.({ clusterRadiusDraft: e.target.value })
                   }
                   onBlur={() => {
-                    // When leaving the input:
-                    // - Parse the number
-                    // - Fix invalid values
-                    // - Clamp to a safe range
-                    // - Commit it as the real cluster radius
+                    // Apply the draft only when focus leaves the field so typing does
+                    // not repeatedly rebuild clusters. Zero remains valid because it
+                    // keeps exact-coordinate clustering without grouping nearby points.
                     const raw = mapToolsState?.clusterRadiusDraft;
-
-                    let n = Number.parseInt(String(raw ?? "").trim(), 10);
-                    if (!Number.isFinite(n)) {
-                      n = mapToolsState?.clusterRadius ?? 80;
-                    }
-
-                    // Clamp to a safe range
-                    n = Math.max(1, Math.min(300, n));
+                    const radius = normalizeClusterRadius(
+                      raw,
+                      mapToolsState?.clusterRadius ?? DEFAULT_CLUSTER_RADIUS,
+                    );
 
                     // Commit value only on blur (leave box)
                     onMapToolsPatch?.({
-                      clusterRadius: n,
-                      clusterRadiusDraft: n,
+                      clusterRadius: radius,
+                      clusterRadiusDraft: radius,
                     });
                   }}
                 />

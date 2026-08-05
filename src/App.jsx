@@ -112,6 +112,74 @@ export default function App() {
     result: null,
     error: null,
   });
+
+  /** Hide a completed import message without affecting imported datasets. */
+  const dismissImportMessage = useCallback(() => {
+    setDesktopImportState((current) => (
+      current.status === "importing"
+        ? current
+        : { status: "idle", summary: null, error: null, progress: null }
+    ));
+  }, []);
+
+  /** Hide the current dataset-list error until a later load fails. */
+  const dismissDatasetLoadError = useCallback(() => {
+    setDesktopDatasetState((current) => ({
+      ...current,
+      status: current.datasets.length > 0 ? "loaded" : "idle",
+      error: null,
+    }));
+  }, []);
+
+  /** Hide the current dataset visibility error without changing visibility. */
+  const dismissDatasetMutationError = useCallback(() => {
+    setDesktopVisibilityState((current) => ({ ...current, error: null }));
+  }, []);
+
+  /** Hide the current removal error without changing any dataset. */
+  const dismissDatasetRemovalError = useCallback(() => {
+    setDesktopRemovalState((current) => ({ ...current, error: null }));
+  }, []);
+
+  /** Hide the current mapping error while preserving the last valid mapping. */
+  const dismissDatasetMappingError = useCallback(() => {
+    setDatabaseMappingState((current) => ({ ...current, error: null }));
+  }, []);
+
+  /** Hide the current query error while retaining the last successful map result. */
+  const dismissDatasetQueryError = useCallback(() => {
+    setDesktopMapViewState((current) => ({
+      ...current,
+      status: current.result ? "loaded" : "idle",
+      error: null,
+    }));
+  }, []);
+
+  /** Hide the current preview error without discarding loaded preview rows. */
+  const dismissDatasetPreviewError = useCallback(() => {
+    setDatabasePreviewState((current) => ({
+      ...current,
+      error: null,
+    }));
+  }, []);
+
+  const messageDismissal = useMemo(() => ({
+    import: dismissImportMessage,
+    datasetLoad: dismissDatasetLoadError,
+    datasetMutation: dismissDatasetMutationError,
+    datasetRemoval: dismissDatasetRemovalError,
+    datasetQuery: dismissDatasetQueryError,
+    mapping: dismissDatasetMappingError,
+    preview: dismissDatasetPreviewError,
+  }), [
+    dismissDatasetLoadError,
+    dismissDatasetMappingError,
+    dismissDatasetMutationError,
+    dismissDatasetPreviewError,
+    dismissDatasetQueryError,
+    dismissDatasetRemovalError,
+    dismissImportMessage,
+  ]);
   const desktopSqliteMapAvailable =
     usesViewportQueries && desktopCapabilities.points;
   const desktopDatasetSummaryAvailable =
@@ -786,6 +854,7 @@ export default function App() {
               : undefined}
             initialization={initialization ?? { ok: false }}
             mappingState={databaseMappingState}
+            messageDismissal={messageDismissal}
             timelineState={timelineState}
             timelineFields={timelineFields}
             onTimelinePatch={patchTimeline}

@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import { DismissibleMessage } from "./DismissibleMessage";
 
 const PREVIEW_ROWS_INCREMENT = 30;
 
+/** Render bounded CSV preview rows and any completed preview-loading error. */
 export default function CsvPreviewTable({
   headers,
   rows,
@@ -10,6 +12,7 @@ export default function CsvPreviewTable({
   status = "loaded",
   error,
   onShowMore,
+  onDismissError,
 }) {
   const controlledPaging = typeof onShowMore === "function";
   const [previewRowLimit, setPreviewRowLimit] = useState(
@@ -29,16 +32,27 @@ export default function CsvPreviewTable({
   const canShowMorePreviewRows = controlledPaging
     ? !!hasMore
     : previewRows.length < previewTotalRows;
+  // A dismissed initial-load error must not be replaced with a misleading empty-data message.
+  const previewErrorDismissed = status === "error" && !error;
 
   return (
     <>
       <div className="csvPreviewTitle">Preview</div>
 
-      {error && <div className="csvEmptyPreview" role="alert">{error}</div>}
+      {error && (
+        <DismissibleMessage
+          className="csvEmptyPreview"
+          dismissLabel="Dismiss dataset loading error"
+          onDismiss={onDismissError}
+          role="alert"
+        >
+          {error}
+        </DismissibleMessage>
+      )}
 
       {status === "loading" ? (
         <div className="csvEmptyPreview">Loading preview rows...</div>
-      ) : error && previewTotalRows === 0 ? null : headers.length === 0 ? (
+      ) : previewErrorDismissed || (error && previewTotalRows === 0) ? null : headers.length === 0 ? (
         <div className="csvEmptyPreview">No headers detected.</div>
       ) : previewTotalRows === 0 ? (
         <div className="csvEmptyPreview">No data rows detected.</div>

@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
+import { DismissButton, DismissibleMessage } from "./DismissibleMessage";
+import {
+  INITIAL_CONDITION_DISMISSAL,
+  reduceConditionDismissal,
+} from "../messageDismissalState";
 
+/** Render import controls, persistent operation messages, and the dataset list. */
 export default function CsvFileControls({
   files,
   selectedId,
@@ -12,6 +18,7 @@ export default function CsvFileControls({
   removeActionLabel = "Unload",
   onToggleEnabled,
   onUseRecommendedTimelineRange,
+  messageDismissal,
 }) {
   /**
    * Hidden file input reference.
@@ -30,10 +37,27 @@ export default function CsvFileControls({
     ? desktopSummary.results
     : [];
   const hiddenByRenderBudget = normalizeCount(viewportQueryStats?.hiddenByRenderBudget);
+  const [renderWarningDismissal, dispatchRenderWarningDismissal] = useReducer(
+    reduceConditionDismissal,
+    INITIAL_CONDITION_DISMISSAL,
+  );
   const browserImportAvailable = typeof onImportFiles === "function";
   const canSelect = typeof onSelect === "function";
   const canToggleEnabled = typeof onToggleEnabled === "function";
   const canRemove = typeof onUnloadFile === "function";
+  const hasTerminalImportMessage = !isDesktopImporting && (
+    desktopImportResults.length > 0 ||
+    desktopImport?.status === "canceled" ||
+    desktopImport?.status === "error"
+  );
+
+  useEffect(() => {
+    // A changing positive count belongs to the same warning cycle. Only zero resets it.
+    dispatchRenderWarningDismissal({
+      type: "sync",
+      active: hiddenByRenderBudget > 0,
+    });
+  }, [hiddenByRenderBudget]);
 
   /** Close the custom recommendation menu on outside interaction or Escape. */
   useEffect(() => {
@@ -162,51 +186,64 @@ export default function CsvFileControls({
             </div>
           )}
 
-          {desktopImportResults.length > 0 && (
-            <div className="csvDesktopImportStatus" role="status">
-              {desktopImportResults.map((result, index) => (
-                <div
-                  key={`${result.fileName}-${index}`}
-                  className={result.ok ? undefined : "csvDesktopImportStatusError"}
-                >
-                  <div className="csvDesktopImportTitle">{result.fileName}</div>
-                  {result.ok ? (
-                    <>
-                      <div>
-                        Imported {result.importedFeatureCount} of {result.rowCount} rows
-                        {result.skippedRowCount
-                          ? `, skipped ${result.skippedRowCount}`
-                          : ""}.
-                      </div>
-                      <div>Fields: {formatFieldList(result.detectedFields)}</div>
-                      {result.warnings?.length > 0 && (
-                        <div>{result.warnings.length} parsing warning(s).</div>
+          {hasTerminalImportMessage && (
+            <div className="csvDismissibleMessageGroup">
+              <DismissButton
+                label="Dismiss import message"
+                onDismiss={messageDismissal?.import}
+              />
+              {desktopImportResults.length > 0 && (
+                <div className="csvDesktopImportStatus" role="status">
+                  {desktopImportResults.map((result, index) => (
+                    <div
+                      key={`${result.fileName}-${index}`}
+                      className={result.ok ? undefined : "csvDesktopImportStatusError"}
+                    >
+                      <div className="csvDesktopImportTitle">{result.fileName}</div>
+                      {result.ok ? (
+                        <>
+                          <div>
+                            Imported {result.importedFeatureCount} of {result.rowCount} rows
+                            {result.skippedRowCount
+                              ? `, skipped ${result.skippedRowCount}`
+                              : ""}.
+                          </div>
+                          <div>Fields: {formatFieldList(result.detectedFields)}</div>
+                          {result.warnings?.length > 0 && (
+                            <div>{result.warnings.length} parsing warning(s).</div>
+                          )}
+                        </>
+                      ) : (
+                        <div>{getImportErrorMessage(result.error)}</div>
                       )}
-                    </>
-                  ) : (
-                    <div>{getImportErrorMessage(result.error)}</div>
-                  )}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {desktopImport.status === "canceled" && (
+                <div className="csvDesktopImportStatus" role="status">
+                  Import canceled.
+                </div>
+              )}
+
+              {desktopImport.status === "error" && (
+                <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+                  {desktopImport.error ?? "Import failed."}
+                </div>
+              )}
             </div>
           )}
 
-          {desktopImport.status === "canceled" && (
-            <div className="csvDesktopImportStatus" role="status">
-              Import canceled.
-            </div>
-          )}
-
-
-          {hiddenByRenderBudget > 0 && (
-            <div className="csvDesktopImportStatus" role="status">
+          {hiddenByRenderBudget > 0 && !renderWarningDismissal.dismissed && (
+            <DismissibleMessage
+              className="csvDesktopImportStatus"
+              dismissLabel="Dismiss warning"
+              onDismiss={() => dispatchRenderWarningDismissal({ type: "dismiss" })}
+              role="status"
+            >
               {hiddenByRenderBudget.toLocaleString()} datapoints are not being displayed
-            </div>
-          )}
-          {desktopImport.status === "error" && (
-            <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
-              {desktopImport.error ?? "Import failed."}
-            </div>
+            </DismissibleMessage>
           )}
         </div>
       )}
@@ -232,24 +269,44 @@ export default function CsvFileControls({
         </div>
 
         {datasetListState?.status === "error" && (
-          <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+          <DismissibleMessage
+            className="csvDesktopImportStatus csvDesktopImportStatusError"
+            dismissLabel="Dismiss dataset loading error"
+            onDismiss={messageDismissal?.datasetLoad}
+            role="alert"
+          >
             {datasetListState.error ?? "Could not load datasets."}
-          </div>
+          </DismissibleMessage>
         )}
         {datasetListState?.mutationError && (
-          <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+          <DismissibleMessage
+            className="csvDesktopImportStatus csvDesktopImportStatusError"
+            dismissLabel="Dismiss dataset mutation error"
+            onDismiss={messageDismissal?.datasetMutation}
+            role="alert"
+          >
             {datasetListState.mutationError}
-          </div>
+          </DismissibleMessage>
         )}
         {datasetListState?.removalError && (
-          <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+          <DismissibleMessage
+            className="csvDesktopImportStatus csvDesktopImportStatusError"
+            dismissLabel="Dismiss dataset removal error"
+            onDismiss={messageDismissal?.datasetRemoval}
+            role="alert"
+          >
             {datasetListState.removalError}
-          </div>
+          </DismissibleMessage>
         )}
         {datasetListState?.queryError && (
-          <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+          <DismissibleMessage
+            className="csvDesktopImportStatus csvDesktopImportStatusError"
+            dismissLabel="Dismiss dataset query error"
+            onDismiss={messageDismissal?.datasetQuery}
+            role="alert"
+          >
             {datasetListState.queryError}
-          </div>
+          </DismissibleMessage>
         )}
 
         {datasetListState?.status === "loading" && files.length === 0 ? (

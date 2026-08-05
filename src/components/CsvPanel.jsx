@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import DualRangeSlider from "./DualRangeSlider";
 import CsvPreviewTable from "./csv-panel/CsvPreviewTable";
 import SelectedFileMetadata from "./csv-panel/SelectedFileMetadata";
@@ -6,6 +6,8 @@ import CoordinateMapping from "./csv-panel/CoordinateMapping";
 import CsvParsingWarnings from "./csv-panel/CsvParsingWarnings";
 import CsvFileControls from "./csv-panel/CsvFileControls";
 import MapToolsMenu from "./csv-panel/MapToolsMenu";
+import { DismissibleMessage } from "./csv-panel/DismissibleMessage";
+import { getParsingWarningsMessageKey } from "./messageDismissalState";
 
 /**
  * CsvPanel
@@ -30,6 +32,7 @@ export default function CsvPanel({
   viewportQueryStats,
   initialization,
   mappingState,
+  messageDismissal,
   onLoadMorePreview,
   onUnloadFile,     // Callback to unload a CSV by ID
   removeActionLabel,
@@ -54,6 +57,24 @@ export default function CsvPanel({
     () => files.find((f) => f.id === selectedId) || null,
     [files, selectedId]
   );
+  const [dismissedInitializationError, setDismissedInitializationError] = useState(null);
+  const [dismissedParsingWarningKeys, setDismissedParsingWarningKeys] = useState(
+    () => new Set(),
+  );
+  const parsingWarningsMessageKey = getParsingWarningsMessageKey(selected);
+  const parsingWarningsDismissed = parsingWarningsMessageKey
+    ? dismissedParsingWarningKeys.has(parsingWarningsMessageKey)
+    : false;
+
+  /** Remember dismissal against this CSV import's parsing-result identity. */
+  function dismissSelectedParsingWarnings() {
+    if (!parsingWarningsMessageKey) return;
+    setDismissedParsingWarningKeys((current) => {
+      const next = new Set(current);
+      next.add(parsingWarningsMessageKey);
+      return next;
+    });
+  }
 
   // local editable inputs for "Year domain" (min/max + Begin)
   // These are UI-only text boxes so the user can type without instantly snapping/clamping.
@@ -175,6 +196,7 @@ export default function CsvPanel({
             removeActionLabel={removeActionLabel}
             onToggleEnabled={onToggleEnabled}
             onUseRecommendedTimelineRange={useRecommendedTimelineRange}
+            messageDismissal={messageDismissal}
           />
 
           {/* Timeline UI lives inside the panel header (NOT in the dropdown). */}
@@ -474,14 +496,22 @@ export default function CsvPanel({
          ========================= */}
       <div className="csvPanelBody">
         {initialization && initialization.ok !== true && (
-          <div
-            className={initialization.error
-              ? "csvDesktopImportStatus csvDesktopImportStatusError"
-              : "csvEmptyState"}
-            role={initialization.error ? "alert" : "status"}
-          >
-            {initialization.error?.message ?? "Initializing data..."}
-          </div>
+          initialization.error ? (
+            initialization.error !== dismissedInitializationError && (
+              <DismissibleMessage
+                className="csvDesktopImportStatus csvDesktopImportStatusError"
+                dismissLabel="Dismiss initialization error"
+                onDismiss={() => setDismissedInitializationError(initialization.error)}
+                role="alert"
+              >
+                {initialization.error.message}
+              </DismissibleMessage>
+            )
+          ) : (
+            <div className="csvEmptyState" role="status">
+              Initializing data...
+            </div>
+          )
         )}
         {/* No CSV selected */}
         {!selected ? (
@@ -526,13 +556,23 @@ export default function CsvPanel({
               disabled={mappingState?.pendingDatasetId === selected.id}
             />
             {mappingState?.error && (
-              <div className="csvDesktopImportStatus csvDesktopImportStatusError" role="alert">
+              <DismissibleMessage
+                className="csvDesktopImportStatus csvDesktopImportStatusError"
+                dismissLabel="Dismiss dataset mapping error"
+                onDismiss={messageDismissal?.mapping}
+                role="alert"
+              >
                 {mappingState.error}
-              </div>
+              </DismissibleMessage>
             )}
 
             {/* CSV parsing warnings (non-fatal) */}
-            <CsvParsingWarnings errors={selected.parseErrors} />
+            {!parsingWarningsDismissed && (
+              <CsvParsingWarnings
+                errors={selected.parseErrors}
+                onDismiss={dismissSelectedParsingWarnings}
+              />
+            )}
 
             {/* Preview table */}
             <CsvPreviewTable
@@ -544,6 +584,7 @@ export default function CsvPanel({
               status={selected.previewStatus}
               error={selected.previewError}
               onShowMore={onLoadMorePreview}
+              onDismissError={messageDismissal?.preview}
             />
 
           </>

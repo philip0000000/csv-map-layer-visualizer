@@ -335,6 +335,62 @@ button.csvBtnPrimary.csvDesktopImportButton {
   margin-bottom: 3px;
   overflow-wrap: anywhere;
 }
+
+.csvDismissibleMessage,
+.csvDismissibleMessageGroup {
+  position: relative;
+}
+
+.csvDismissibleMessage {
+  padding-right: 38px;
+}
+
+.csvDismissibleMessageGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.csvDismissibleMessageGroup > .csvDesktopImportStatus:first-of-type {
+  padding-right: 38px;
+}
+
+.csvDismissButton {
+  position: absolute;
+  z-index: 1;
+  top: 5px;
+  right: 5px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.45);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.csvDismissButtonIcon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+}
+
+.csvDismissButton:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.csvDismissButton:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
 .csvFilesList {
   display: flex;
   flex-direction: column;

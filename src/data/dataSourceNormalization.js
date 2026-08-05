@@ -266,7 +266,22 @@ export function normalizeDatasetSummaryItem(value) {
     latField: normalizeNullableString(value.latField),
     lonField: normalizeNullableString(value.lonField),
     detectedFields: normalizeDetectedFields(value.detectedFields),
+    recommendedTimelineRange: normalizeRecommendedTimelineRange(
+      value.recommendedTimelineRange,
+    ),
     parseErrors: normalizeStringList(value.parseErrors, MAX_STRING_LIST_ITEMS),
+  };
+}
+
+/** Normalize one stored per-dataset recommendation or its explicit absence. */
+function normalizeRecommendedTimelineRange(value) {
+  if (!isRecord(value)) return null;
+  const startYear = normalizeOptionalInteger(value.startYear);
+  const endYear = normalizeOptionalInteger(value.endYear);
+  if (startYear == null || endYear == null) return null;
+  return {
+    startYear: Math.min(startYear, endYear),
+    endYear: Math.max(startYear, endYear),
   };
 }
 

@@ -43,6 +43,7 @@ try {
       lonField: 'lon',
       yearField: null,
     },
+    recommendedTimelineRange: { startYear: 900, endYear: 1200 },
     parseErrors: ['One malformed row was skipped.'],
   });
   assert.deepEqual(summary.datasets[1].headers, []);
@@ -154,6 +155,8 @@ function insertFixtures(targetDatabase) {
       yearField: null,
     }),
     mappingJson: JSON.stringify({ latField: 'lat', lonField: 'lon' }),
+    recommendedTimelineStartYear: 900,
+    recommendedTimelineEndYear: 1200,
     warningsJson: JSON.stringify(['One malformed row was skipped.']),
     importState: 'complete',
     importedAt: '2026-07-26T12:00:00.000Z',
@@ -242,10 +245,12 @@ function insertDataset(targetDatabase, fixture) {
       enabled,
       detected_fields_json,
       coordinate_mapping_json,
+      recommended_timeline_start_year,
+      recommended_timeline_end_year,
       warnings_json,
       import_state,
       imported_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     fixture.id,
     fixture.fileName,
@@ -257,6 +262,8 @@ function insertDataset(targetDatabase, fixture) {
     fixture.enabled,
     fixture.detectedFieldsJson,
     fixture.mappingJson,
+    fixture.recommendedTimelineStartYear ?? null,
+    fixture.recommendedTimelineEndYear ?? null,
     fixture.warningsJson,
     fixture.importState,
     fixture.importedAt,

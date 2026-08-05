@@ -519,6 +519,7 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {string|null} latField
  * @property {string|null} lonField
  * @property {DetectedFields|null} [detectedFields]
+ * @property {{startYear: number, endYear: number}|null} recommendedTimelineRange
  * @property {string[]} parseErrors
  */
 

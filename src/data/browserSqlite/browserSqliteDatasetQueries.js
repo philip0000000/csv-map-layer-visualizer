@@ -28,6 +28,8 @@ export function getBrowserSqliteDatasetSummary(database) {
       enabled,
       detected_fields_json,
       coordinate_mapping_json,
+      recommended_timeline_start_year,
+      recommended_timeline_end_year,
       warnings_json,
       imported_at
     FROM datasets
@@ -79,6 +81,10 @@ export function getBrowserSqliteDatasetSummary(database) {
         latField: normalizeNullableString(mapping.latField),
         lonField: normalizeNullableString(mapping.lonField),
         detectedFields: parseJsonObject(row.detected_fields_json),
+        recommendedTimelineRange: normalizeRecommendedTimelineRange(
+          row.recommended_timeline_start_year,
+          row.recommended_timeline_end_year,
+        ),
         parseErrors: parseJsonStringList(row.warnings_json),
       };
     }),
@@ -86,6 +92,17 @@ export function getBrowserSqliteDatasetSummary(database) {
     timeline: yearMin == null || yearMax == null
       ? null
       : { yearMin, yearMax },
+  };
+}
+
+/** Normalize the stored import-time range without consulting feature rows. */
+function normalizeRecommendedTimelineRange(startValue, endValue) {
+  const startYear = normalizeStoredYear(startValue);
+  const endYear = normalizeStoredYear(endValue);
+  if (startYear == null || endYear == null) return null;
+  return {
+    startYear: Math.min(startYear, endYear),
+    endYear: Math.max(startYear, endYear),
   };
 }
 

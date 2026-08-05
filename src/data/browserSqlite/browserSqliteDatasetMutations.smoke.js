@@ -28,6 +28,7 @@ try {
       dateField: null,
     },
     mapping: { latField: 'lat', lonField: 'lon' },
+    recommendedTimelineRange: { startYear: 900, endYear: 1200 },
   });
   insertDataset(database, {
     id: 'dataset-b',
@@ -160,6 +161,10 @@ try {
   assert.equal(datasetA.enabled, false);
   assert.equal(datasetA.latField, null);
   assert.equal(datasetA.lonField, null);
+  assert.deepEqual(datasetA.recommendedTimelineRange, {
+    startYear: 900,
+    endYear: 1200,
+  });
   assert.equal(datasetB.enabled, true);
   assert.equal(datasetB.latField, 'latitude');
   assert.equal(datasetB.lonField, 'longitude');
@@ -178,15 +183,19 @@ function insertDataset(targetDatabase, fixture) {
       columns_json,
       detected_fields_json,
       coordinate_mapping_json,
+      recommended_timeline_start_year,
+      recommended_timeline_end_year,
       import_state,
       imported_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     fixture.id,
     fixture.fileName,
     JSON.stringify(fixture.headers),
     JSON.stringify(fixture.detectedFields),
     JSON.stringify(fixture.mapping),
+    fixture.recommendedTimelineRange?.startYear ?? null,
+    fixture.recommendedTimelineRange?.endYear ?? null,
     importState,
     importState === 'complete' ? '2026-07-26T12:00:00.000Z' : null,
   ]);

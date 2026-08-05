@@ -18,7 +18,6 @@ const DEFAULT_TOOLS_STATE = {
 
 export default function MapToolsMenu({
   timelineState,
-  timelineAvailable = true,
   onTimelinePatch,
   mapToolsState,
   onMapToolsPatch,
@@ -120,12 +119,10 @@ export default function MapToolsMenu({
               className="csvToolToggle"
               role="menuitemcheckbox"
               aria-checked={!!timelineState?.timelineEnabled}
-              aria-disabled={!timelineAvailable}
             >
               <input
                 type="checkbox"
                 checked={!!timelineState?.timelineEnabled}
-                disabled={!timelineAvailable}
                 onChange={(e) =>
                   onTimelinePatch?.({ timelineEnabled: e.target.checked })
                 }

@@ -5,6 +5,7 @@ import {
 import {
   rebuildBrowserSqliteGeometryFeatures,
 } from './browserSqliteGeometryDerivation.js';
+import { getBrowserSqliteTimelineExtent } from './browserSqliteTimeline.js';
 
 /** Maximum already-normalized rows accepted by one storage call. */
 export const MAX_BROWSER_SQLITE_IMPORT_BATCH_ROWS = 1_000;
@@ -154,6 +155,13 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
       metadata,
       state.nextSourceRowIndex,
     );
+    // Capture the file-level recommendation before mapping-derived features are
+    // built. Later mapping changes must not alter this import-time decision.
+    const recommendedTimelineRange = calculateRecommendedTimelineRange(
+      state.database,
+      state.datasetId,
+      normalized.detectedFields,
+    );
     freeActiveStatement(state);
     state.database.run(`
       UPDATE datasets
@@ -163,6 +171,8 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
           skipped_row_count = ?,
           detected_fields_json = ?,
           coordinate_mapping_json = ?,
+          recommended_timeline_start_year = ?,
+          recommended_timeline_end_year = ?,
           warnings_json = ?,
           import_state = 'complete',
           imported_at = ?
@@ -174,6 +184,8 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
       normalized.skippedRowCount,
       JSON.stringify(normalized.detectedFields),
       JSON.stringify(normalized.coordinateMapping),
+      recommendedTimelineRange?.startYear ?? null,
+      recommendedTimelineRange?.endYear ?? null,
       JSON.stringify(normalized.warnings),
       normalized.importedAt,
       state.datasetId,
@@ -207,6 +219,7 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
       skippedLineCount: geometryResult.skippedLineCount,
       regionFeatureCount: geometryResult.regionFeatureCount,
       skippedRegionCount: geometryResult.skippedRegionCount,
+      recommendedTimelineRange,
       importedAt: normalized.importedAt,
     };
   } catch (error) {
@@ -216,6 +229,47 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
       'import-finalization-failed',
       'The file import could not be finalized.',
     );
+  }
+}
+
+/** Scan stored source rows once to calculate the immutable import recommendation. */
+function calculateRecommendedTimelineRange(database, datasetId, detectedFields) {
+  const rows = database.prepare(`
+    SELECT row_json
+    FROM source_rows
+    WHERE dataset_id = ?
+    ORDER BY source_row_index
+  `);
+  let startYear = null;
+  let endYear = null;
+
+  try {
+    rows.bind([datasetId]);
+    while (rows.step()) {
+      const stored = rows.getAsObject();
+      const row = parseStoredRow(stored.row_json);
+      const extent = getBrowserSqliteTimelineExtent(row, detectedFields);
+      if (!extent) continue;
+      startYear = startYear == null
+        ? extent.startYear
+        : Math.min(startYear, extent.startYear);
+      endYear = endYear == null
+        ? extent.endYear
+        : Math.max(endYear, extent.endYear);
+    }
+  } finally {
+    rows.free();
+  }
+
+  return startYear == null || endYear == null ? null : { startYear, endYear };
+}
+
+function parseStoredRow(value) {
+  try {
+    const parsed = JSON.parse(String(value ?? ''));
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
   }
 }
 

@@ -15,6 +15,8 @@ function getSqliteDatasetSummary({ db } = {}) {
       skipped_row_count,
       columns_json,
       enabled,
+      recommended_timeline_start_year,
+      recommended_timeline_end_year,
       imported_at
     FROM datasets
     ORDER BY imported_at DESC, id ASC
@@ -75,7 +77,23 @@ function toDatasetSummaryItem(row) {
     totalRows: normalizeCount(row.row_count),
     importedFeatureCount: normalizeCount(row.imported_feature_count),
     skippedRowCount: normalizeCount(row.skipped_row_count),
+    recommendedTimelineRange: normalizeRecommendedTimelineRange(
+      row.recommended_timeline_start_year,
+      row.recommended_timeline_end_year,
+    ),
     importedAt: String(row.imported_at),
+  };
+}
+
+/** Return a complete ordered recommendation, or an explicit null absence. */
+function normalizeRecommendedTimelineRange(startValue, endValue) {
+  if (startValue == null || endValue == null) return null;
+  const startYear = Number(startValue);
+  const endYear = Number(endValue);
+  if (!Number.isFinite(startYear) || !Number.isFinite(endYear)) return null;
+  return {
+    startYear: Math.min(Math.trunc(startYear), Math.trunc(endYear)),
+    endYear: Math.max(Math.trunc(startYear), Math.trunc(endYear)),
   };
 }
 

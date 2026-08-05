@@ -48,6 +48,8 @@ try {
       'enabled',
       'detected_fields_json',
       'coordinate_mapping_json',
+      'recommended_timeline_start_year',
+      'recommended_timeline_end_year',
       'warnings_json',
       'import_state',
       'imported_at',

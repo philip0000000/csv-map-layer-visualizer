@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function CsvFileControls({
   files,
@@ -11,12 +11,18 @@ export default function CsvFileControls({
   onUnloadFile,
   removeActionLabel = "Unload",
   onToggleEnabled,
+  onUseRecommendedTimelineRange,
 }) {
   /**
    * Hidden file input reference.
    * We trigger this programmatically when user clicks "Import..."
    */
   const fileInputRef = useRef(null);
+  const contextMenuRef = useRef(null);
+  const hoverTimerRef = useRef(null);
+  const pendingHoverRef = useRef(null);
+  const [hoverMessage, setHoverMessage] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
   const isDesktopImporting = desktopImport?.status === "importing";
   const desktopSummary = desktopImport?.summary ?? null;
   const desktopProgress = desktopImport?.progress ?? null;
@@ -28,6 +34,76 @@ export default function CsvFileControls({
   const canSelect = typeof onSelect === "function";
   const canToggleEnabled = typeof onToggleEnabled === "function";
   const canRemove = typeof onUnloadFile === "function";
+
+  /** Close the custom recommendation menu on outside interaction or Escape. */
+  useEffect(() => {
+    if (!contextMenu) return undefined;
+
+    function handlePointerDown(event) {
+      if (contextMenuRef.current?.contains(event.target)) return;
+      setContextMenu(null);
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setContextMenu(null);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  useEffect(() => () => {
+    globalThis.clearTimeout(hoverTimerRef.current);
+  }, []);
+
+  /** Start one delayed hover without restarting across row child elements. */
+  function handleRowPointerEnter(event, file) {
+    pendingHoverRef.current = {
+      text: formatRecommendedTimelineMessage(file.recommendedTimelineRange),
+      ...getFloatingPosition(event.clientX, event.clientY, 360, 32),
+    };
+    globalThis.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = globalThis.setTimeout(() => {
+      setHoverMessage(pendingHoverRef.current);
+      hoverTimerRef.current = null;
+    }, 1000);
+  }
+
+  /** Keep the message near the pointer while preserving the same hover target. */
+  function handleRowPointerMove(event) {
+    const position = getFloatingPosition(event.clientX, event.clientY, 360, 32);
+    if (pendingHoverRef.current) {
+      pendingHoverRef.current = { ...pendingHoverRef.current, ...position };
+    }
+    setHoverMessage((current) => current
+      ? { ...current, ...position }
+      : null);
+  }
+
+  /** Cancel pending and visible hover UI when the pointer leaves the row. */
+  function clearHoverMessage() {
+    globalThis.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = null;
+    pendingHoverRef.current = null;
+    setHoverMessage(null);
+  }
+
+  /** Open a custom menu only when the imported CSV has a stored recommendation. */
+  function handleRowContextMenu(event, file) {
+    const range = file.recommendedTimelineRange;
+    if (!range) return;
+
+    event.preventDefault();
+    clearHoverMessage();
+    setContextMenu({
+      range,
+      ...getFloatingPosition(event.clientX, event.clientY, 360, 44),
+    });
+  }
 
   /**
    * Trigger the hidden file input.
@@ -189,6 +265,10 @@ export default function CsvFileControls({
                 file.id === selectedId ? " csvFilesRowSelected" : ""
               }`}
               onClick={canSelect ? () => onSelect(file.id) : undefined}
+              onPointerEnter={(event) => handleRowPointerEnter(event, file)}
+              onPointerMove={handleRowPointerMove}
+              onPointerLeave={clearHoverMessage}
+              onContextMenu={(event) => handleRowContextMenu(event, file)}
             >
               <input
                 type="checkbox"
@@ -231,8 +311,60 @@ export default function CsvFileControls({
           ))
         )}
       </div>
+
+      {hoverMessage && (
+        <div
+          className="csvTimelineHoverMessage"
+          style={{ left: hoverMessage.left, top: hoverMessage.top }}
+          role="tooltip"
+        >
+          {hoverMessage.text}
+        </div>
+      )}
+
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="csvTimelineContextMenu"
+          style={{ left: contextMenu.left, top: contextMenu.top }}
+          role="menu"
+          aria-label="CSV timeline actions"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              // Apply all four values together so the slider never sees a mixed range.
+              onUseRecommendedTimelineRange?.(contextMenu.range);
+              setContextMenu(null);
+            }}
+          >
+            Use recommended timeline range: {formatTimelineRange(contextMenu.range)}
+          </button>
+        </div>
+      )}
     </>
   );
+}
+
+function formatRecommendedTimelineMessage(range) {
+  return range
+    ? `Recommended timeline range: ${formatTimelineRange(range)}`
+    : "No timeline available";
+}
+
+function formatTimelineRange(range) {
+  return `${range.startYear}–${range.endYear}`;
+}
+
+/** Keep pointer-anchored UI inside the visible viewport. */
+function getFloatingPosition(clientX, clientY, width, height) {
+  const viewportWidth = globalThis.innerWidth ?? width;
+  const viewportHeight = globalThis.innerHeight ?? height;
+  return {
+    left: Math.max(8, Math.min(clientX + 12, viewportWidth - width - 8)),
+    top: Math.max(8, Math.min(clientY + 12, viewportHeight - height - 8)),
+  };
 }
 
 /**

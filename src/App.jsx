@@ -28,7 +28,6 @@ export default function App() {
   const {
     state: timelineState,
     patch: patchTimeline,
-    setYearRange,
   } = useTimelineFilterState();
   const mapToolsApi = useMapToolsState();
   const timelinePlaybackApi = useTimelinePlayback({
@@ -610,10 +609,8 @@ export default function App() {
       .map((dataset) => dataset.id),
     [desktopDatasetState.datasets],
   );
-  const databaseTimelineAvailable = !!desktopDatasetState.timeline;
   const databaseTimelineQuery = useMemo(() => ({
-    timelineEnabled:
-      databaseTimelineAvailable && !!timelineState.timelineEnabled,
+    timelineEnabled: !!timelineState.timelineEnabled,
     startYear: timelineState.startYear ?? null,
     endYear: timelineState.endYear ?? null,
     yearMin: timelineState.yearMin ?? null,
@@ -622,7 +619,6 @@ export default function App() {
     startDay: timelineState.startDay ?? null,
     endDay: timelineState.endDay ?? null,
   }), [
-    databaseTimelineAvailable,
     timelineState.dayFilterEnabled,
     timelineState.endDay,
     timelineState.endYear,
@@ -735,42 +731,6 @@ export default function App() {
     dayOfYearField: databaseSelected?.detectedFields?.dayOfYearField ?? null,
   }), [databaseSelected?.detectedFields]);
 
-  // SQLite exposes only a compact enabled-dataset timeline extent; React must
-  // not load all source rows merely to initialize the year controls.
-  useEffect(() => {
-    if (!usesViewportQueries || !timelineState.timelineEnabled) return;
-    if (timelineState.yearDomainMode === "manual") return;
-    const min = desktopDatasetState.timeline?.yearMin ?? null;
-    const max = desktopDatasetState.timeline?.yearMax ?? null;
-    patchTimeline({
-      yearMin: min,
-      yearMax: max,
-      yearMinDraft: String(min ?? ""),
-      yearMaxDraft: String(max ?? ""),
-    });
-    if (min == null || max == null) return;
-    const nextStart = timelineState.startYear == null
-      ? min
-      : Math.max(min, Math.min(max, timelineState.startYear));
-    const nextEnd = timelineState.endYear == null
-      ? max
-      : Math.max(min, Math.min(max, timelineState.endYear));
-    const start = Math.min(nextStart, nextEnd);
-    const end = Math.max(nextStart, nextEnd);
-    if (start !== timelineState.startYear || end !== timelineState.endYear) {
-      setYearRange(start, end);
-    }
-  }, [
-    desktopDatasetState.timeline,
-    patchTimeline,
-    setYearRange,
-    timelineState.endYear,
-    timelineState.startYear,
-    timelineState.timelineEnabled,
-    timelineState.yearDomainMode,
-    usesViewportQueries,
-  ]);
-
   return (
     <div
       className="appRoot"
@@ -827,7 +787,6 @@ export default function App() {
             initialization={initialization ?? { ok: false }}
             mappingState={databaseMappingState}
             timelineState={timelineState}
-            timelineAvailable={databaseTimelineAvailable}
             timelineFields={timelineFields}
             onTimelinePatch={patchTimeline}
             onTimelinePlaybackStart={timelinePlaybackApi.startPlayback}

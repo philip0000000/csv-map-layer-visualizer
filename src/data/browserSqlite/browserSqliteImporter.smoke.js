@@ -109,6 +109,10 @@ try {
   assert.equal(summary.totalRows, 3);
   assert.equal(summary.latField, 'latitude');
   assert.equal(summary.lonField, 'longitude');
+  assert.deepEqual(summary.recommendedTimelineRange, {
+    startYear: 2019,
+    endYear: 2024,
+  });
 
   const preview = getBrowserSqlitePreviewPage(database, {
     datasetId: 'dataset-incremental',
@@ -187,6 +191,9 @@ try {
   assert.ok(headerOnlyResult.warnings.includes(
     'No usable data rows were parsed.',
   ));
+  const headerOnlySummary = getBrowserSqliteDatasetSummary(database).datasets
+    .find((dataset) => dataset.id === 'dataset-header-only');
+  assert.equal(headerOnlySummary.recommendedTimelineRange, null);
 
   const readFailureFile = new TestBrowserFile(
     'name,lat,lon\nFirst,1,2\nSecond,3,4\nThird,5,6',

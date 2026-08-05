@@ -22,7 +22,7 @@ function verifyMixedBatchImport() {
   const firstPath = path.join(tempDir, "first.csv");
   const secondPath = path.join(tempDir, "second.csv");
   const missingPath = path.join(tempDir, "missing.csv");
-  fs.writeFileSync(firstPath, "lat,lon,name\n1,2,one\n3,4,two\n", "utf8");
+  fs.writeFileSync(firstPath, "lat,lon,name,year\n1,2,one,900\n3,4,two,1200\n", "utf8");
   fs.writeFileSync(secondPath, "lat,lon,name\n5,6,three\nbad,7,skip\n", "utf8");
 
   const db = openSqliteStore(path.join(tempDir, "mixed.sqlite"));
@@ -57,7 +57,18 @@ function verifyMixedBatchImport() {
       { state: "completed", fileName: "second.csv", fileNumber: 3, totalFiles: 3, ok: true },
     ]);
     assert.equal(JSON.stringify(progressEvents).includes(tempDir), false);
-    assert.equal(getSqliteDatasetSummary({ db }).datasets.length, 2);
+    const datasets = getSqliteDatasetSummary({ db }).datasets;
+    assert.equal(datasets.length, 2);
+    assert.deepEqual(
+      datasets.find((dataset) => dataset.name === "first.csv")
+        ?.recommendedTimelineRange,
+      { startYear: 900, endYear: 1200 },
+    );
+    assert.equal(
+      datasets.find((dataset) => dataset.name === "second.csv")
+        ?.recommendedTimelineRange,
+      null,
+    );
     assert.equal(db.prepare("SELECT COUNT(*) AS count FROM features").get().count, 3);
   } finally {
     closeSqliteStore(db);

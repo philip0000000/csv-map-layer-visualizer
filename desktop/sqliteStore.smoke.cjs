@@ -30,6 +30,7 @@ function verifyNewDatabase() {
     assert.ok(enabledColumn);
     assert.equal(Number(enabledColumn.notnull), 1);
     assert.equal(String(enabledColumn.dflt_value), "1");
+    assert.equal(countRecommendedTimelineColumns(db), 2);
 
     insertDataset(db, "new-dataset");
     assert.equal(getDatasetEnabled(db, "new-dataset"), 1);
@@ -64,10 +65,12 @@ function verifyLegacyDatabaseMigration() {
 
     assert.equal(countEnabledColumns(db), 1);
     assert.equal(getDatasetEnabled(db, "legacy-dataset"), 1);
+    assert.equal(countRecommendedTimelineColumns(db), 2);
 
     initializeSchema(db);
     assert.equal(countEnabledColumns(db), 1);
     assert.equal(getDatasetEnabled(db, "legacy-dataset"), 1);
+    assert.equal(countRecommendedTimelineColumns(db), 2);
   } finally {
     closeSqliteStore(db);
   }
@@ -95,6 +98,12 @@ function getEnabledColumn(db) {
 function countEnabledColumns(db) {
   return db.pragma("table_info(datasets)")
     .filter((column) => column.name === "enabled")
+    .length;
+}
+
+function countRecommendedTimelineColumns(db) {
+  return db.pragma("table_info(datasets)")
+    .filter((column) => column.name.startsWith("recommended_timeline_"))
     .length;
 }
 

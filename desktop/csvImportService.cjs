@@ -41,6 +41,10 @@ function importCsvFileToSqlite({ db, filePath }) {
   const csvText = fs.readFileSync(filePath, "utf8");
   const parsed = parseCsvText(csvText);
   const detectedFields = detectFields(parsed.headers);
+  const recommendedTimelineRange = getRecommendedTimelineRange(
+    parsed.rows,
+    detectedFields,
+  );
   const datasetId = randomUUID();
 
   const importRows = buildImportRows({
@@ -60,11 +64,29 @@ function importCsvFileToSqlite({ db, filePath }) {
     columns: parsed.headers,
     detectedFields,
     parseErrors: parsed.parseErrors,
+    recommendedTimelineRange,
   };
 
   insertImportResult(db, summary, importRows.features);
 
   return summary;
+}
+
+/** Calculate the immutable per-file recommendation from all parsed feature rows. */
+function getRecommendedTimelineRange(rows, detectedFields) {
+  let startYear = null;
+  let endYear = null;
+
+  for (const row of rows) {
+    const extent = getRowTimelineExtent(row, detectedFields);
+    if (!extent) continue;
+    const first = Math.min(extent.startYear, extent.endYear);
+    const last = Math.max(extent.startYear, extent.endYear);
+    startYear = startYear == null ? first : Math.min(startYear, first);
+    endYear = endYear == null ? last : Math.max(endYear, last);
+  }
+
+  return startYear == null || endYear == null ? null : { startYear, endYear };
 }
 
 /**
@@ -278,9 +300,11 @@ function insertImportResult(db, summary, features) {
       imported_feature_count,
       skipped_row_count,
       columns_json,
+      recommended_timeline_start_year,
+      recommended_timeline_end_year,
       imported_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertFeature = db.prepare(`
@@ -307,6 +331,8 @@ function insertImportResult(db, summary, features) {
       summary.importedFeatureCount,
       summary.skippedRowCount,
       JSON.stringify(summary.columns),
+      summary.recommendedTimelineRange?.startYear ?? null,
+      summary.recommendedTimelineRange?.endYear ?? null,
       new Date().toISOString(),
     );
 

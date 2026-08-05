@@ -88,6 +88,8 @@ export function initializeBrowserSqliteSchema(database) {
         coordinate_mapping_json TEXT NOT NULL
           DEFAULT '{"latField":null,"lonField":null}'
           CHECK (json_valid(coordinate_mapping_json)),
+        recommended_timeline_start_year INTEGER,
+        recommended_timeline_end_year INTEGER,
         warnings_json TEXT NOT NULL DEFAULT '[]'
           CHECK (json_valid(warnings_json)),
         import_state TEXT NOT NULL DEFAULT 'importing'
@@ -95,6 +97,14 @@ export function initializeBrowserSqliteSchema(database) {
         imported_at TEXT,
         CHECK (
           stored_row_count + skipped_row_count = total_parsed_row_count
+        ),
+        CHECK (
+          (recommended_timeline_start_year IS NULL AND recommended_timeline_end_year IS NULL)
+          OR (
+            recommended_timeline_start_year IS NOT NULL
+            AND recommended_timeline_end_year IS NOT NULL
+            AND recommended_timeline_start_year <= recommended_timeline_end_year
+          )
         ),
         CHECK (
           (import_state = 'importing' AND imported_at IS NULL)

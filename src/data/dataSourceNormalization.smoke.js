@@ -129,6 +129,7 @@ const datasetSummary = normalizeDatasetSummary({
       latField: 'lat',
       lonField: 'lon',
       detectedFields: { dayOfYearField: 'doy' },
+      recommendedTimelineRange: { startYear: 2025, endYear: 1000 },
       parseErrors: ['warning'],
       rows: [{ secret: 'must not pass through' }],
     },
@@ -142,6 +143,10 @@ assert.equal(datasetSummary.datasets[0].name, 'places.csv');
 assert.equal(datasetSummary.datasets[0].rowCount, 12);
 assert.equal(datasetSummary.datasets[0].totalRows, 15);
 assert.equal(datasetSummary.datasets[0].skippedRowCount, null);
+assert.deepEqual(datasetSummary.datasets[0].recommendedTimelineRange, {
+  startYear: 1000,
+  endYear: 2025,
+});
 assert.equal(Object.hasOwn(datasetSummary.datasets[0], 'rows'), false);
 assert.equal(datasetSummary.selectedDatasetId, 'dataset-1');
 assert.deepEqual(datasetSummary.timeline, { yearMin: 1000, yearMax: 2025 });

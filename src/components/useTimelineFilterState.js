@@ -4,19 +4,20 @@ import { useSessionStorageState } from "./useSessionStorageState";
 const STORAGE_KEY = "csv-map-layer-visualizer.timeline.v1";
 
 const DEFAULT_STATE = {
-  timelineEnabled: false,
+  timelineEnabled: true,
 
-  yearDomainMode: "auto",  // "auto" | "manual"
-  yearMinDraft: "",
-  yearMaxDraft: "",
+  // Retained for saved-state compatibility; ranges now change only explicitly.
+  yearDomainMode: "manual",
+  yearMinDraft: "-2100",
+  yearMaxDraft: "2026",
 
-  // Computed domain from data (set when timeline is enabled)
-  yearMin: null,
-  yearMax: null,
+  // Fixed initial domain; only explicit controls may replace it.
+  yearMin: -2100,
+  yearMax: 2026,
 
   // Selected range
-  startYear: null,
-  endYear: null,
+  startYear: -2100,
+  endYear: 2026,
 
   // Optional day filter
   dayFilterEnabled: false,
@@ -68,16 +69,10 @@ export function useTimelineFilterState() {
   }, [setState]);
 
   /*
-   * Sets the computed year domain (data-derived bounds).
+   * Sets the year domain without changing drafts or the selected range.
    *
-   * NOTE:
-   * This helper is kept for backward compatibility, but is no longer used by App.jsx.
-   * The current implementation updates only `yearMin/yearMax` and does NOT:
-   * - update `yearMinDraft/yearMaxDraft`
-   * - respect `yearDomainMode === "manual"`
-   *
-   * For auto-domain updates, prefer a single `patch()` call that
-   * updates domain + draft fields together (see App.jsx).
+   * This legacy helper remains available to callers that intentionally want
+   * that narrow update; imports and dataset changes never call it.
    */
   const setYearDomain = useCallback((yearMin, yearMax) => {
     setState((prev) => ({

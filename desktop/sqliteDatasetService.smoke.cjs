@@ -28,6 +28,8 @@ try {
     skippedRowCount: 2,
     columnsJson: JSON.stringify(["name", "lat", "lon"]),
     enabled: 0,
+    recommendedTimelineStartYear: 900,
+    recommendedTimelineEndYear: 1200,
     importedAt: "2026-01-01T00:00:00.000Z",
   });
 
@@ -41,6 +43,7 @@ try {
       totalRows: 8,
       importedFeatureCount: 6,
       skippedRowCount: 2,
+      recommendedTimelineRange: { startYear: 900, endYear: 1200 },
       importedAt: "2026-01-01T00:00:00.000Z",
     },
   ]);
@@ -53,6 +56,8 @@ try {
     skippedRowCount: 0,
     columnsJson: "not-json",
     enabled: 1,
+    recommendedTimelineStartYear: null,
+    recommendedTimelineEndYear: null,
     importedAt: "2026-02-01T00:00:00.000Z",
   });
   insertDataset({
@@ -63,6 +68,8 @@ try {
     skippedRowCount: 0,
     columnsJson: JSON.stringify(["lat", 42, "lon"]),
     enabled: 1,
+    recommendedTimelineStartYear: null,
+    recommendedTimelineEndYear: null,
     importedAt: "2026-02-01T00:00:00.000Z",
   });
 
@@ -182,6 +189,8 @@ function insertDataset({
   skippedRowCount,
   columnsJson,
   enabled,
+  recommendedTimelineStartYear,
+  recommendedTimelineEndYear,
   importedAt,
 }) {
   db.prepare(`
@@ -193,8 +202,10 @@ function insertDataset({
       skipped_row_count,
       columns_json,
       enabled,
+      recommended_timeline_start_year,
+      recommended_timeline_end_year,
       imported_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     fileName,
@@ -203,6 +214,8 @@ function insertDataset({
     skippedRowCount,
     columnsJson,
     enabled,
+    recommendedTimelineStartYear,
+    recommendedTimelineEndYear,
     importedAt,
   );
 }

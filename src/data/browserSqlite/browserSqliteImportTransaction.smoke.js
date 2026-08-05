@@ -82,6 +82,7 @@ try {
     skippedLineCount: 0,
     regionFeatureCount: 0,
     skippedRegionCount: 0,
+    recommendedTimelineRange: { startYear: 2020, endYear: 2022 },
     importedAt: '2026-07-26T14:00:00.000Z',
   });
   assert.equal(freedInsertStatementCount, 1);

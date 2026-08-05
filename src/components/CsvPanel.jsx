@@ -37,7 +37,6 @@ export default function CsvPanel({
   onUpdateMapping,  // Callback when user changes latitude/longitude fields
 
   timelineState,
-  timelineAvailable = true,
   timelineFields,
   onTimelinePatch,
   onTimelinePlaybackStart,
@@ -83,7 +82,7 @@ export default function CsvPanel({
     const nextEnd = Math.max(nextStartRaw, nextEndRaw);
 
     patchTimelineWithStop({
-      // lock the domain so auto-detection does not overwrite it
+      // Record that this range came from an explicit manual action.
       yearDomainMode: "manual",
 
       yearMin: lo,
@@ -98,6 +97,19 @@ export default function CsvPanel({
   const canBeginYearDomain =
     toIntOrNull(yearMinDraft) != null && toIntOrNull(yearMaxDraft) != null;
 
+  /** Apply one stored CSV recommendation without changing Timeline's enabled state. */
+  function useRecommendedTimelineRange(range) {
+    if (!range) return;
+    patchTimelineWithStop({
+      yearDomainMode: "manual",
+      yearMin: range.startYear,
+      yearMax: range.endYear,
+      yearMinDraft: String(range.startYear),
+      yearMaxDraft: String(range.endYear),
+      startYear: range.startYear,
+      endYear: range.endYear,
+    });
+  }
 
   function patchTimelineWithStop(partial) {
     // Stop first, so timer is cleared.
@@ -134,7 +146,6 @@ export default function CsvPanel({
         ========================= */}
       <MapToolsMenu
         timelineState={timelineState}
-        timelineAvailable={timelineAvailable}
         onTimelinePatch={onTimelinePatch}
         mapToolsState={mapToolsState}
         onMapToolsPatch={onMapToolsPatch}
@@ -163,10 +174,11 @@ export default function CsvPanel({
             onUnloadFile={onUnloadFile}
             removeActionLabel={removeActionLabel}
             onToggleEnabled={onToggleEnabled}
+            onUseRecommendedTimelineRange={useRecommendedTimelineRange}
           />
 
           {/* Timeline UI lives inside the panel header (NOT in the dropdown). */}
-          {timelineAvailable && timelineState?.timelineEnabled && (
+          {timelineState?.timelineEnabled && (
             <div className="csvTimelineBlock" aria-label="Timeline filter">
               <div className="csvTimelineTitleRow">
                 <div className="csvTimelineTitle">Timeline filter</div>

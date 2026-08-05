@@ -33,6 +33,8 @@ function initializeSchema(db) {
       skipped_row_count INTEGER NOT NULL DEFAULT 0,
       columns_json TEXT NOT NULL DEFAULT '[]',
       enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+      recommended_timeline_start_year INTEGER,
+      recommended_timeline_end_year INTEGER,
       imported_at TEXT NOT NULL
     );
 
@@ -63,6 +65,7 @@ function initializeSchema(db) {
   `);
 
   ensureDatasetEnabledColumn(db);
+  ensureDatasetRecommendedTimelineColumns(db);
 }
 
 /**
@@ -79,6 +82,19 @@ function ensureDatasetEnabledColumn(db) {
     ALTER TABLE datasets
     ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1));
   `);
+}
+
+/** Add import-time recommendation columns to databases created by older builds. */
+function ensureDatasetRecommendedTimelineColumns(db) {
+  const columns = db.pragma("table_info(datasets)");
+  const names = new Set(columns.map((column) => column.name));
+
+  if (!names.has("recommended_timeline_start_year")) {
+    db.exec("ALTER TABLE datasets ADD COLUMN recommended_timeline_start_year INTEGER;");
+  }
+  if (!names.has("recommended_timeline_end_year")) {
+    db.exec("ALTER TABLE datasets ADD COLUMN recommended_timeline_end_year INTEGER;");
+  }
 }
 
 /**

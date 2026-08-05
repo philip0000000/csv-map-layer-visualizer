@@ -103,7 +103,7 @@ contract migration.
 
 ### Map and panel tools
 
-- Marker clustering is optional and uses the configured 1–300 pixel radius.
+- Marker clustering is optional and uses the configured 0–300 pixel radius. At radius 0, only exact coordinate matches cluster; nearby markers with different coordinates remain separate.
 - The map tools menu closes on an outside click or Escape.
 - The map supports the current blank, OpenStreetMap, imagery, and reference
   layer choices and the existing zoom/pan behavior.

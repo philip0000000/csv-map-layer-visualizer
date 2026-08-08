@@ -27,6 +27,7 @@
     "smoke:browser-sqlite-ui": "node src/components/browserSqliteUiCoordination.smoke.js",
     "smoke:message-dismissal": "node src/components/messageDismissalState.smoke.js",
     "smoke:map-tools": "node src/components/mapToolsState.smoke.js",
+    "smoke:coordinates": "node src/components/coordinateNavigation.smoke.js",
     "smoke:marker-proximity": "node src/components/markerProximitySelection.smoke.js",
     "smoke:browser-sqlite-points": "node src/data/browserSqlite/browserSqlitePointQueries.smoke.js",
     "validate:browser-sqlite-worker": "node desktop/run-electron.cjs desktop/browserSqliteWorkerValidation.cjs",

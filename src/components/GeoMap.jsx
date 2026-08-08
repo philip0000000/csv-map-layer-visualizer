@@ -27,6 +27,7 @@ import "leaflet-polylinedecorator";
 
 import { getClusterMarkerIcon, getMarkerIcon } from "./markerIcons";
 import { buildMarkerDetailFields } from "./markerDetailFields";
+import MapCoordinateControls from "./MapCoordinateControls";
 import {
   findMarkersNearClickedMarker,
   MARKER_PROXIMITY_RADIUS_PIXELS,
@@ -439,6 +440,7 @@ export default function GeoMap({
       zoomControl={false}
     >
       <ViewportChangeReporter onViewportChange={onViewportChange} />
+      <MapCoordinateControls />
 
       {/* Zoom controls moved away from the CSV overlay */}
       <ZoomControl position="bottomright" />

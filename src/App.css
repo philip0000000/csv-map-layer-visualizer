@@ -471,7 +471,7 @@ button.csvBtnPrimary.csvDesktopImportButton {
   outline: none;
 }
 
-/* Pointer-anchored actions for copying or navigating to map coordinates. */
+/* Pointer-anchored actions for coordinates and temporary map measurements. */
 .mapCoordinateContextMenu {
   position: fixed;
   z-index: 2200;
@@ -498,6 +498,59 @@ button.csvBtnPrimary.csvDesktopImportButton {
 .mapCoordinateContextMenu button:hover,
 .mapCoordinateContextMenu button:focus-visible {
   background: rgba(56, 189, 248, 0.18);
+  outline: none;
+}
+
+/* White drag handles remain legible over both street and satellite tiles. */
+.mapDistanceEndpointIcon {
+  box-sizing: border-box;
+  border: 2px solid #0f172a;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+/* Keep measurement status visible inside the map while panning or zooming. */
+.mapDistanceInfo {
+  position: absolute;
+  z-index: 1000;
+  bottom: 12px;
+  left: 50%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 96px);
+  padding: 7px 8px 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.96);
+  color: #e2e8f0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transform: translateX(-50%);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.mapDistanceInfo button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #e2e8f0;
+  cursor: pointer;
+  place-items: center;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.mapDistanceInfo button:hover,
+.mapDistanceInfo button:focus-visible {
+  background: rgba(248, 113, 113, 0.24);
   outline: none;
 }
 

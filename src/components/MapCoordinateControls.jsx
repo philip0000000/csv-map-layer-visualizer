@@ -1,14 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useMap } from "react-leaflet";
+import L from "leaflet";
+import { Marker, Polyline, useMap } from "react-leaflet";
 import {
   formatCoordinatePair,
   parseCoordinatePaste,
   validateCoordinateInputs,
 } from "./coordinateNavigation";
+import {
+  cancelIncompleteDistanceMeasurement,
+  clearDistanceMeasurement,
+  completeDistanceMeasurement,
+  formatMetricDistance,
+  moveDistanceEndpoint,
+  startDistanceMeasurement,
+} from "./distanceMeasurement";
 
 const CONTEXT_MENU_WIDTH = 240;
-const CONTEXT_MENU_HEIGHT = 84;
+const CONTEXT_MENU_HEIGHT = 116;
+const DISTANCE_ENDPOINT_ICON = L.divIcon({
+  className: "mapDistanceEndpointIcon",
+  iconAnchor: [7, 7],
+  iconSize: [14, 14],
+});
 
 /** Keep the pointer-anchored map menu inside the visible viewport. */
 function getContextMenuPosition(clientX, clientY) {
@@ -20,7 +34,32 @@ function getContextMenuPosition(clientX, clientY) {
   };
 }
 
-/** Add coordinate copying and fixed-zoom navigation to the active Leaflet map. */
+/** Keep measurement instructions and cleanup available inside the visible map. */
+function DistanceMeasurementInfo({ children, onClear }) {
+  const infoRef = useRef(null);
+
+  useEffect(() => {
+    if (!infoRef.current) return;
+    // Prevent information-box actions from placing an endpoint or moving the map.
+    L.DomEvent.disableClickPropagation(infoRef.current);
+    L.DomEvent.disableScrollPropagation(infoRef.current);
+  }, []);
+
+  return (
+    <div ref={infoRef} className="mapDistanceInfo" role="status">
+      <span>{children}</span>
+      <button
+        type="button"
+        aria-label="Clear distance measurement"
+        onClick={onClear}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+/** Add shared coordinate and distance actions to the active Leaflet map. */
 export default function MapCoordinateControls() {
   const map = useMap();
   const contextMenuRef = useRef(null);
@@ -30,6 +69,7 @@ export default function MapCoordinateControls() {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [errors, setErrors] = useState({ latitude: null, longitude: null });
+  const [measurement, setMeasurement] = useState(null);
 
   useEffect(() => {
     const mapContainer = map.getContainer();
@@ -40,6 +80,7 @@ export default function MapCoordinateControls() {
       const latLng = map.mouseEventToLatLng(event);
       setContextMenu({
         text: formatCoordinatePair(latLng.lat, latLng.lng),
+        latLng: { lat: latLng.lat, lng: latLng.lng },
         ...getContextMenuPosition(event.clientX, event.clientY),
       });
     }
@@ -71,6 +112,35 @@ export default function MapCoordinateControls() {
   }, [contextMenu]);
 
   useEffect(() => {
+    if (!measurement || measurement.end) return undefined;
+
+    /** Complete the active measurement with exactly one ordinary map click. */
+    function handleMapClick(event) {
+      setMeasurement((current) => completeDistanceMeasurement(
+        current,
+        { lat: event.latlng.lat, lng: event.latlng.lng },
+      ));
+    }
+
+    map.on("click", handleMapClick);
+    return () => map.off("click", handleMapClick);
+  }, [map, measurement]);
+
+  useEffect(() => {
+    if (!measurement || measurement.end) return undefined;
+
+    /** Let Escape cancel only a measurement that is waiting for its endpoint. */
+    function handleMeasurementKeyDown(event) {
+      if (event.key === "Escape") {
+        setMeasurement(cancelIncompleteDistanceMeasurement);
+      }
+    }
+
+    document.addEventListener("keydown", handleMeasurementKeyDown);
+    return () => document.removeEventListener("keydown", handleMeasurementKeyDown);
+  }, [measurement]);
+
+  useEffect(() => {
     if (!dialogOpen) return undefined;
 
     latitudeInputRef.current?.focus();
@@ -97,6 +167,26 @@ export default function MapCoordinateControls() {
     } catch (error) {
       console.error("Could not copy map coordinates.", error);
     }
+  }
+
+  /** Replace any previous measurement with the context-menu position. */
+  function startMeasurement() {
+    const start = contextMenu?.latLng;
+    setContextMenu(null);
+    if (start) setMeasurement(startDistanceMeasurement(start));
+  }
+
+  /** Update one geographic endpoint continuously during a marker drag. */
+  function handleEndpointDrag(endpoint, event) {
+    const latLng = event.target.getLatLng();
+    // Geographic state keeps the measurement stable through map pans and zooms.
+    setMeasurement((current) => moveDistanceEndpoint(current, endpoint, latLng));
+  }
+
+  /** Remove the complete temporary measurement without touching map or dataset state. */
+  function clearMeasurement() {
+    // Every measurement layer derives from this one state object and unmounts together.
+    setMeasurement(clearDistanceMeasurement());
   }
 
   /** Open a fresh coordinate dialog and discard values from any earlier visit. */
@@ -141,8 +231,53 @@ export default function MapCoordinateControls() {
 
   if (typeof document === "undefined") return null;
 
-  return createPortal(
+  const distanceText = measurement?.end
+    // Leaflet calculates geographic distance from latitude and longitude.
+    ? `Total distance: ${formatMetricDistance(map.distance(measurement.start, measurement.end))}`
+    : "Click the map to place the second point.";
+
+  return (
     <>
+      {measurement && (
+        <>
+          <Marker
+            position={measurement.start}
+            icon={DISTANCE_ENDPOINT_ICON}
+            draggable={!!measurement.end}
+            bubblingMouseEvents={false}
+            eventHandlers={{
+              drag: (event) => handleEndpointDrag("start", event),
+            }}
+          />
+          {measurement.end && (
+            <>
+              <Polyline
+                positions={[measurement.start, measurement.end]}
+                pathOptions={{ color: "#0284c7", weight: 4, opacity: 0.95 }}
+                interactive={false}
+              />
+              <Marker
+                position={measurement.end}
+                icon={DISTANCE_ENDPOINT_ICON}
+                draggable
+                bubblingMouseEvents={false}
+                eventHandlers={{
+                  drag: (event) => handleEndpointDrag("end", event),
+                }}
+              />
+            </>
+          )}
+          {createPortal(
+            <DistanceMeasurementInfo onClear={clearMeasurement}>
+              {distanceText}
+            </DistanceMeasurementInfo>,
+            map.getContainer(),
+          )}
+        </>
+      )}
+
+      {createPortal(
+        <>
       {contextMenu && (
         <div
           ref={contextMenuRef}
@@ -156,6 +291,9 @@ export default function MapCoordinateControls() {
           </button>
           <button type="button" role="menuitem" onClick={openDialog}>
             Go to coordinates…
+          </button>
+          <button type="button" role="menuitem" onClick={startMeasurement}>
+            Measure distance
           </button>
         </div>
       )}
@@ -220,7 +358,9 @@ export default function MapCoordinateControls() {
           </div>
         </div>
       )}
-    </>,
-    document.body,
+        </>,
+        document.body,
+      )}
+    </>
   );
 }

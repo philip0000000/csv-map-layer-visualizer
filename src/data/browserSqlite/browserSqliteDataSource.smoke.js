@@ -181,6 +181,23 @@ class FakeWorkerClient {
     });
   }
 
+  getLogicalZone(query) {
+    this.calls.push(['getLogicalZone', query]);
+    return this.result({
+      ...query,
+      parts: [{
+        part: 'main',
+        coordinates: [[1, 1], [1, 2], [2, 1], [1, 1]],
+        style: { color: '#3388ff' },
+      }],
+    });
+  }
+
+  updateLogicalZone(request) {
+    this.calls.push(['updateLogicalZone', request]);
+    return this.result(request);
+  }
+
   dispose() {
     this.disposeCount += 1;
   }
@@ -217,6 +234,7 @@ assert.equal(initialized.capabilities.points, true);
 assert.equal(initialized.capabilities.lines, true);
 assert.equal(initialized.capabilities.regions, true);
 assert.equal(initialized.capabilities.groupedViewportResults, true);
+assert.equal(initialized.capabilities.zoneEditing, true);
 assert.deepEqual(dataSource.getCapabilities(), initialized.capabilities);
 
 const observedProgress = [];
@@ -317,6 +335,12 @@ const featureDetails = await dataSource.getFeatureDetails({
 });
 assert.deepEqual(featureDetails.row, { name: 'One', count: '2' });
 const groupRows = await dataSource.getGroupRows({ offset: 0, limit: 1 });
+const logicalZone = await dataSource.getLogicalZone({
+  datasetId: 'dataset-1',
+  featureId: 'zone',
+});
+assert.equal(logicalZone.parts.length, 1);
+assert.deepEqual(await dataSource.updateLogicalZone(logicalZone), logicalZone);
 assert.deepEqual(groupRows.rows, [{ name: 'One', count: '2' }]);
 
 client.failure = { code: 'invalid-mapping', message: 'private detail' };

@@ -25,6 +25,10 @@ import {
 import {
   queryBrowserSqliteMapView,
 } from './browserSqlitePointQueries.js';
+import {
+  getBrowserSqliteLogicalZone,
+  updateBrowserSqliteLogicalZone,
+} from './browserSqliteZoneAdjustments.js';
 
 const HEADERS = [
   'name',
@@ -422,6 +426,58 @@ try {
     renderBudget: 100,
   }), resultBeforeFailure);
   assert.equal(readScalar(database, 'PRAGMA foreign_key_check'), null);
+
+  importDataset(database, 'dataset-zone-edit', [
+    geometry('Main one', 'region', 'editable', 1, 1, { part: 'main', order: '1' }),
+    geometry('Main two', 'region', 'editable', 1, 2, { part: 'main', order: '2' }),
+    geometry('Main three', 'region', 'editable', 2, 1, { part: 'main', order: '3' }),
+    geometry('Island one', 'region', 'editable', 5, 5, { part: 'island', order: '1' }),
+    geometry('Island two', 'region', 'editable', 5, 6, { part: 'island', order: '2' }),
+    geometry('Island three', 'region', 'editable', 6, 5, { part: 'island', order: '3' }),
+  ]);
+  const editableZone = getBrowserSqliteLogicalZone(database, {
+    datasetId: 'dataset-zone-edit',
+    featureId: 'editable',
+  });
+  assert.deepEqual(editableZone.parts.map((part) => part.part), ['main', 'island']);
+  const movedParts = editableZone.parts.map((part) => ({
+    part: part.part,
+    coordinates: part.coordinates.map(([lat, lon]) => [lat + 1, lon + 2]),
+  }));
+  const updatedZone = updateBrowserSqliteLogicalZone(database, {
+    datasetId: 'dataset-zone-edit',
+    featureId: 'editable',
+    parts: movedParts,
+  });
+  assert.deepEqual(updatedZone.parts[0].coordinates, movedParts[0].coordinates);
+  assert.equal(JSON.parse(readScalar(database, `
+    SELECT row_json FROM source_rows
+    WHERE dataset_id = 'dataset-zone-edit' AND source_row_index = 0
+  `)).lat, '2');
+  assert.equal(JSON.parse(readScalar(database, `
+    SELECT row_json FROM source_rows
+    WHERE dataset_id = 'dataset-zone-edit' AND source_row_index = 0
+  `)).lon, '3');
+
+  const committedZone = structuredClone(updatedZone);
+  database.run(`
+    CREATE TRIGGER fail_zone_update BEFORE UPDATE ON geometry_features
+    WHEN OLD.dataset_id = 'dataset-zone-edit'
+    BEGIN SELECT RAISE(ABORT, 'forced zone failure'); END;
+  `);
+  assert.throws(() => updateBrowserSqliteLogicalZone(database, {
+    datasetId: 'dataset-zone-edit',
+    featureId: 'editable',
+    parts: movedParts.map((part) => ({
+      ...part,
+      coordinates: part.coordinates.map(([lat, lon]) => [lat + 1, lon + 1]),
+    })),
+  }));
+  database.run('DROP TRIGGER fail_zone_update');
+  assert.deepEqual(getBrowserSqliteLogicalZone(database, {
+    datasetId: 'dataset-zone-edit',
+    featureId: 'editable',
+  }), committedZone);
 } finally {
   closeBrowserSqliteDatabase(database);
 }

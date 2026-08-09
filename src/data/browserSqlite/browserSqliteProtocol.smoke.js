@@ -191,6 +191,28 @@ assert.deepEqual(validateBrowserSqliteRequest({
   payload: { groupRef, offset: 10, limit: 100 },
 });
 
+assert.deepEqual(validateBrowserSqliteRequest({
+  requestId: 'request-zone-update',
+  operation: BROWSER_SQLITE_OPERATIONS.UPDATE_LOGICAL_ZONE,
+  payload: {
+    datasetId: 'dataset-1',
+    featureId: 'zone',
+    parts: [{
+      part: 'main',
+      coordinates: [[1, 1], [1, 2], [2, 1], [1, 1]],
+    }],
+  },
+}).payload.parts[0].coordinates, [[1, 1], [1, 2], [2, 1], [1, 1]]);
+assertProtocolError(() => validateBrowserSqliteRequest({
+  requestId: 'request-zone-invalid',
+  operation: BROWSER_SQLITE_OPERATIONS.UPDATE_LOGICAL_ZONE,
+  payload: {
+    datasetId: 'dataset-1',
+    featureId: 'zone',
+    parts: [{ part: 'main', coordinates: [[1, 1]] }],
+  },
+}), 'invalid-request');
+
 assertProtocolError(() => validateBrowserSqliteRequest(null), 'invalid-request');
 assertProtocolError(() => validateBrowserSqliteRequest([]), 'invalid-request');
 assertProtocolError(() => validateBrowserSqliteRequest({
@@ -486,6 +508,8 @@ assert.deepEqual(
     'query-map-view',
     'get-feature-details',
     'get-group-rows',
+    'get-logical-zone',
+    'update-logical-zone',
     'close',
   ]),
 );

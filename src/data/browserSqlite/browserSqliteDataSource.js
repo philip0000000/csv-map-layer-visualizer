@@ -14,6 +14,7 @@ import {
   normalizeFeatureDetailsResult,
   normalizeGroupRowsResult,
   normalizeMapViewResult,
+  normalizeLogicalZoneResult,
   normalizeMappingMutationResult,
   normalizePreviewPageResult,
 } from '../dataSourceNormalization.js';
@@ -43,6 +44,7 @@ const CAPABILITIES = normalizeBackendCapabilities({
   lines: true,
   regions: true,
   groupedViewportResults: true,
+  zoneEditing: true,
 });
 
 /** Create the unselected browser SQLite data-source adapter. */
@@ -320,6 +322,28 @@ export function createBrowserSqliteDataSource(options = {}) {
         );
       } catch (error) {
         throw workerFailure(DATA_SOURCE_METHODS.getGroupRows, error);
+      }
+    },
+
+    async getLogicalZone(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getLogicalZone);
+      try {
+        return normalizeLogicalZoneResult(await workerClient.getLogicalZone(query));
+      } catch (error) {
+        throw workerFailure(DATA_SOURCE_METHODS.getLogicalZone, error, {
+          datasetId: query.datasetId,
+        });
+      }
+    },
+
+    async updateLogicalZone(request = {}) {
+      assertActive(DATA_SOURCE_METHODS.updateLogicalZone);
+      try {
+        return normalizeLogicalZoneResult(await workerClient.updateLogicalZone(request));
+      } catch (error) {
+        throw workerFailure(DATA_SOURCE_METHODS.updateLogicalZone, error, {
+          datasetId: request.datasetId,
+        });
       }
     },
 

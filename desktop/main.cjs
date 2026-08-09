@@ -12,6 +12,10 @@ const {
 } = require("./sqliteDatasetService.cjs");
 const { closeSqliteStore, openSqliteStore } = require("./sqliteStore.cjs");
 const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
+const {
+  getSqliteLogicalZone,
+  updateSqliteLogicalZone,
+} = require("./sqliteZoneService.cjs");
 
 const {
   getSqliteFeatureDetails,
@@ -147,6 +151,31 @@ function registerDesktopBridgeHandlers() {
         groupRef: query?.groupRef,
         offset: query?.offset,
         limit: query?.limit,
+      });
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
+  ipcMain.handle('desktop:getLogicalZone', async (_event, query = {}) => {
+    const db = openDesktopSqliteStore();
+    try {
+      return getSqliteLogicalZone({
+        db,
+        datasetId: query?.datasetId,
+        featureId: query?.featureId,
+      });
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
+  ipcMain.handle('desktop:updateLogicalZone', async (_event, request = {}) => {
+    const db = openDesktopSqliteStore();
+    try {
+      return updateSqliteLogicalZone({
+        db,
+        datasetId: request?.datasetId,
+        featureId: request?.featureId,
+        parts: request?.parts,
       });
     } finally {
       closeSqliteStore(db);

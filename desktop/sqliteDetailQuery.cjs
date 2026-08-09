@@ -90,9 +90,11 @@ function getSqliteGroupRows({
 
 function buildGroupWhereClause(groupRef) {
   const { bounds, grid, timeline } = groupRef;
-  // Rebuild the original group from its viewport, grid cell, and timeline.
+  // Rebuild the original point group from its viewport, grid cell, and timeline.
   const clauses = [
     'dataset_id IN (SELECT id FROM datasets WHERE enabled = 1)',
+    // Region vertices render as polygons and therefore cannot belong to a point marker.
+    "COALESCE(LOWER(TRIM(json_extract(compact_json, '$.featureType'))), 'point') <> 'region'",
     'lat BETWEEN @south AND @north',
     bounds.west > bounds.east
       ? '(lon >= @west OR lon <= @east)'

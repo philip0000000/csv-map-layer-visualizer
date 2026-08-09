@@ -770,6 +770,28 @@ export default function App() {
   const activeGroupRowsLoader = desktopSqliteMapAvailable
     ? getDesktopGroupRows
     : null;
+  const getCompleteLogicalZone = useCallback(
+    (query) => dataSource.getLogicalZone(query),
+    [dataSource],
+  );
+  const updateCompleteLogicalZone = useCallback(async (request) => {
+    const result = await dataSource.updateLogicalZone(request);
+    // One revision refreshes the viewport from committed SQLite geometry.
+    setDesktopDataRevision((revision) => revision + 1);
+    return result;
+  }, [dataSource]);
+  const reportZoneEditingError = useCallback((error) => {
+    setDesktopMapViewState((current) => ({
+      ...current,
+      status: current.result ? "loaded" : "error",
+      error: error?.message
+        ? String(error.message)
+        : "Could not update the selected zone.",
+    }));
+  }, []);
+  const setZoneEditingEnabled = useCallback((enabled) => {
+    mapToolsApi.patch({ zoneEditingEnabled: enabled === true });
+  }, [mapToolsApi]);
   const databaseFiles = useMemo(() => desktopDatasetState.datasets.map((dataset) => ({
     ...dataset,
     size: dataset.sizeBytes,
@@ -824,6 +846,20 @@ export default function App() {
           onViewportChange={setMapViewport}
           onMarkerSelect={handleMarkerSelect}
           selectedMarker={selectedMarker}
+          zoneEditingEnabled={
+            desktopCapabilities.zoneEditing && !!mapToolsApi.state.zoneEditingEnabled
+          }
+          onZoneEditingToggle={desktopCapabilities.zoneEditing
+            ? setZoneEditingEnabled
+            : undefined}
+          getLogicalZone={desktopCapabilities.zoneEditing
+            ? getCompleteLogicalZone
+            : undefined}
+          updateLogicalZone={desktopCapabilities.zoneEditing
+            ? updateCompleteLogicalZone
+            : undefined}
+          enabledDatasetIds={enabledDatabaseIds}
+          onZoneEditingError={reportZoneEditingError}
         />
 
         <CsvPanelOverlay onVisibleWidthChange={setCsvPanelVisibleWidth}>

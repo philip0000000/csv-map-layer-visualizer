@@ -25,6 +25,10 @@ import {
   queryBrowserSqliteMapView,
 } from './browserSqlitePointQueries.js';
 import {
+  getBrowserSqliteLogicalZone,
+  updateBrowserSqliteLogicalZone,
+} from './browserSqliteZoneAdjustments.js';
+import {
   BROWSER_SQLITE_OPERATIONS,
   BrowserSqliteProtocolError,
   createBrowserSqliteFailureResponse,
@@ -169,6 +173,16 @@ export function createBrowserSqliteWorkerRuntime({
         );
       case BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS:
         return getBrowserSqliteGroupRows(
+          requireDatabase(database),
+          request.payload,
+        );
+      case BROWSER_SQLITE_OPERATIONS.GET_LOGICAL_ZONE:
+        return getBrowserSqliteLogicalZone(
+          requireDatabase(database),
+          request.payload,
+        );
+      case BROWSER_SQLITE_OPERATIONS.UPDATE_LOGICAL_ZONE:
+        return updateBrowserSqliteLogicalZone(
           requireDatabase(database),
           request.payload,
         );

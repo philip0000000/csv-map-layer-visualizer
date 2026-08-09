@@ -26,6 +26,8 @@ export const DATA_SOURCE_METHODS = Object.freeze({
   queryMapView: "queryMapView",
   getFeatureDetails: "getFeatureDetails",
   getGroupRows: "getGroupRows",
+  getLogicalZone: "getLogicalZone",
+  updateLogicalZone: "updateLogicalZone",
   dispose: "dispose",
 });
 
@@ -92,6 +94,10 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  *   Returns row/detail data for a selected map feature.
  * @property {(query: GroupRowsQuery) => GroupRowsResult | Promise<GroupRowsResult>} getGroupRows
  *   Returns a page of backing rows for a dataset or future grouped detail view.
+ * @property {(query: LogicalZoneQuery) => LogicalZoneResult | Promise<LogicalZoneResult>} getLogicalZone
+ *   Returns every part of one dataset-scoped logical region.
+ * @property {(request: LogicalZoneUpdate) => LogicalZoneResult | Promise<LogicalZoneResult>} updateLogicalZone
+ *   Atomically replaces every coordinate belonging to one logical region.
  * @property {() => void | Promise<void>} dispose
  *   Releases listeners, workers, and backend resources. It must be idempotent.
  */
@@ -145,6 +151,7 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {boolean} lines
  * @property {boolean} regions
  * @property {boolean} groupedViewportResults
+ * @property {boolean} zoneEditing
  */
 
 /**
@@ -397,6 +404,33 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @typedef {object} FeatureSourceRef
  * @property {string} datasetId
  * @property {number} rowIndex
+ */
+
+/**
+ * @typedef {object} LogicalZoneQuery
+ * @property {string} datasetId
+ * @property {string} featureId
+ */
+
+/**
+ * @typedef {object} LogicalZonePart
+ * @property {string} part
+ * @property {Array<[number, number]>} coordinates
+ * @property {object|null} [style]
+ */
+
+/**
+ * @typedef {object} LogicalZoneUpdate
+ * @property {string} datasetId
+ * @property {string} featureId
+ * @property {LogicalZonePart[]} parts
+ */
+
+/**
+ * @typedef {object} LogicalZoneResult
+ * @property {string|null} datasetId
+ * @property {string|null} featureId
+ * @property {LogicalZonePart[]} parts
  */
 
 /**

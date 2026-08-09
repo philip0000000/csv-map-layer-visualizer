@@ -276,6 +276,16 @@ export function createBrowserSqliteWorkerClient(options = {}) {
     return sendRequest(BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS, query);
   }
 
+  function getLogicalZone(query = {}) {
+    if (!isPlainRecord(query)) return invalidRequestPromise();
+    return sendRequest(BROWSER_SQLITE_OPERATIONS.GET_LOGICAL_ZONE, query);
+  }
+
+  function updateLogicalZone(request = {}) {
+    if (!isPlainRecord(request)) return invalidRequestPromise();
+    return sendRequest(BROWSER_SQLITE_OPERATIONS.UPDATE_LOGICAL_ZONE, request);
+  }
+
   function close() {
     return sendRequest(BROWSER_SQLITE_OPERATIONS.CLOSE);
   }
@@ -318,6 +328,8 @@ export function createBrowserSqliteWorkerClient(options = {}) {
     queryMapView,
     getFeatureDetails,
     getGroupRows,
+    getLogicalZone,
+    updateLogicalZone,
     close,
     dispose,
   });

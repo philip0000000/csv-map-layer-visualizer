@@ -23,5 +23,6 @@ const initialState = getInitialMapToolsState();
 assert.equal(initialState.clusterMarkersEnabled, false);
 assert.equal(initialState.clusterRadius, DEFAULT_CLUSTER_RADIUS);
 assert.equal(initialState.clusterRadiusDraft, DEFAULT_CLUSTER_RADIUS);
+assert.equal(initialState.zoneEditingEnabled, false);
 
 console.log("Map tools state smoke checks passed.");

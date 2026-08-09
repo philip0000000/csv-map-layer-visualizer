@@ -8,6 +8,7 @@ const Papa = require("papaparse");
 const LAT_SYNONYMS = ["lat", "latitude", "y", "northing"];
 const LON_SYNONYMS = ["lon", "lng", "long", "longitude", "x", "easting"];
 const YEAR_SYNONYMS = ["year", "yyyy", "yr", "ar"];
+const { rebuildSqliteDatasetRegions } = require("./sqliteZoneService.cjs");
 const DATE_SYNONYMS = ["date", "datetime", "timestamp", "time", "created", "createdat"];
 // These fields are small enough to keep beside each imported point. Later map queries can read them without loading the full row.
 const COMPACT_FIELD_NAMES = [
@@ -349,6 +350,8 @@ function insertImportResult(db, summary, features) {
         feature.rowJson,
       );
     }
+    // Region parts derive inside the import transaction, so partial geometry never persists.
+    rebuildSqliteDatasetRegions({ db, datasetId: summary.datasetId });
   });
 
   runImport();

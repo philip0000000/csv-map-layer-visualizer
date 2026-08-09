@@ -91,6 +91,20 @@ assert.deepEqual(validateBrowserSqliteRequest({
   operation: 'remove-dataset',
   payload: { datasetId: 'dataset-1' },
 });
+assertProtocolError(() => validateBrowserSqliteRequest({
+  requestId: 'request-export-path',
+  operation: BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_CSV,
+  payload: { datasetId: 'dataset-1', path: 'C:\\private\\export.csv' },
+}), 'invalid-request');
+assert.deepEqual(validateBrowserSqliteRequest({
+  requestId: 'request-export',
+  operation: BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_CSV,
+  payload: { datasetId: 'dataset-1' },
+}), {
+  requestId: 'request-export',
+  operation: 'export-dataset-csv',
+  payload: { datasetId: 'dataset-1' },
+});
 assert.deepEqual(validateBrowserSqliteRequest({
   requestId: 'request-mapping',
   operation: BROWSER_SQLITE_OPERATIONS.UPDATE_DATASET_MAPPING,
@@ -503,6 +517,7 @@ assert.deepEqual(
     'get-dataset-summary',
     'set-dataset-enabled',
     'remove-dataset',
+    'export-dataset-csv',
     'update-dataset-mapping',
     'get-preview-page',
     'query-map-view',

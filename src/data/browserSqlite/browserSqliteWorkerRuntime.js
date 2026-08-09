@@ -14,6 +14,7 @@ import {
 import {
   removeBrowserSqliteDataset,
 } from './browserSqliteDatasetRemoval.js';
+import { exportBrowserSqliteDatasetCsv } from './browserSqliteDatasetExport.js';
 import {
   importBrowserSqliteCsvBatch,
 } from './browserSqliteImportBatch.js';
@@ -147,6 +148,12 @@ export function createBrowserSqliteWorkerRuntime({
         );
       case BROWSER_SQLITE_OPERATIONS.REMOVE_DATASET:
         return removeBrowserSqliteDataset(
+          requireDatabase(database),
+          request.payload.datasetId,
+        );
+      case BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_CSV:
+        // Worker serialization reads committed rows without copying them into app state.
+        return exportBrowserSqliteDatasetCsv(
           requireDatabase(database),
           request.payload.datasetId,
         );

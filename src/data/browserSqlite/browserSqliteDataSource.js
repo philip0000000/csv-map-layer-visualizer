@@ -5,6 +5,7 @@ import {
 import {
   normalizeBackendCapabilities,
   normalizeBackendFailure,
+  normalizeDatasetCsvSaveResult,
   normalizeDatasetMutationResult,
   normalizeDatasetSummary,
   normalizeImportBatchResult,
@@ -38,6 +39,7 @@ const CAPABILITIES = normalizeBackendCapabilities({
   datasetSelection: true,
   datasetVisibility: true,
   datasetRemoval: true,
+  datasetCsvExport: true,
   datasetMapping: true,
   previewPaging: true,
   points: true,
@@ -51,6 +53,7 @@ const CAPABILITIES = normalizeBackendCapabilities({
 export function createBrowserSqliteDataSource(options = {}) {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const baseUrl = options.baseUrl ?? import.meta.env?.BASE_URL ?? '/';
+  const downloadCsv = options.downloadCsv ?? downloadBrowserCsv;
   let workerClient = options.client ?? null;
   let clientCreationFailed = false;
   if (!workerClient) {
@@ -246,6 +249,25 @@ export function createBrowserSqliteDataSource(options = {}) {
       }
     },
 
+    /** Serialize in the worker, then start a renderer-safe local download. */
+    async saveDatasetAsCsv(datasetId) {
+      assertActive(DATA_SOURCE_METHODS.saveDatasetAsCsv);
+      const normalizedId = normalizeId(datasetId);
+      if (!normalizedId) return normalizeDatasetCsvSaveResult(null, normalizedId);
+      try {
+        const exported = await workerClient.exportDatasetCsv(normalizedId);
+        // The renderer handles only a completed CSV payload and never database access.
+        downloadCsv(exported.csvText, exported.fileName);
+        return normalizeDatasetCsvSaveResult({
+          ok: true,
+          datasetId: exported.datasetId,
+          fileName: exported.fileName,
+        }, normalizedId);
+      } catch (error) {
+        return failedDatasetCsvSave(normalizedId, error);
+      }
+    },
+
     async updateDatasetMapping(datasetId, mapping = {}) {
       assertActive(DATA_SOURCE_METHODS.updateDatasetMapping);
       const normalizedId = normalizeId(datasetId) ?? '';
@@ -434,6 +456,35 @@ function failedDatasetMutation(operation, datasetId, error) {
     dataset: null,
     error: workerFailure(operation, error, { datasetId }),
   };
+}
+
+/** Convert worker or download failures into the shared safe save result. */
+function failedDatasetCsvSave(datasetId, error) {
+  const result = normalizeDatasetCsvSaveResult(null, datasetId);
+  return {
+    ...result,
+    error: workerFailure(DATA_SOURCE_METHODS.saveDatasetAsCsv, error, { datasetId }),
+  };
+}
+
+/** Download a completed UTF-8 CSV using APIs available on GitHub Pages. */
+function downloadBrowserCsv(csvText, fileName) {
+  if (typeof csvText !== 'string' || typeof fileName !== 'string' || !fileName) {
+    throw new TypeError('A serialized CSV and filename are required.');
+  }
+  const url = URL.createObjectURL(new Blob([csvText], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  try {
+    link.href = url;
+    link.download = fileName;
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+  } finally {
+    link.remove();
+    // Revocation is deferred so the browser can begin consuming the object URL.
+    globalThis.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 }
 
 function unsupportedImport(operation) {

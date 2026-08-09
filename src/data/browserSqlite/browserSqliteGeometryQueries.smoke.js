@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import Papa from 'papaparse';
 import initSqlJs from 'sql.js';
 import {
   closeBrowserSqliteDatabase,
@@ -19,6 +20,7 @@ import {
 import {
   getBrowserSqliteDatasetSummary,
 } from './browserSqliteDatasetQueries.js';
+import { exportBrowserSqliteDatasetCsv } from './browserSqliteDatasetExport.js';
 import {
   getBrowserSqliteFeatureDetails,
 } from './browserSqlitePointDetails.js';
@@ -458,6 +460,12 @@ try {
     SELECT row_json FROM source_rows
     WHERE dataset_id = 'dataset-zone-edit' AND source_row_index = 0
   `)).lon, '3');
+  const exportedZoneRows = Papa.parse(
+    exportBrowserSqliteDatasetCsv(database, 'dataset-zone-edit').csvText,
+    { header: true, skipEmptyLines: true },
+  ).data;
+  assert.equal(exportedZoneRows[0].lat, '2');
+  assert.equal(exportedZoneRows[0].lon, '3');
 
   const committedZone = structuredClone(updatedZone);
   database.run(`

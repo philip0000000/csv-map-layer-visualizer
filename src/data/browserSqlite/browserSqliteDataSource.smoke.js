@@ -115,6 +115,15 @@ class FakeWorkerClient {
     });
   }
 
+  exportDatasetCsv(datasetId) {
+    this.calls.push(['exportDatasetCsv', datasetId]);
+    return this.result({
+      datasetId,
+      fileName: 'first.csv',
+      csvText: 'name\nFirst',
+    });
+  }
+
   updateDatasetMapping(datasetId, mapping) {
     this.calls.push(['updateDatasetMapping', datasetId, mapping]);
     if (this.failure) return Promise.reject(this.failure);
@@ -208,8 +217,10 @@ class FakeWorkerClient {
 }
 
 const client = new FakeWorkerClient();
+const downloads = [];
 const dataSource = createBrowserSqliteDataSource({
   client,
+  downloadCsv: (csvText, fileName) => downloads.push({ csvText, fileName }),
   baseUrl: '/',
   fetchImpl: async (url) => ({
     ok: url === '/examples/present-day/books.csv',
@@ -235,6 +246,7 @@ assert.equal(initialized.capabilities.lines, true);
 assert.equal(initialized.capabilities.regions, true);
 assert.equal(initialized.capabilities.groupedViewportResults, true);
 assert.equal(initialized.capabilities.zoneEditing, true);
+assert.equal(initialized.capabilities.datasetCsvExport, true);
 assert.deepEqual(dataSource.getCapabilities(), initialized.capabilities);
 
 const observedProgress = [];
@@ -294,6 +306,11 @@ assert.equal(disabled.ok, true);
 assert.equal(disabled.dataset.enabled, false);
 const invalidVisibility = await dataSource.setDatasetEnabled('', false);
 assert.equal(invalidVisibility.ok, false);
+const saved = await dataSource.saveDatasetAsCsv('dataset-1');
+assert.equal(saved.ok, true);
+assert.equal(saved.fileName, 'first.csv');
+assert.deepEqual(downloads, [{ csvText: 'name\nFirst', fileName: 'first.csv' }]);
+assert.deepEqual(client.calls.at(-1), ['exportDatasetCsv', 'dataset-1']);
 const mapped = await dataSource.updateDatasetMapping('dataset-2', {
   latField: 'lat',
   lonField: 'lon',

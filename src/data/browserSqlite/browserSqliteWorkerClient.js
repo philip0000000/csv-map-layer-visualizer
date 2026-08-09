@@ -241,6 +241,11 @@ export function createBrowserSqliteWorkerClient(options = {}) {
     return sendRequest(BROWSER_SQLITE_OPERATIONS.REMOVE_DATASET, { datasetId });
   }
 
+  /** Request one complete serialized dataset from the worker-owned database. */
+  function exportDatasetCsv(datasetId) {
+    return sendRequest(BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_CSV, { datasetId });
+  }
+
   function updateDatasetMapping(datasetId, mapping) {
     return sendRequest(BROWSER_SQLITE_OPERATIONS.UPDATE_DATASET_MAPPING, {
       datasetId,
@@ -323,6 +328,7 @@ export function createBrowserSqliteWorkerClient(options = {}) {
     getDatasetSummary,
     setDatasetEnabled,
     removeDataset,
+    exportDatasetCsv,
     updateDatasetMapping,
     getPreviewPage,
     queryMapView,

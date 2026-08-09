@@ -72,6 +72,13 @@ const desktopApi = {
   }),
   setDatasetEnabled: async () => ({ updated: true, private: 'ignored' }),
   removeDataset: async () => ({ removed: true, private: 'ignored' }),
+  saveDatasetAsCsv: async (datasetId) => ({
+    ok: true,
+    canceled: false,
+    datasetId,
+    fileName: 'places.csv',
+    private: 'ignored',
+  }),
   queryMapView: async () => ({
     points: [{
       id: 'point-1',
@@ -118,6 +125,7 @@ assert.equal(initialization.capabilities.browserFileImport, false);
 assert.equal(initialization.capabilities.datasetMapping, false);
 assert.equal(initialization.capabilities.previewPaging, false);
 assert.equal(initialization.capabilities.zoneEditing, true);
+assert.equal(initialization.capabilities.datasetCsvExport, true);
 
 const progressEvents = [];
 const unsubscribe = dataSource.subscribeImportProgress((progress) => {
@@ -162,6 +170,13 @@ assert.equal(
   true,
 );
 assert.equal((await dataSource.removeDataset(' dataset-1 ')).changed, true);
+assert.deepEqual(await dataSource.saveDatasetAsCsv(' dataset-1 '), {
+  ok: true,
+  canceled: false,
+  datasetId: 'dataset-1',
+  fileName: 'places.csv',
+  error: null,
+});
 
 const mapView = await dataSource.queryMapView({ renderBudget: 10 });
 assert.equal(mapView.points.length, 1);

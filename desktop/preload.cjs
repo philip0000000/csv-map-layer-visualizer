@@ -37,4 +37,6 @@ contextBridge.exposeInMainWorld("csvMapDesktop", {
   // Expose structured lookup requests without exposing SQLite or raw SQL.
   getFeatureDetails: (query) => ipcRenderer.invoke('desktop:getFeatureDetails', query),
   getGroupRows: (query) => ipcRenderer.invoke('desktop:getGroupRows', query),
+  getLogicalZone: (query) => ipcRenderer.invoke('desktop:getLogicalZone', query),
+  updateLogicalZone: (request) => ipcRenderer.invoke('desktop:updateLogicalZone', request),
 });

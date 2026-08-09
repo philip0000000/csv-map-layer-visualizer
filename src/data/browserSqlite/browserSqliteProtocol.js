@@ -16,6 +16,8 @@ export const BROWSER_SQLITE_OPERATIONS = Object.freeze({
   QUERY_MAP_VIEW: 'query-map-view',
   GET_FEATURE_DETAILS: 'get-feature-details',
   GET_GROUP_ROWS: 'get-group-rows',
+  GET_LOGICAL_ZONE: 'get-logical-zone',
+  UPDATE_LOGICAL_ZONE: 'update-logical-zone',
   CLOSE: 'close',
 });
 
@@ -240,6 +242,10 @@ function normalizeOperationPayload(operation, payload) {
       return normalizeFeatureDetailsPayload(payload);
     case BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS:
       return normalizeGroupRowsPayload(payload);
+    case BROWSER_SQLITE_OPERATIONS.GET_LOGICAL_ZONE:
+      return normalizeLogicalZoneIdentityPayload(payload);
+    case BROWSER_SQLITE_OPERATIONS.UPDATE_LOGICAL_ZONE:
+      return normalizeLogicalZoneUpdatePayload(payload);
     default:
       throwProtocolError(
         'unsupported-operation',
@@ -405,6 +411,52 @@ function normalizeGroupRowsPayload(payload) {
       100,
     ),
   };
+}
+
+function normalizeLogicalZoneIdentityPayload(payload) {
+  requirePayload(payload, ['datasetId', 'featureId']);
+  return {
+    datasetId: normalizeIdentifier(payload.datasetId, 'dataset ID', 'invalid-request'),
+    featureId: normalizeIdentifier(payload.featureId, 'feature ID', 'invalid-request'),
+  };
+}
+
+/** Bound complete-zone coordinates before they enter the worker transaction queue. */
+function normalizeLogicalZoneUpdatePayload(payload) {
+  requirePayload(payload, ['datasetId', 'featureId', 'parts']);
+  const identity = normalizeLogicalZoneIdentityPayload({
+    datasetId: payload.datasetId,
+    featureId: payload.featureId,
+  });
+  if (!Array.isArray(payload.parts) || payload.parts.length === 0 || payload.parts.length > 1000) {
+    throwProtocolError('invalid-request', 'A bounded logical-zone part list is required.');
+  }
+  let coordinateCount = 0;
+  const parts = payload.parts.map((part) => {
+    requirePlainRecord(part, 'invalid-request', 'A logical-zone part must be an object.');
+    requireOnlyKeys(part, ['part', 'coordinates']);
+    if (!Array.isArray(part.coordinates) || part.coordinates.length < 4) {
+      throwProtocolError('invalid-request', 'A region part requires a coordinate ring.');
+    }
+    coordinateCount += part.coordinates.length;
+    const coordinates = part.coordinates.map((coordinate) => {
+      if (!Array.isArray(coordinate) || coordinate.length !== 2) {
+        throwProtocolError('invalid-request', 'A zone coordinate must be a latitude-longitude pair.');
+      }
+      return [
+        normalizeFiniteNumber(coordinate[0], 'zone latitude'),
+        normalizeFiniteNumber(coordinate[1], 'zone longitude'),
+      ];
+    });
+    return {
+      part: normalizeIdentifier(part.part, 'part ID', 'invalid-request'),
+      coordinates,
+    };
+  });
+  if (coordinateCount > 100000) {
+    throwProtocolError('invalid-request', 'The logical zone contains too many coordinates.');
+  }
+  return { ...identity, parts };
 }
 
 function normalizeBoundsPayload(value) {

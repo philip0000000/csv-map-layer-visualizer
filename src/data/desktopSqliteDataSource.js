@@ -15,6 +15,7 @@ import {
   normalizeImportProgress,
   normalizeInitializationResult,
   normalizeMapViewResult,
+  normalizeLogicalZoneResult,
 } from './dataSourceNormalization.js';
 
 const DEFAULT_SQLITE_RENDER_BUDGET = 1000;
@@ -47,6 +48,9 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
     groupedViewportResults:
       typeof desktopApi?.queryMapView === 'function' &&
       typeof desktopApi?.getGroupRows === 'function',
+    zoneEditing:
+      typeof desktopApi?.getLogicalZone === 'function' &&
+      typeof desktopApi?.updateLogicalZone === 'function',
   });
 
   return {
@@ -274,6 +278,29 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
         return normalizeGroupRowsResult(result, { offset, limit });
       } catch {
         throw queryFailure(DATA_SOURCE_METHODS.getGroupRows);
+      }
+    },
+
+    async getLogicalZone(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getLogicalZone);
+      requireMethod(desktopApi?.getLogicalZone, DATA_SOURCE_METHODS.getLogicalZone);
+      try {
+        return normalizeLogicalZoneResult(await desktopApi.getLogicalZone({
+          datasetId: normalizeId(query.datasetId),
+          featureId: normalizeId(query.featureId),
+        }));
+      } catch {
+        throw queryFailure(DATA_SOURCE_METHODS.getLogicalZone, query.datasetId);
+      }
+    },
+
+    async updateLogicalZone(request = {}) {
+      assertActive(DATA_SOURCE_METHODS.updateLogicalZone);
+      requireMethod(desktopApi?.updateLogicalZone, DATA_SOURCE_METHODS.updateLogicalZone);
+      try {
+        return normalizeLogicalZoneResult(await desktopApi.updateLogicalZone(request));
+      } catch {
+        throw queryFailure(DATA_SOURCE_METHODS.updateLogicalZone, request.datasetId);
       }
     },
 

@@ -1,6 +1,7 @@
 "use strict";
 
 const Database = require("better-sqlite3");
+const { rebuildSqliteDatasetRegions } = require("./sqliteZoneService.cjs");
 
 /**
  * Open the SQLite database and make sure the prototype schema exists.
@@ -62,10 +63,46 @@ function initializeSchema(db) {
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_features_dataset_source_row
       ON features(dataset_id, source_row_index);
+
+    CREATE TABLE IF NOT EXISTS geometry_features (
+      dataset_id TEXT NOT NULL,
+      feature_id TEXT NOT NULL,
+      part TEXT NOT NULL,
+      source_row_index INTEGER NOT NULL,
+      part_order_index INTEGER NOT NULL,
+      min_lat REAL NOT NULL,
+      max_lat REAL NOT NULL,
+      min_lon REAL NOT NULL,
+      max_lon REAL NOT NULL,
+      timeline_start_year INTEGER,
+      timeline_end_year INTEGER,
+      coordinates_json TEXT NOT NULL,
+      style_json TEXT NOT NULL DEFAULT '{}',
+      PRIMARY KEY (dataset_id, feature_id, part),
+      FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_geometry_features_dataset_bounds
+      ON geometry_features(dataset_id, min_lat, max_lat, min_lon, max_lon);
   `);
 
   ensureDatasetEnabledColumn(db);
   ensureDatasetRecommendedTimelineColumns(db);
+  migratePersistentRegions(db);
+}
+
+/** Materialize regions once for databases imported before zone storage existed. */
+function migratePersistentRegions(db) {
+  const version = Number(db.pragma("user_version", { simple: true })) || 0;
+  if (version >= 1) return;
+  const migrate = db.transaction(() => {
+    const datasets = db.prepare("SELECT id FROM datasets ORDER BY id").all();
+    for (const dataset of datasets) {
+      rebuildSqliteDatasetRegions({ db, datasetId: String(dataset.id) });
+    }
+    db.pragma("user_version = 1");
+  });
+  migrate();
 }
 
 /**

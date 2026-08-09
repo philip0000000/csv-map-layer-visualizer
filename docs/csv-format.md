@@ -226,6 +226,27 @@ region,russia,kaliningrad,1,54.7,20.5,Russia,#ff0000,0.15
 region,russia,kaliningrad,2,54.8,21.2,Russia,#ff0000,0.15
 ```
 
+### Limited zone adjustment
+
+Zone editing is an optional advanced editing tool for small final alignment corrections
+after a CSV has been imported. Right-click the map and select **Enable zone
+editing**, then click any rendered region part to select its complete logical
+zone. All parts with the same `featureId` in that dataset are selected together;
+features from different CSV datasets are never combined.
+
+With the zone selected:
+
+* Primary-button drag moves it.
+* Hold `Z` when beginning a primary-button drag to rotate it around one shared centre.
+* Hold `X` when beginning a primary-button drag to uniformly scale it around that centre.
+
+Select **Disable zone editing** from the map context menu to end editing and clear
+the current selection. Completed adjustments remain in the runtime SQLite
+database. Browser and GitHub Pages adjustments are temporary and disappear when
+that in-memory database session ends; desktop adjustments remain in the persistent
+desktop database. The originally imported CSV file is never modified automatically.
+Exporting adjusted data is handled separately.
+
 Example (points with featureType):
 
 ```csv

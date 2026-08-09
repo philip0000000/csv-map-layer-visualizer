@@ -80,7 +80,7 @@ function runGroupedPagingSmoke(db) {
     DEFAULT_GROUP_ROWS_LIMIT,
     getSqliteGroupRows,
   } = require('./sqliteDetailQuery.cjs');
-  // The fixture includes other dates and cells to prove the saved group filter.
+  // The fixture includes other dates, cells, and a region vertex to prove the saved group filter.
   const groupRef = {
     groupId: 'grid:18:36',
     bounds: {
@@ -201,13 +201,14 @@ function createSmokeDatabase() {
     createFeature(DATASET_A, 1, 'match-one', 1, 1, 1995, 2001),
     createFeature(DATASET_A, 2, 'match-two', 1, 1, 2003, 2003),
     createFeature(DATASET_A, 3, 'other-cell', 6, 1, 2003, 2003),
+    createFeature(DATASET_A, 4, 'excluded-region-vertex', 1, 1, 2003, 2003, 'region'),
     createFeature(DATASET_B, 0, 'match-three', 1, 1, 2005, 2010),
     createFeature(DATASET_B, 1, 'excluded-after', 1, 1, 2011, 2020),
   ];
 
   try {
     initializeSchema(db);
-    insertDataset(db, DATASET_A, 4);
+    insertDataset(db, DATASET_A, 5);
     insertDataset(db, DATASET_B, 2);
 
     const insertFeature = db.prepare([
@@ -257,6 +258,7 @@ function createFeature(
   lon,
   timelineStartYear,
   timelineEndYear,
+  featureType = null,
 ) {
   return {
     id: datasetId === DATASET_A
@@ -271,6 +273,7 @@ function createFeature(
     compactJson: JSON.stringify({
       latField: 'latitude',
       lonField: 'longitude',
+      ...(featureType ? { featureType } : {}),
     }),
     rowJson: JSON.stringify({
       name,

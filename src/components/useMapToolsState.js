@@ -25,6 +25,7 @@ export function getInitialMapToolsState() {
     clusterMarkersEnabled: false,
     clusterRadius: DEFAULT_CLUSTER_RADIUS,
     clusterRadiusDraft: DEFAULT_CLUSTER_RADIUS,
+    zoneEditingEnabled: false,
   };
 }
 

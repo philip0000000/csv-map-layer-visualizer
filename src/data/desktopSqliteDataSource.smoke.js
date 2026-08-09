@@ -92,6 +92,16 @@ const desktopApi = {
     limit: 1,
     totalRows: 2,
   }),
+  getLogicalZone: async () => ({
+    datasetId: 'dataset-1',
+    featureId: 'zone',
+    parts: [{
+      part: 'main',
+      coordinates: [[1, 1], [1, 2], [2, 1], [1, 1]],
+      style: { color: '#3388ff' },
+    }],
+  }),
+  updateLogicalZone: async (request) => request,
 };
 
 const dataSource = createDesktopSqliteDataSource({ desktopApi });
@@ -107,6 +117,7 @@ assert.equal(initialization.capabilities.droppedFileImport, true);
 assert.equal(initialization.capabilities.browserFileImport, false);
 assert.equal(initialization.capabilities.datasetMapping, false);
 assert.equal(initialization.capabilities.previewPaging, false);
+assert.equal(initialization.capabilities.zoneEditing, true);
 
 const progressEvents = [];
 const unsubscribe = dataSource.subscribeImportProgress((progress) => {
@@ -177,6 +188,12 @@ assert.deepEqual(await dataSource.getGroupRows({
   totalRows: 2,
   hasMore: true,
 });
+const logicalZone = await dataSource.getLogicalZone({
+  datasetId: 'dataset-1',
+  featureId: 'zone',
+});
+assert.equal(logicalZone.parts.length, 1);
+assert.deepEqual(await dataSource.updateLogicalZone(logicalZone), logicalZone);
 
 unsubscribe();
 unsubscribe();

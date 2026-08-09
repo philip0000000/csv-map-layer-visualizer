@@ -17,7 +17,7 @@ import {
 } from "./distanceMeasurement";
 
 const CONTEXT_MENU_WIDTH = 240;
-const CONTEXT_MENU_HEIGHT = 116;
+const CONTEXT_MENU_HEIGHT = 154;
 const DISTANCE_ENDPOINT_ICON = L.divIcon({
   className: "mapDistanceEndpointIcon",
   iconAnchor: [7, 7],
@@ -59,8 +59,11 @@ function DistanceMeasurementInfo({ children, onClear }) {
   );
 }
 
-/** Add shared coordinate and distance actions to the active Leaflet map. */
-export default function MapCoordinateControls() {
+/** Add coordinate, distance, and optional zone-editing actions to the Leaflet map. */
+export default function MapCoordinateControls({
+  zoneEditingEnabled = false,
+  onZoneEditingToggle,
+}) {
   const map = useMap();
   const contextMenuRef = useRef(null);
   const latitudeInputRef = useRef(null);
@@ -174,6 +177,12 @@ export default function MapCoordinateControls() {
     const start = contextMenu?.latLng;
     setContextMenu(null);
     if (start) setMeasurement(startDistanceMeasurement(start));
+  }
+
+  /** Toggle the intentionally temporary edit mode from the existing map menu. */
+  function toggleZoneEditing() {
+    setContextMenu(null);
+    onZoneEditingToggle?.(!zoneEditingEnabled);
   }
 
   /** Update one geographic endpoint continuously during a marker drag. */
@@ -295,6 +304,11 @@ export default function MapCoordinateControls() {
           <button type="button" role="menuitem" onClick={startMeasurement}>
             Measure distance
           </button>
+          {typeof onZoneEditingToggle === "function" && (
+            <button type="button" role="menuitem" onClick={toggleZoneEditing}>
+              {zoneEditingEnabled ? "Disable zone editing" : "Enable zone editing"}
+            </button>
+          )}
         </div>
       )}
 

@@ -45,6 +45,7 @@ const CAPABILITY_KEYS = [
   'lines',
   'regions',
   'groupedViewportResults',
+  'zoneEditing',
 ];
 
 /**
@@ -447,6 +448,27 @@ export function normalizeGroupRowsResult(value, query = {}) {
     totalRows,
     hasMore: offset + rows.length < totalRows,
   };
+}
+
+/** Normalize one complete dataset-scoped region without accepting extra fields. */
+export function normalizeLogicalZoneResult(value) {
+  const source = isRecord(value) ? value : {};
+  const datasetId = normalizeNullableId(source.datasetId);
+  const featureId = normalizeNullableId(source.featureId);
+  const parts = Array.isArray(source.parts)
+    ? source.parts.map(normalizeLogicalZonePart).filter(Boolean)
+    : [];
+  return { datasetId, featureId, parts };
+}
+
+/** Retain only the declared identity, ring, and style fields for one zone part. */
+function normalizeLogicalZonePart(value) {
+  if (!isRecord(value)) return null;
+  const part = normalizeNullableString(value.part);
+  const coordinates = normalizeCoordinates(value.coordinates, 3, true);
+  return part && coordinates
+    ? { part, coordinates, style: normalizeStyle(value.style) }
+    : null;
 }
 
 function normalizePointFeature(value) {

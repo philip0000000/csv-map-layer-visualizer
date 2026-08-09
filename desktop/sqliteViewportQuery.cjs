@@ -7,7 +7,7 @@ const MIN_IMAGE_SIZE_METERS = 1;
 const MAX_IMAGE_SIZE_METERS = 100000;
 
 /**
- * Query compact point render data from the desktop SQLite store.
+ * Query compact point and region render data from the desktop SQLite store.
  * This intentionally avoids row_json; full details use a separate lookup path.
  */
 function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAULT_RENDER_BUDGET }) {
@@ -50,24 +50,30 @@ function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAUL
     ? points.reduce((sum, point) => sum + normalizeCount(point.count), 0)
     : returnedCount;
   const hiddenByRenderBudget = Math.max(0, totalMatchingCount - representedCount);
+  const regionResult = queryMatchingRegions(db, normalizedBounds, timeline, budget);
 
   return {
     points,
     lines: [],
-    regions: [],
+    regions: regionResult.regions,
     stats: {
       skippedPoints: 0,
       skippedLines: 0,
       skippedRegions: 0,
       skippedPointsByTimeline,
       skippedLinesByTimeline: 0,
-      skippedRegionsByTimeline: 0,
-      skippedByTimeline: skippedPointsByTimeline,
+      skippedRegionsByTimeline: regionResult.skippedByTimeline,
+      skippedByTimeline: skippedPointsByTimeline + regionResult.skippedByTimeline,
       limitedToRenderBudget: overBudget ? budget : null,
       totalMatchingCount,
       returnedCount,
       hiddenByRenderBudget,
       overBudget,
+      totalMatchingRegionCount: regionResult.totalMatchingCount,
+      returnedRegionCount: regionResult.regions.length,
+      hiddenGeometryCount: Math.max(0, regionResult.totalMatchingCount - regionResult.regions.length),
+      geometryLimit: regionResult.totalMatchingCount > regionResult.regions.length ? budget : null,
+      geometryOverLimit: regionResult.totalMatchingCount > regionResult.regions.length,
     },
     timelineIndex: {
       entries: [],
@@ -78,6 +84,58 @@ function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAUL
 function countMatchingFeatures(db, filter) {
   const row = db.prepare(`SELECT COUNT(*) AS count FROM features ${filter.sql}`).get(filter.params);
   return normalizeCount(row?.count);
+}
+
+/** Query compact persistent regions with the same visibility and timeline rules as points. */
+function queryMatchingRegions(db, bounds, timeline, renderBudget) {
+  const timelineFilter = buildTimelineFilter(timeline);
+  const boundsClauses = [
+    "dataset_id IN (SELECT id FROM datasets WHERE enabled = 1)",
+    "max_lat >= @south",
+    "min_lat <= @north",
+    bounds.crossesAntimeridian
+      ? "(max_lon >= @west OR min_lon <= @east)"
+      : "max_lon >= @west AND min_lon <= @east",
+  ];
+  const params = {
+    north: bounds.north,
+    south: bounds.south,
+    east: bounds.east,
+    west: bounds.west,
+    ...timelineFilter.params,
+  };
+  const clauses = [...boundsClauses, ...timelineFilter.clauses];
+  const count = (whereClauses, whereParams) => normalizeCount(db.prepare(`
+    SELECT COUNT(*) AS count FROM geometry_features
+    WHERE ${whereClauses.join(" AND ")}
+  `).get(whereParams)?.count);
+  const totalMatchingCount = count(clauses, params);
+  const boundsOnlyCount = timelineFilter.usesTimeline
+    ? count(boundsClauses, params)
+    : totalMatchingCount;
+  const rows = db.prepare(`
+    SELECT dataset_id, feature_id, part, source_row_index,
+           coordinates_json, style_json
+    FROM geometry_features
+    WHERE ${clauses.join(" AND ")}
+    ORDER BY dataset_id, part_order_index, feature_id, part
+    LIMIT @limit
+  `).all({ ...params, limit: renderBudget });
+  return {
+    totalMatchingCount,
+    skippedByTimeline: Math.max(0, boundsOnlyCount - totalMatchingCount),
+    regions: rows.map((row) => ({
+      id: `${row.dataset_id}:${row.feature_id}:${row.part}`,
+      featureId: String(row.feature_id),
+      part: String(row.part),
+      coordinates: parseCoordinates(row.coordinates_json),
+      style: parseCompactFields(row.style_json),
+      sourceRef: {
+        datasetId: String(row.dataset_id),
+        rowIndex: normalizeCount(row.source_row_index),
+      },
+    })),
+  };
 }
 
 function selectMatchingFeatures(db, filter, renderBudget) {
@@ -210,6 +268,8 @@ function buildWhereClause({ bounds, timeline }) {
 function buildBoundsFilter(bounds) {
   const clauses = [
     "dataset_id IN (SELECT id FROM datasets WHERE enabled = 1)",
+    // Region vertices now render from geometry_features; retain every other existing point-row behavior.
+    "COALESCE(LOWER(TRIM(json_extract(compact_json, '$.featureType'))), 'point') <> 'region'",
     "lat BETWEEN @south AND @north",
   ];
   const params = {
@@ -341,6 +401,15 @@ function parseCompactFields(value) {
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
+  }
+}
+
+function parseCoordinates(value) {
+  try {
+    const parsed = JSON.parse(String(value ?? ""));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
 }
 

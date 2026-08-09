@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld("csvMapDesktop", {
     "desktop:removeDataset",
     { datasetId },
   ),
+  saveDatasetAsCsv: (datasetId) => ipcRenderer.invoke(
+    "desktop:saveDatasetAsCsv",
+    { datasetId },
+  ),
   // Expose structured lookup requests without exposing SQLite or raw SQL.
   getFeatureDetails: (query) => ipcRenderer.invoke('desktop:getFeatureDetails', query),
   getGroupRows: (query) => ipcRenderer.invoke('desktop:getGroupRows', query),

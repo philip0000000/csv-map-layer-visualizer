@@ -11,6 +11,7 @@ export const BROWSER_SQLITE_OPERATIONS = Object.freeze({
   GET_DATASET_SUMMARY: 'get-dataset-summary',
   SET_DATASET_ENABLED: 'set-dataset-enabled',
   REMOVE_DATASET: 'remove-dataset',
+  EXPORT_DATASET_CSV: 'export-dataset-csv',
   UPDATE_DATASET_MAPPING: 'update-dataset-mapping',
   GET_PREVIEW_PAGE: 'get-preview-page',
   QUERY_MAP_VIEW: 'query-map-view',
@@ -231,6 +232,7 @@ function normalizeOperationPayload(operation, payload) {
     case BROWSER_SQLITE_OPERATIONS.SET_DATASET_ENABLED:
       return normalizeDatasetEnabledPayload(payload);
     case BROWSER_SQLITE_OPERATIONS.REMOVE_DATASET:
+    case BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_CSV:
       return normalizeDatasetIdPayload(payload);
     case BROWSER_SQLITE_OPERATIONS.UPDATE_DATASET_MAPPING:
       return normalizeDatasetMappingPayload(payload);

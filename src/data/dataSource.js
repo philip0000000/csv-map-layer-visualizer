@@ -21,6 +21,7 @@ export const DATA_SOURCE_METHODS = Object.freeze({
   selectDataset: "selectDataset",
   setDatasetEnabled: "setDatasetEnabled",
   removeDataset: "removeDataset",
+  saveDatasetAsCsv: "saveDatasetAsCsv",
   updateDatasetMapping: "updateDatasetMapping",
   getPreviewPage: "getPreviewPage",
   queryMapView: "queryMapView",
@@ -83,6 +84,9 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  *   Enables or disables one dataset.
  * @property {(datasetId: string) => DatasetMutationResult | Promise<DatasetMutationResult>} removeDataset
  *   Removes one dataset from the active backend without modifying its source file.
+ * @property {(datasetId: string) => DatasetCsvSaveResult | Promise<DatasetCsvSaveResult>} saveDatasetAsCsv
+ *   Saves one dataset's current committed SQLite rows without exposing runtime
+ *   filesystem or database access to presentation code.
  * @property {(datasetId: string, mapping: CoordinateMapping) => MappingMutationResult | Promise<MappingMutationResult>} updateDatasetMapping
  *   Changes coordinate fields and returns normalized detected timeline metadata.
  * @property {(query: PreviewPageQuery) => PreviewPageResult | Promise<PreviewPageResult>} getPreviewPage
@@ -145,6 +149,7 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {boolean} datasetSelection
  * @property {boolean} datasetVisibility
  * @property {boolean} datasetRemoval
+ * @property {boolean} datasetCsvExport
  * @property {boolean} datasetMapping
  * @property {boolean} previewPaging
  * @property {boolean} points
@@ -204,6 +209,18 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {number} skippedRowCount
  * @property {string[]} warnings
  * @property {DetectedFields|null} detectedFields
+ * @property {BackendFailure|null} error
+ */
+
+/**
+ * Expected cancellation is distinct from export failure so the UI can remain
+ * silent when a native Save As dialog is dismissed.
+ *
+ * @typedef {object} DatasetCsvSaveResult
+ * @property {boolean} ok
+ * @property {boolean} canceled
+ * @property {string|null} datasetId
+ * @property {string|null} fileName
  * @property {BackendFailure|null} error
  */
 

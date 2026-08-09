@@ -78,6 +78,10 @@ export default function App() {
     pendingDatasetIds: [],
     error: null,
   });
+  const [datasetExportState, setDatasetExportState] = useState({
+    pendingDatasetIds: [],
+    error: null,
+  });
   const [databaseMappingState, setDatabaseMappingState] = useState({
     pendingDatasetId: null,
     error: null,
@@ -141,6 +145,11 @@ export default function App() {
     setDesktopRemovalState((current) => ({ ...current, error: null }));
   }, []);
 
+  /** Hide the current CSV export error without changing any stored rows. */
+  const dismissDatasetExportError = useCallback(() => {
+    setDatasetExportState((current) => ({ ...current, error: null }));
+  }, []);
+
   /** Hide the current mapping error while preserving the last valid mapping. */
   const dismissDatasetMappingError = useCallback(() => {
     setDatabaseMappingState((current) => ({ ...current, error: null }));
@@ -168,11 +177,13 @@ export default function App() {
     datasetLoad: dismissDatasetLoadError,
     datasetMutation: dismissDatasetMutationError,
     datasetRemoval: dismissDatasetRemovalError,
+    datasetExport: dismissDatasetExportError,
     datasetQuery: dismissDatasetQueryError,
     mapping: dismissDatasetMappingError,
     preview: dismissDatasetPreviewError,
   }), [
     dismissDatasetLoadError,
+    dismissDatasetExportError,
     dismissDatasetMappingError,
     dismissDatasetMutationError,
     dismissDatasetPreviewError,
@@ -188,6 +199,8 @@ export default function App() {
     usesViewportQueries && desktopCapabilities.datasetVisibility;
   const desktopDatasetRemovalAvailable =
     usesViewportQueries && desktopCapabilities.datasetRemoval;
+  const datasetCsvExportAvailable =
+    usesViewportQueries && desktopCapabilities.datasetCsvExport;
 
   useEffect(() => {
     if (
@@ -253,6 +266,8 @@ export default function App() {
         mutationError: desktopVisibilityState.error,
         pendingRemovalDatasetIds: desktopRemovalState.pendingDatasetIds,
         removalError: desktopRemovalState.error,
+        pendingExportDatasetIds: datasetExportState.pendingDatasetIds,
+        exportError: datasetExportState.error,
         queryError: desktopMapViewState.error,
       }
     : {
@@ -263,6 +278,8 @@ export default function App() {
         mutationError: null,
         pendingRemovalDatasetIds: [],
         removalError: null,
+        pendingExportDatasetIds: [],
+        exportError: null,
         queryError: null,
       };
 
@@ -516,6 +533,39 @@ export default function App() {
     dataSource,
     databaseSelectedId,
   ]);
+
+  /** Save only the requested dataset while treating dialog cancellation as success. */
+  const saveDatasetAsCsv = useCallback(async (datasetId) => {
+    if (!datasetCsvExportAvailable) return;
+    setDatasetExportState((current) => ({
+      pendingDatasetIds: current.pendingDatasetIds.includes(datasetId)
+        ? current.pendingDatasetIds
+        : [...current.pendingDatasetIds, datasetId],
+      error: null,
+    }));
+
+    try {
+      const result = await dataSource.saveDatasetAsCsv(datasetId);
+      if (!result.ok && !result.canceled) {
+        throw new Error(result.error?.message ?? "Could not save the CSV dataset.");
+      }
+      setDatasetExportState((current) => ({
+        pendingDatasetIds: current.pendingDatasetIds.filter(
+          (pendingId) => pendingId !== datasetId,
+        ),
+        error: null,
+      }));
+    } catch (error) {
+      setDatasetExportState((current) => ({
+        pendingDatasetIds: current.pendingDatasetIds.filter(
+          (pendingId) => pendingId !== datasetId,
+        ),
+        error: error?.message
+          ? String(error.message)
+          : "Could not save the CSV dataset.",
+      }));
+    }
+  }, [dataSource, datasetCsvExportAvailable]);
 
   /** Rebuild one dataset mapping while retaining its last valid UI state on failure. */
   const updateDatabaseMapping = useCallback(async (datasetId, mapping) => {
@@ -877,6 +927,9 @@ export default function App() {
             viewportQueryStats={viewportQueryStats}
             onUnloadFile={desktopDatasetRemovalAvailable
               ? removeDesktopDataset
+              : undefined}
+            onSaveAsCsv={datasetCsvExportAvailable
+              ? saveDatasetAsCsv
               : undefined}
             removeActionLabel="Remove"
             onToggleEnabled={desktopDatasetVisibilityAvailable

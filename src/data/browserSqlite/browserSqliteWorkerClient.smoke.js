@@ -199,6 +199,16 @@ assert.deepEqual(worker.posted.at(-1).payload, {
   datasetId: 'dataset-1',
   enabled: false,
 });
+await completeSuccess(worker, client.exportDatasetCsv('dataset-1'), {
+  datasetId: 'dataset-1',
+  fileName: 'dataset.csv',
+  csvText: 'name\nPlace',
+});
+assert.equal(
+  worker.posted.at(-1).operation,
+  BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_CSV,
+);
+assert.deepEqual(worker.posted.at(-1).payload, { datasetId: 'dataset-1' });
 await completeSuccess(
   worker,
   client.updateDatasetMapping('dataset-1', {

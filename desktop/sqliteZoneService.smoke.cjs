@@ -2,6 +2,8 @@
 
 const assert = require("node:assert/strict");
 const Database = require("better-sqlite3");
+const Papa = require("papaparse");
+const { exportSqliteDatasetCsv } = require("./sqliteDatasetExport.cjs");
 const { initializeSchema } = require("./sqliteStore.cjs");
 const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
 const {
@@ -17,7 +19,10 @@ try {
     INSERT INTO datasets (
       id, file_name, row_count, imported_feature_count, skipped_row_count,
       columns_json, imported_at
-    ) VALUES ('dataset-a', 'zones.csv', 6, 6, 0, '[]', '2026-08-08T00:00:00.000Z')
+    ) VALUES (
+      'dataset-a', 'zones.csv', 6, 6, 0, '["name","lat","lon"]',
+      '2026-08-08T00:00:00.000Z'
+    )
   `).run();
   const insert = db.prepare(`
     INSERT INTO features (
@@ -72,6 +77,11 @@ try {
     db.prepare("SELECT lat, lon FROM features WHERE id = 'dataset-a:0'").get(),
     { lat: 2, lon: 3 },
   );
+  const exportedRows = Papa.parse(
+    exportSqliteDatasetCsv({ db, datasetId: "dataset-a" }).csvText,
+    { header: true, skipEmptyLines: true },
+  ).data;
+  assert.deepEqual(exportedRows[0], { name: "Zone", lat: "2", lon: "3" });
 
   db.exec(`
     CREATE TRIGGER fail_zone_update BEFORE UPDATE ON geometry_features

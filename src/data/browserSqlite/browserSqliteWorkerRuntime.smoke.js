@@ -120,6 +120,14 @@ try {
     lat: '59.3',
     lon: '18.1',
   }]);
+  const exported = await runtime.handleMessage(request(
+    'export-first',
+    BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_CSV,
+    { datasetId: firstDatasetId },
+  ));
+  assert.equal(exported.result.fileName, 'first.csv');
+  assert.equal(exported.result.csvText.includes('First,59.3,18.1'), true);
+  assert.equal(exported.result.csvText.includes('dataset_id'), false);
   const disabled = await runtime.handleMessage(request(
     'disable-first',
     BROWSER_SQLITE_OPERATIONS.SET_DATASET_ENABLED,

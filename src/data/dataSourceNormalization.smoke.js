@@ -7,6 +7,7 @@ import {
 import {
   normalizeBackendCapabilities,
   normalizeBackendFailure,
+  normalizeDatasetCsvSaveResult,
   normalizeDatasetMutationResult,
   normalizeDatasetSummary,
   normalizeFeatureDetailsResult,
@@ -52,6 +53,22 @@ assert.equal(capabilities.browserFileImport, false);
 assert.equal(capabilities.nativeFilePickerImport, true);
 assert.equal(capabilities.points, true);
 assert.equal(capabilities.lines, false);
+assert.equal(capabilities.datasetCsvExport, false);
+
+assert.deepEqual(normalizeDatasetCsvSaveResult({
+  ok: true,
+  datasetId: 'dataset-1',
+  fileName: 'places.csv',
+}, 'dataset-1'), {
+  ok: true,
+  canceled: false,
+  datasetId: 'dataset-1',
+  fileName: 'places.csv',
+  error: null,
+});
+assert.equal(normalizeDatasetCsvSaveResult({
+  canceled: true,
+}, 'dataset-1').error, null);
 
 const initialization = normalizeInitializationResult({
   ok: false,

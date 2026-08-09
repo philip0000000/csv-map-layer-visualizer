@@ -39,6 +39,7 @@ const CAPABILITY_KEYS = [
   'datasetSelection',
   'datasetVisibility',
   'datasetRemoval',
+  'datasetCsvExport',
   'datasetMapping',
   'previewPaging',
   'points',
@@ -310,6 +311,30 @@ export function normalizeDatasetMutationResult(value, context = {}) {
           message: context.message ?? 'The selected dataset is unavailable.',
           recoverable: true,
           datasetId,
+        }),
+  };
+}
+
+/** Normalize one runtime-specific CSV save without exposing paths or raw errors. */
+export function normalizeDatasetCsvSaveResult(value, datasetId) {
+  const source = isRecord(value) ? value : {};
+  const normalizedDatasetId = normalizeNullableId(datasetId ?? source.datasetId);
+  const canceled = source.canceled === true;
+  const ok = source.ok === true && !canceled;
+
+  return {
+    ok,
+    canceled,
+    datasetId: normalizedDatasetId,
+    fileName: ok ? normalizeDisplayName(source.fileName) : null,
+    error: ok || canceled
+      ? null
+      : normalizeBackendFailure(source.error, {
+          category: BACKEND_FAILURE_CATEGORIES.QUERY_FAILED,
+          operation: DATA_SOURCE_METHODS.saveDatasetAsCsv,
+          message: 'The selected CSV dataset could not be saved.',
+          recoverable: true,
+          datasetId: normalizedDatasetId,
         }),
   };
 }

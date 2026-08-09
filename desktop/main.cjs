@@ -11,6 +11,7 @@ const {
   setSqliteDatasetEnabled,
 } = require("./sqliteDatasetService.cjs");
 const { closeSqliteStore, openSqliteStore } = require("./sqliteStore.cjs");
+const { exportSqliteDatasetCsv } = require("./sqliteDatasetExport.cjs");
 const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
 const {
   getSqliteLogicalZone,
@@ -129,6 +130,47 @@ function registerDesktopBridgeHandlers() {
       closeSqliteStore(db);
     }
   });
+  ipcMain.handle("desktop:saveDatasetAsCsv", async (event, request = {}) => {
+    const requestedDatasetId = typeof request?.datasetId === "string"
+      ? request.datasetId.trim()
+      : null;
+    let exported;
+
+    try {
+      const db = openDesktopSqliteStore();
+      try {
+        // Serialize before opening the dialog so no partial output can precede a failure.
+        exported = exportSqliteDatasetCsv({ db, datasetId: requestedDatasetId });
+      } finally {
+        closeSqliteStore(db);
+      }
+
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      const saveResult = await dialog.showSaveDialog(owner, {
+        title: "Save CSV dataset",
+        defaultPath: exported.fileName,
+        filters: [
+          { name: "CSV files", extensions: ["csv"] },
+          { name: "All files", extensions: ["*"] },
+        ],
+      });
+
+      if (saveResult.canceled || !saveResult.filePath) {
+        return { ok: false, canceled: true, datasetId: exported.datasetId };
+      }
+
+      writeUtf8FileAtomically(saveResult.filePath, exported.csvText);
+      return {
+        ok: true,
+        canceled: false,
+        datasetId: exported.datasetId,
+        fileName: path.basename(saveResult.filePath),
+      };
+    } catch {
+      // Raw paths, SQLite details, and filesystem errors never cross the preload boundary.
+      return { ok: false, canceled: false, datasetId: requestedDatasetId };
+    }
+  });
   ipcMain.handle('desktop:getFeatureDetails', async (_event, query = {}) => {
     // Keep SQLite access in the main process and return full rows only on demand.
     const db = openDesktopSqliteStore();
@@ -186,6 +228,25 @@ function registerDesktopBridgeHandlers() {
 function sendCsvImportProgress(event, progress) {
   if (!event?.sender || event.sender.isDestroyed()) return;
   event.sender.send("desktop:csvImportProgress", progress);
+}
+
+/** Write beside the destination, then replace it only after UTF-8 output succeeds. */
+function writeUtf8FileAtomically(destination, contents) {
+  const temporaryPath = path.join(
+    path.dirname(destination),
+    `.${path.basename(destination)}.${process.pid}.${Date.now()}.tmp`,
+  );
+  try {
+    fs.writeFileSync(temporaryPath, contents, { encoding: "utf8", flag: "wx" });
+    fs.renameSync(temporaryPath, destination);
+  } catch (error) {
+    try {
+      if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
+    } catch {
+      // Cleanup failure must not replace the original export error.
+    }
+    throw error;
+  }
 }
 
 /**

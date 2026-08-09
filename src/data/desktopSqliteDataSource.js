@@ -6,6 +6,7 @@ import {
 import {
   normalizeBackendCapabilities,
   normalizeBackendFailure,
+  normalizeDatasetCsvSaveResult,
   normalizeDatasetMutationResult,
   normalizeDatasetSummary,
   normalizeFeatureDetailsResult,
@@ -40,6 +41,7 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
     datasetSelection: false,
     datasetVisibility: typeof desktopApi?.setDatasetEnabled === 'function',
     datasetRemoval: typeof desktopApi?.removeDataset === 'function',
+    datasetCsvExport: typeof desktopApi?.saveDatasetAsCsv === 'function',
     datasetMapping: false,
     previewPaging: false,
     points: typeof desktopApi?.queryMapView === 'function',
@@ -204,6 +206,23 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
         });
       } catch {
         return failedMutation(DATA_SOURCE_METHODS.removeDataset, normalizedId);
+      }
+    },
+
+    /** Ask the restricted desktop bridge to own both the dialog and file write. */
+    async saveDatasetAsCsv(datasetId) {
+      assertActive(DATA_SOURCE_METHODS.saveDatasetAsCsv);
+      const normalizedId = normalizeId(datasetId);
+      if (!capabilities.datasetCsvExport || !normalizedId) {
+        return normalizeDatasetCsvSaveResult(null, normalizedId);
+      }
+      try {
+        return normalizeDatasetCsvSaveResult(
+          await desktopApi.saveDatasetAsCsv(normalizedId),
+          normalizedId,
+        );
+      } catch {
+        return normalizeDatasetCsvSaveResult(null, normalizedId);
       }
     },
 

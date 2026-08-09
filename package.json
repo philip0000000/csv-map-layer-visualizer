@@ -16,6 +16,7 @@
     "smoke:browser-sqlite-database": "node src/data/browserSqlite/browserSqliteDatabase.smoke.js",
     "smoke:browser-sqlite-dataset-mutations": "node src/data/browserSqlite/browserSqliteDatasetMutations.smoke.js",
     "smoke:browser-sqlite-dataset-queries": "node src/data/browserSqlite/browserSqliteDatasetQueries.smoke.js",
+    "smoke:browser-sqlite-dataset-export": "node src/data/browserSqlite/browserSqliteDatasetExport.smoke.js",
     "smoke:browser-sqlite-dataset-removal": "node src/data/browserSqlite/browserSqliteDatasetRemoval.smoke.js",
     "smoke:browser-sqlite-import-transaction": "node src/data/browserSqlite/browserSqliteImportTransaction.smoke.js",
     "smoke:browser-sqlite-importer": "node src/data/browserSqlite/browserSqliteImporter.smoke.js",
@@ -38,6 +39,7 @@
     "smoke:desktop-data-source": "node src/data/desktopSqliteDataSource.smoke.js",
     "smoke:runtime-data-source": "node src/data/runtimeDataSource.smoke.js",
     "smoke:sqlite-datasets": "electron desktop/sqliteDatasetService.smoke.cjs",
+    "smoke:sqlite-export": "electron desktop/sqliteDatasetExport.smoke.cjs",
     "smoke:sqlite-store": "electron desktop/sqliteStore.smoke.cjs",
     "smoke:sqlite-viewport": "node desktop/sqliteViewportQuery.smoke.cjs",
     "smoke:sqlite-zone": "electron desktop/sqliteZoneService.smoke.cjs",
@@ -46,7 +48,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "smoke:browser-sqlite-geometries": "node src/data/browserSqlite/browserSqliteGeometryQueries.smoke.js",
-    "smoke:browser-sqlite": "npm run smoke:browser-sqlite-database && npm run smoke:browser-sqlite-dataset-mutations && npm run smoke:browser-sqlite-dataset-queries && npm run smoke:browser-sqlite-dataset-removal && npm run smoke:browser-sqlite-import-transaction && npm run smoke:browser-sqlite-importer && npm run smoke:browser-sqlite-import-batch && npm run smoke:browser-sqlite-protocol && npm run smoke:browser-sqlite-worker-runtime && npm run smoke:browser-sqlite-worker-client && npm run smoke:browser-sqlite-data-source && npm run smoke:browser-sqlite-ui && npm run smoke:browser-sqlite-points && npm run smoke:browser-sqlite-geometries"
+    "smoke:browser-sqlite": "npm run smoke:browser-sqlite-database && npm run smoke:browser-sqlite-dataset-mutations && npm run smoke:browser-sqlite-dataset-queries && npm run smoke:browser-sqlite-dataset-export && npm run smoke:browser-sqlite-dataset-removal && npm run smoke:browser-sqlite-import-transaction && npm run smoke:browser-sqlite-importer && npm run smoke:browser-sqlite-import-batch && npm run smoke:browser-sqlite-protocol && npm run smoke:browser-sqlite-worker-runtime && npm run smoke:browser-sqlite-worker-client && npm run smoke:browser-sqlite-data-source && npm run smoke:browser-sqlite-ui && npm run smoke:browser-sqlite-points && npm run smoke:browser-sqlite-geometries"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",

@@ -471,6 +471,11 @@ button.csvBtnPrimary.csvDesktopImportButton {
   outline: none;
 }
 
+.csvTimelineContextMenu button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Pointer-anchored actions for coordinates and temporary map measurements. */
 .mapCoordinateContextMenu {
   position: fixed;

@@ -15,6 +15,7 @@ export default function CsvFileControls({
   datasetListState,
   viewportQueryStats,
   onUnloadFile,
+  onSaveAsCsv,
   removeActionLabel = "Unload",
   onToggleEnabled,
   onUseRecommendedTimelineRange,
@@ -45,6 +46,7 @@ export default function CsvFileControls({
   const canSelect = typeof onSelect === "function";
   const canToggleEnabled = typeof onToggleEnabled === "function";
   const canRemove = typeof onUnloadFile === "function";
+  const canSaveAsCsv = typeof onSaveAsCsv === "function";
   const hasTerminalImportMessage = !isDesktopImporting && (
     desktopImportResults.length > 0 ||
     desktopImport?.status === "canceled" ||
@@ -59,7 +61,7 @@ export default function CsvFileControls({
     });
   }, [hiddenByRenderBudget]);
 
-  /** Close the custom recommendation menu on outside interaction or Escape. */
+  /** Close the dataset-row context menu on outside interaction or Escape. */
   useEffect(() => {
     if (!contextMenu) return undefined;
 
@@ -116,16 +118,17 @@ export default function CsvFileControls({
     setHoverMessage(null);
   }
 
-  /** Open a custom menu only when the imported CSV has a stored recommendation. */
+  /** Open the existing dataset menu with actions scoped to the right-clicked row. */
   function handleRowContextMenu(event, file) {
     const range = file.recommendedTimelineRange;
-    if (!range) return;
+    if (!range && !canSaveAsCsv) return;
 
     event.preventDefault();
     clearHoverMessage();
     setContextMenu({
+      datasetId: file.id,
       range,
-      ...getFloatingPosition(event.clientX, event.clientY, 360, 44),
+      ...getFloatingPosition(event.clientX, event.clientY, 360, range ? 80 : 44),
     });
   }
 
@@ -298,6 +301,16 @@ export default function CsvFileControls({
             {datasetListState.removalError}
           </DismissibleMessage>
         )}
+        {datasetListState?.exportError && (
+          <DismissibleMessage
+            className="csvDesktopImportStatus csvDesktopImportStatusError"
+            dismissLabel="Dismiss CSV save error"
+            onDismiss={messageDismissal?.datasetExport}
+            role="alert"
+          >
+            {datasetListState.exportError}
+          </DismissibleMessage>
+        )}
         {datasetListState?.queryError && (
           <DismissibleMessage
             className="csvDesktopImportStatus csvDesktopImportStatusError"
@@ -385,19 +398,37 @@ export default function CsvFileControls({
           className="csvTimelineContextMenu"
           style={{ left: contextMenu.left, top: contextMenu.top }}
           role="menu"
-          aria-label="CSV timeline actions"
+          aria-label="CSV dataset actions"
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              // Apply all four values together so the slider never sees a mixed range.
-              onUseRecommendedTimelineRange?.(contextMenu.range);
-              setContextMenu(null);
-            }}
-          >
-            Use recommended timeline range: {formatTimelineRange(contextMenu.range)}
-          </button>
+          {contextMenu.range && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                // Apply all four values together so the slider never sees a mixed range.
+                onUseRecommendedTimelineRange?.(contextMenu.range);
+                setContextMenu(null);
+              }}
+            >
+              Use recommended timeline range: {formatTimelineRange(contextMenu.range)}
+            </button>
+          )}
+          {canSaveAsCsv && (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={datasetListState?.pendingExportDatasetIds?.includes(
+                contextMenu.datasetId,
+              )}
+              onClick={() => {
+                // Capture the row identity before closing so selection never redirects export.
+                onSaveAsCsv(contextMenu.datasetId);
+                setContextMenu(null);
+              }}
+            >
+              Save as CSV…
+            </button>
+          )}
         </div>
       )}
     </>

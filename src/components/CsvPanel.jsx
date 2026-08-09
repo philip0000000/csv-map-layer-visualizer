@@ -17,6 +17,7 @@ import { getParsingWarningsMessageKey } from "./messageDismissalState";
  * - Select one CSV file for preview in browser mode
  * - Enable or disable CSV files for map display
  * - Unload browser files or remove desktop datasets
+ * - Save one loaded dataset's current SQLite state as CSV
  * - Preview basic metadata and a few rows in browser mode
  *
  * This component does NOT parse CSV files itself.
@@ -35,6 +36,7 @@ export default function CsvPanel({
   messageDismissal,
   onLoadMorePreview,
   onUnloadFile,     // Callback to unload a CSV by ID
+  onSaveAsCsv,      // Callback to save the current SQLite rows for one CSV
   removeActionLabel,
   onToggleEnabled,  // Callback to toggle file visibility
   onUpdateMapping,  // Callback when user changes latitude/longitude fields
@@ -193,6 +195,7 @@ export default function CsvPanel({
             datasetListState={datasetListState}
             viewportQueryStats={viewportQueryStats}
             onUnloadFile={onUnloadFile}
+            onSaveAsCsv={onSaveAsCsv}
             removeActionLabel={removeActionLabel}
             onToggleEnabled={onToggleEnabled}
             onUseRecommendedTimelineRange={useRecommendedTimelineRange}

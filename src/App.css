@@ -227,6 +227,25 @@
   margin-bottom: 6px;
 }
 
+.markerDetailInlineLink {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.markerDetailInlineLink:visited {
+  color: #93c5fd;
+}
+
+.markerDetailInlineImage {
+  display: inline-block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
 .groupedMarkerShowMore {
   margin-top: 2px;
 }

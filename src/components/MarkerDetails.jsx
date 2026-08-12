@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { DEFAULT_GROUP_ROWS_LIMIT } from '../data/dataSource';
+import { MarkerDetailInlineContent } from './MarkerDetailInlineRenderer';
 import { buildMarkerDetailFields } from './markerDetailFields';
+import {
+  createInlineImageBudget,
+  prepareMarkerDetailInlineContent,
+} from './markerDetailInlineContent';
 
 export function PointMarkerDetails({
   point,
@@ -9,7 +14,7 @@ export function PointMarkerDetails({
   lonField,
   getSourceRow,
   getFeatureDetails,
-  isActive,
+  isActive = true,
 }) {
   const requestVersionRef = useRef(0);
   const [detailState, setDetailState] = useState({
@@ -94,16 +99,14 @@ export function PointMarkerDetails({
         <div>Could not load details.</div>
       )}
 
-      {(!shouldLoadDetails || detailState.status === 'loaded') &&
-        buildMarkerDetailFields(
-          row,
-          resolvedLatField,
-          resolvedLonField,
-        ).map(([key, value]) => (
-          <div key={key} style={{ marginBottom: 4 }}>
-            <b>{key}:</b> {String(value ?? '')}
-          </div>
-        ))}
+      {isActive &&
+        (!shouldLoadDetails || detailState.status === 'loaded') && (
+          <MarkerDetailFieldRows
+            row={row}
+            latField={resolvedLatField}
+            lonField={resolvedLonField}
+          />
+        )}
     </div>
   );
 }
@@ -303,21 +306,11 @@ export function GroupedMarkerDetails({ point, getGroupRows, isActive }) {
                 }}
               >
                 {pagingState.rows.map((row, index) => (
-                  <details
+                  <GroupedMarkerRow
                     key={[point.id, index].join(':')}
-                    style={{ marginBottom: 6 }}
-                  >
-                    <summary>Row {index + 1}</summary>
-                    <div style={{ padding: '4px 0 2px 10px' }}>
-                      {buildMarkerDetailFields(row, null, null).map(
-                        ([key, value]) => (
-                          <div key={key} style={{ marginBottom: 3 }}>
-                            <b>{key}:</b> {String(value ?? '')}
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  </details>
+                    row={row}
+                    index={index}
+                  />
                 ))}
                 {/* Keep paging after loaded rows so it scrolls with the list. */}
                 {canShowMore && (
@@ -342,6 +335,60 @@ export function GroupedMarkerDetails({ point, getGroupRows, isActive }) {
       )}
     </div>
   );
+}
+
+/** Mount represented-row inline content only while its disclosure is expanded. */
+function GroupedMarkerRow({ row, index }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <details
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      style={{ marginBottom: 6 }}
+    >
+      <summary>Row {index + 1}</summary>
+      {isOpen && (
+        <div style={{ padding: '4px 0 2px 10px' }}>
+          <MarkerDetailFieldRows
+            row={row}
+            latField={null}
+            lonField={null}
+            fieldMarginBottom={3}
+          />
+        </div>
+      )}
+    </details>
+  );
+}
+
+/**
+ * Prepare every field with one shared budget so at most ten images mount per row.
+ * Preparing in the parent keeps the budget deterministic across React renders.
+ */
+export function MarkerDetailFieldRows({
+  row,
+  latField,
+  lonField,
+  fieldMarginBottom = 4,
+}) {
+  const imageBudget = createInlineImageBudget();
+  const fields = buildMarkerDetailFields(row, latField, lonField).map(
+    ([key, value]) => [
+      key,
+      prepareMarkerDetailInlineContent(value, {
+        imageBudget,
+        baseUrl: import.meta.env.BASE_URL,
+      }),
+    ],
+  );
+
+  return fields.map(([key, tokens]) => (
+    <div key={key} style={{ marginBottom: fieldMarginBottom }}>
+      <b>{key}:</b>{' '}
+      <MarkerDetailInlineContent tokens={tokens} />
+    </div>
+  ));
 }
 
 function getFeatureDetailRow(feature, getSourceRow) {

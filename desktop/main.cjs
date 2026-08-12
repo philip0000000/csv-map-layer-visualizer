@@ -12,6 +12,7 @@ const {
 } = require("./sqliteDatasetService.cjs");
 const { closeSqliteStore, openSqliteStore } = require("./sqliteStore.cjs");
 const { exportSqliteDatasetCsv } = require("./sqliteDatasetExport.cjs");
+const { createExternalLinkWindowHandler } = require("./externalLinks.cjs");
 const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
 const {
   getSqliteLogicalZone,
@@ -310,10 +311,9 @@ function createMainWindow() {
     },
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: "deny" };
-  });
+  mainWindow.webContents.setWindowOpenHandler(
+    createExternalLinkWindowHandler((url) => shell.openExternal(url)),
+  );
 
   const devServerUrl = getDevServerUrl();
 

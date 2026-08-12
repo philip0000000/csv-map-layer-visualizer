@@ -1,0 +1,11 @@
+featureType,lat,lon,name,details,moreDetails
+point,59.32930,18.06860,Basic Wikipedia link,"Read the [Wikipedia article](https://en.wikipedia.org/wiki/Wikipedia).",
+point,59.32945,18.06875,External Wikipedia image,"Text before ![Wikipedia logo](https://en.wikipedia.org/static/images/icons/wikipedia.png) text after.",
+point,59.32960,18.06890,Mixed inline sequence,"Start ![Wikipedia logo](https://en.wikipedia.org/static/images/icons/wikipedia.png) middle [Stockholm on Wikipedia](https://en.wikipedia.org/wiki/Stockholm) end.",
+point,59.32975,18.06905,Escaped markup,"Escaped \[Wikipedia](https://en.wikipedia.org/wiki/Wikipedia) and \![Wikipedia logo](https://en.wikipedia.org/static/images/icons/wikipedia.png) should stay literal.",
+point,59.32990,18.06920,Plain punctuation,"Plain [brackets] and (parentheses). [Not markup] (https://en.wikipedia.org/wiki/Wikipedia)",
+point,59.33005,18.06935,App-relative image,"Local image before ![Castle](point-images/castle.png) local image after.",
+point,59.33020,18.06950,Rejected image paths,"Filename ![Filename](castle.png) root ![Root](/point-images/castle.png) traversal ![Traversal](point-images/../castle.png) backslash ![Backslash](point-images\castle.png)",
+point,59.33035,18.06965,Broken Wikipedia image,"This should fall back to literal markup: ![Missing Wikipedia image](https://en.wikipedia.org/static/images/icons/definitely-missing-inline-marker-test.png)",
+point,59.33050,18.06980,Parenthesized Wikipedia URL,"Open [Function on Wikipedia](https://en.wikipedia.org/wiki/Function_(mathematics)).",
+point,59.33065,18.06995,Ten-image row limit,"![Castle 1](point-images/castle.png) ![Castle 2](point-images/castle.png) ![Castle 3](point-images/castle.png) ![Castle 4](point-images/castle.png) ![Castle 5](point-images/castle.png) ![Castle 6](point-images/castle.png)","![Castle 7](point-images/castle.png) ![Castle 8](point-images/castle.png) ![Castle 9](point-images/castle.png) ![Castle 10](point-images/castle.png) ![Castle 11 stays literal](point-images/castle.png)"

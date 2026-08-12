@@ -41,6 +41,64 @@ Notes:
 
 Point rows use `featureType=point` (or omit `featureType`).
 
+### Inline links and images in marker details
+
+Point marker-detail values support a limited inline syntax for links and images:
+
+```text
+[Wikipedia](https://en.wikipedia.org/wiki/Wikipedia)
+![Wikipedia logo](https://en.wikipedia.org/static/images/icons/wikipedia.png)
+```
+
+Text, links, and images are displayed in their original sequence. The closing `]`
+must be immediately followed by `(`. Ordinary brackets and parentheses remain
+plain text, and arbitrary HTML or other Markdown syntax is not rendered.
+
+Prefix otherwise valid markup with a backslash to display it literally. The
+backslash is omitted from the displayed value:
+
+```text
+\[Wikipedia](https://en.wikipedia.org/wiki/Wikipedia)
+\![Wikipedia logo](https://en.wikipedia.org/static/images/icons/wikipedia.png)
+```
+
+Links must use an absolute `http://` or `https://` URL. They open in a new browser
+tab in the browser application and in the default external browser in the desktop
+application. Unsupported, unsafe, and malformed link targets remain plain text.
+
+Images support absolute `http://` and `https://` URLs and explicit app-relative
+paths containing a directory component:
+
+```text
+![Castle](point-images/castle.jpg)
+```
+
+App-relative paths resolve from the application's configured base path, including
+the GitHub Pages project path and the desktop build directory. For inline marker-
+detail images, filename-only targets such as `castle.jpg`, root-relative paths,
+paths containing `..` traversal segments, and paths containing backslashes are not
+loaded and remain plain text.
+
+Additional image behavior:
+
+* At most 10 images are rendered per CSV row, counted across all fields in that row.
+* Additional image markup beyond that limit remains plain text.
+* The image description is used as accessible alternative text.
+* Images fit the marker-details panel while preserving their aspect ratio.
+* Images are not clickable.
+* A failed image load is replaced by its complete original markup.
+* Images load only when their marker-detail entry or represented source row is open.
+* External image requests do not send the application page as the HTTP referrer.
+
+Loading an external image contacts the third-party server hosting it and may reveal
+information such as the user's IP address to that server. The application does not
+proxy or prefetch external marker-detail images and makes no availability request
+beyond loading an image when its detail entry is opened.
+
+This inline syntax applies to normal point details, nearby-marker entries,
+representative markers, and individual grouped-marker rows. It is not enabled for
+line or region popups.
+
 ### Marker field
 
 Optional `marker` customizes the point marker.

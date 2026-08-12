@@ -15,6 +15,11 @@ const { exportSqliteDatasetCsv } = require("./sqliteDatasetExport.cjs");
 const { createExternalLinkWindowHandler } = require("./externalLinks.cjs");
 const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
 const {
+  getCustomTileLayerFilePath,
+  readCustomTileLayerFile,
+  writeCustomTileLayerFile,
+} = require("./customTileLayerStore.cjs");
+const {
   getSqliteLogicalZone,
   updateSqliteLogicalZone,
 } = require("./sqliteZoneService.cjs");
@@ -26,6 +31,7 @@ const {
 
 const LOCAL_DATA_DIR_NAME = ".local-data";
 const SQLITE_DB_FILE_NAME = "csv-map-layer-visualizer.sqlite";
+let customTileMutationQueue = Promise.resolve();
 
 function getDevServerUrl() {
   const devServerArg = process.argv.find((arg) => arg.startsWith("--dev-server="));
@@ -224,6 +230,86 @@ function registerDesktopBridgeHandlers() {
       closeSqliteStore(db);
     }
   });
+  ipcMain.handle("desktop:loadCustomTileLayers", async () => {
+    const loaded = await loadValidatedCustomTileLayers();
+    return loaded.ok
+      ? { ok: true, layers: loaded.layers }
+      : customTilePersistenceFailure();
+  });
+  ipcMain.handle("desktop:addCustomTileLayer", (_event, request = {}) => (
+    queueCustomTileMutation(async () => {
+    const loaded = await loadValidatedCustomTileLayers();
+    if (!loaded.ok) return customTilePersistenceFailure();
+
+    const { createCustomTileLayer } = await import("../src/components/customTileLayers.js");
+    const creationOrder = loaded.layers.reduce(
+      (maximum, layer) => Math.max(maximum, layer.creationOrder),
+      -1,
+    ) + 1;
+    const validated = createCustomTileLayer(request?.definition, {
+      existingNames: loaded.layers.map((layer) => layer.name),
+      creationOrder,
+    });
+    if (!validated.ok) return customTilePersistenceFailure();
+
+    const layers = [...loaded.layers, validated.value];
+    const saved = writeCustomTileLayerFile(getCustomTileLayersPath(), persistableLayers(layers));
+    return saved.ok
+      ? { ok: true, layer: validated.value }
+      : customTilePersistenceFailure();
+    })
+  ));
+  ipcMain.handle("desktop:removeCustomTileLayer", (_event, request = {}) => (
+    queueCustomTileMutation(async () => {
+    const loaded = await loadValidatedCustomTileLayers();
+    if (!loaded.ok) return customTilePersistenceFailure();
+
+    const layerId = typeof request?.layerId === "string" ? request.layerId : "";
+    const layers = loaded.layers.filter((layer) => layer.id !== layerId);
+    const saved = writeCustomTileLayerFile(getCustomTileLayersPath(), persistableLayers(layers));
+    return saved.ok ? { ok: true } : customTilePersistenceFailure();
+    })
+  ));
+}
+
+/** Serialize add and remove writes so invocation order remains the persisted creation order. */
+function queueCustomTileMutation(operation) {
+  const result = customTileMutationQueue.then(operation, operation);
+  customTileMutationQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+/** Load saved entries and apply the same normalization used by the add dialog. */
+async function loadValidatedCustomTileLayers() {
+  const loaded = readCustomTileLayerFile(getCustomTileLayersPath());
+  if (!loaded.ok) return { ok: false, layers: [] };
+
+  const { normalizePersistedCustomTileLayers } = await import(
+    "../src/components/customTileLayers.js"
+  );
+  return { ok: true, layers: normalizePersistedCustomTileLayers(loaded.entries) };
+}
+
+/** Resolve storage only in the main process after Electron has initialized. */
+function getCustomTileLayersPath() {
+  return getCustomTileLayerFilePath(app.getPath("userData"));
+}
+
+/** Strip runtime-only identifiers before writing the documented persisted fields. */
+function persistableLayers(layers) {
+  return layers.map(({ name, url, attribution, maxZoom, type, creationOrder }) => ({
+    name,
+    url,
+    attribution,
+    maxZoom,
+    type,
+    creationOrder,
+  }));
+}
+
+/** Return one sanitized failure shape without leaking paths, URLs, or credentials. */
+function customTilePersistenceFailure() {
+  return { ok: false, error: "CUSTOM_TILE_LAYER_PERSISTENCE_FAILED" };
 }
 
 function sendCsvImportProgress(event, progress) {

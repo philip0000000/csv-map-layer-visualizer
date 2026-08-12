@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 // Import core components from react-leaflet.
 // MapContainer is the main map wrapper.
-// TileLayer is used to load map tiles (images).
 // Marker and Popup are used to show points on the map.
-// LayersControl provides Leaflet's built-in "layers" button (base maps + overlays).
 import {
   MapContainer,
-  LayersControl,
-  TileLayer,
-  LayerGroup,
   Marker,
   ImageOverlay,
   CircleMarker,
@@ -28,6 +23,7 @@ import "leaflet-polylinedecorator";
 import { getClusterMarkerIcon, getMarkerIcon } from "./markerIcons";
 import { buildMarkerDetailFields } from "./markerDetailFields";
 import MapCoordinateControls from "./MapCoordinateControls";
+import MapTileLayers from "./MapTileLayers";
 import {
   findMarkersNearClickedMarker,
   MARKER_PROXIMITY_RADIUS_PIXELS,
@@ -596,43 +592,6 @@ function ExactPointMarkers({
     );
   });
 }
-/**
- * Map tile providers.
- * We expose:
- * - Base layers (radio buttons): only one can be active at a time.
- * - Overlays (checkboxes): can be layered on top of any base layer.
- *
- * Notes:
- * - OSM is your current default.
- * - Esri World Imagery is a common "no key" satellite option.
- * - The "Labels + boundaries" overlay provides country borders + city/place names.
- */
-const TILESETS = {
-  osm: {
-    name: "Normal (OSM)",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: "&copy; OpenStreetMap contributors",
-    maxZoom: 19,
-  },
-
-  satellite: {
-    name: "Satellite (Esri)",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution:
-      "Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
-    maxZoom: 20,
-  },
-
-  labelsBoundaries: {
-    name: "Labels + boundaries",
-    url: "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-    attribution: "Tiles &copy; Esri",
-    maxZoom: 20,
-  },
-};
-
-const BLANK_BASE_LAYER_NAME = "Blank background";
-
 export default function GeoMap({
   points = [],
   regions = [],
@@ -655,7 +614,6 @@ export default function GeoMap({
   enabledDatasetIds = [],
   onZoneEditingError,
 }) {
-  const { BaseLayer, Overlay } = LayersControl;
   const markerClusterGroupRef = useRef(null);
   const markerPoints = points.filter((p) => !p.image);
   // Data-source groups are already summarized, so keep them out of client clustering.
@@ -712,49 +670,8 @@ export default function GeoMap({
       {/* Zoom controls moved away from the CSV overlay */}
       <ZoomControl position="bottomright" />
 
-      {/*
-        Leaflet built-in "layers" control:
-        - Base layers (radio buttons) for Blank, Normal, or Satellite.
-        - Overlay (checkbox) for labels/boundaries on top of either base layer.
-      */}
-      <LayersControl position="topright" collapsed={true}>
-        {/* Base layer: blank white canvas with no tiles */}
-        <BaseLayer name={BLANK_BASE_LAYER_NAME}>
-          <LayerGroup />
-        </BaseLayer>
-
-        {/* Base layer: Normal map (default checked) */}
-        <BaseLayer checked name={TILESETS.osm.name}>
-          <TileLayer
-            // Required attribution for OpenStreetMap data.
-            attribution={TILESETS.osm.attribution}
-            // Standard OpenStreetMap tile server URL.
-            url={TILESETS.osm.url}
-            maxZoom={TILESETS.osm.maxZoom}
-          />
-        </BaseLayer>
-
-        {/* Base layer: Satellite imagery */}
-        <BaseLayer name={TILESETS.satellite.name}>
-          <TileLayer
-            attribution={TILESETS.satellite.attribution}
-            url={TILESETS.satellite.url}
-            maxZoom={TILESETS.satellite.maxZoom}
-          />
-        </BaseLayer>
-
-        {/* Overlay: country borders + city/place labels (works nicely on satellite) */}
-        <Overlay name={TILESETS.labelsBoundaries.name} checked={false}>
-          <TileLayer
-            attribution={TILESETS.labelsBoundaries.attribution}
-            url={TILESETS.labelsBoundaries.url}
-            maxZoom={TILESETS.labelsBoundaries.maxZoom}
-            // Keep overlay crisp and readable.
-            // If you ever want it softer, drop opacity to ~0.85.
-            opacity={1}
-          />
-        </Overlay>
-      </LayersControl>
+      {/* Built-in and user-configured raster layers share the Leaflet layer control. */}
+      <MapTileLayers />
 
       {/* A map-native ring highlights selection without modifying marker icons. */}
       {selectedMarker && (

@@ -43,4 +43,14 @@ contextBridge.exposeInMainWorld("csvMapDesktop", {
   getGroupRows: (query) => ipcRenderer.invoke('desktop:getGroupRows', query),
   getLogicalZone: (query) => ipcRenderer.invoke('desktop:getLogicalZone', query),
   updateLogicalZone: (request) => ipcRenderer.invoke('desktop:updateLogicalZone', request),
+  // Custom tile settings use fixed operations; no path or channel is renderer-controlled.
+  loadCustomTileLayers: () => ipcRenderer.invoke("desktop:loadCustomTileLayers"),
+  addCustomTileLayer: (definition) => ipcRenderer.invoke(
+    "desktop:addCustomTileLayer",
+    { definition },
+  ),
+  removeCustomTileLayer: (layerId) => ipcRenderer.invoke(
+    "desktop:removeCustomTileLayer",
+    { layerId },
+  ),
 });

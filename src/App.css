@@ -672,6 +672,260 @@ button.csvBtnPrimary.csvDesktopImportButton {
   outline: none;
 }
 
+/* Separate the configuration action from the selectable layers below it. */
+.mapTileLayerAddControl {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #d1d5db;
+  box-shadow: none;
+}
+
+.mapTileLayerAddControl button {
+  display: block;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #1f2937;
+  cursor: pointer;
+  font: 600 12px/1.2 system-ui, sans-serif;
+  text-align: left;
+}
+
+.mapTileLayerAddControl button:hover,
+.mapTileLayerAddControl button:focus-visible {
+  background: #f1f5f9;
+  outline: 2px solid #0284c7;
+  outline-offset: -2px;
+}
+
+.mapTileLayerAddControl button:disabled {
+  color: #64748b;
+  cursor: wait;
+}
+
+/* Native modal behavior supplies keyboard containment while matching the application theme. */
+.customTileLayerDialog {
+  width: min(560px, calc(100% - 32px));
+  max-height: calc(100vh - 40px);
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
+}
+
+.customTileLayerDialog::backdrop {
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.customTileLayerDialog h2,
+.customTileLayerDialog h3 {
+  margin: 0 0 14px;
+}
+
+.customTileLayerDialog h2 {
+  font-size: 18px;
+}
+
+.customTileLayerDialog h3 {
+  font-size: 14px;
+}
+
+.customTileLayerDialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.customTileLayerDialog form > label,
+.customTileLayerDialog legend {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.customTileLayerDialog input[type="text"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.55);
+  color: #e2e8f0;
+  font: inherit;
+}
+
+.customTileLayerDialog input:focus-visible,
+.customTileLayerDialog button:focus-visible {
+  border-color: #38bdf8;
+  outline: 2px solid rgba(56, 189, 248, 0.45);
+}
+
+.customTileLayerDialog input[aria-invalid="true"] {
+  border-color: #f87171;
+}
+
+.customTileLayerDialog fieldset {
+  display: flex;
+  gap: 18px;
+  margin: 5px 0 0;
+  padding: 9px 11px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+}
+
+.customTileLayerDialog fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.customTileLayerFieldError {
+  color: #fecaca;
+  font-size: 12px;
+}
+
+.customTileLayerFieldHelp,
+.customTileLayerPrivacyNotice {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.customTileLayerPrivacyNotice {
+  margin-top: 7px;
+  padding: 9px;
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.8);
+}
+
+.customTileLayerDialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.customTileLayerDialogActions button,
+.customTileLayerExisting button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.customTileLayerDialogActions .customTileLayerAddButton {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.22);
+  font-weight: 700;
+}
+
+.customTileLayerDialogActions button:hover,
+.customTileLayerExisting button:hover {
+  background: rgba(56, 189, 248, 0.3);
+}
+
+.customTileLayerExisting {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.customTileLayerExisting ul {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.customTileLayerExisting li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.customTileLayerExisting span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Tile and persistence failures stay beside the map rather than inside Map tools. */
+.mapTileLayerMessages {
+  position: absolute;
+  z-index: 1000;
+  top: 12px;
+  left: 50%;
+  display: flex;
+  width: min(560px, calc(100% - 180px));
+  flex-direction: column;
+  gap: 8px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.mapTileLayerMessage {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 9px 9px 12px;
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  border-radius: 8px;
+  background: rgba(69, 26, 3, 0.96);
+  color: #fef3c7;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.mapTileLayerMessage span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.mapTileLayerMessage button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  place-items: center;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.mapTileLayerMessage button:hover,
+.mapTileLayerMessage button:focus-visible {
+  background: rgba(251, 191, 36, 0.2);
+  outline: 2px solid rgba(254, 243, 199, 0.7);
+}
+
+@media (max-width: 720px) {
+  .mapTileLayerMessages {
+    top: 56px;
+    width: calc(100% - 24px);
+  }
+}
+
 .csvFileNameButton {
   background: none;
   border: none;

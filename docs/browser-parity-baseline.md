@@ -71,11 +71,16 @@ future backend may implement it differently.
 ### Timeline
 
 - The Map tools menu enables or disables the timeline and marker clustering.
+- The timeline starts disabled, so dated, undated, and out-of-range features are
+  initially visible. Browser and desktop modes share this default.
 - A detected `year` field takes precedence over a detected date field. Explicit
   year/date range fields are also supported.
-- Enabling the timeline derives the available year domain from the selected
-  dataset. The visible year range filters points, lines, and regions and reports
-  the number skipped.
+- Enabling the timeline uses the configured `-2100` to `2026` default domain and
+  selected range. The visible year range filters points, lines, and regions,
+  excludes undated features, and reports the number skipped.
+- Importing, selecting, showing, hiding, or removing a dataset does not change
+  the configured range. Each dataset can provide a recommended range, which is
+  applied only through its explicit context-menu action.
 - The year domain can be entered manually. Timeline playback advances the
   selected range using the configured year step and interval.
 - Timeline state is kept in session storage.

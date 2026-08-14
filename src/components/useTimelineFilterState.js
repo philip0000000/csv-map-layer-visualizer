@@ -4,14 +4,14 @@ import { useSessionStorageState } from "./useSessionStorageState";
 const STORAGE_KEY = "csv-map-layer-visualizer.timeline.v1";
 
 const DEFAULT_STATE = {
-  timelineEnabled: true,
+  timelineEnabled: false,
 
   // Retained for saved-state compatibility; ranges now change only explicitly.
   yearDomainMode: "manual",
   yearMinDraft: "-2100",
   yearMaxDraft: "2026",
 
-  // Fixed initial domain; only explicit controls may replace it.
+  // Keep the configured range ready without filtering the initial map view.
   yearMin: -2100,
   yearMax: 2026,
 

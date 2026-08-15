@@ -7,6 +7,9 @@ The files are grouped into different folders based on their purpose:
 - `debug/`  
   Test files used to check edge cases, errors, and performance.
 
+- `historical-country-borders/`  
+  Sharded historical country-border datasets, including source metadata, attribution, and licensing information.
+
 - `medieval/`  
   Historical datasets for timeline and map examples.
 
@@ -25,6 +28,7 @@ Use the full relative path from the `examples/` folder:
 ```
 ?example=present-day/books.csv
 ?example=debug/points_basic.csv
+?example=historical-country-borders/historical-country-borders-asia-001.csv&example=historical-country-borders/historical-country-borders-asia-002.csv
 ```
 This always works and does not require any extra configuration.
 

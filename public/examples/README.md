@@ -28,7 +28,7 @@ Use the full relative path from the `examples/` folder:
 ```
 ?example=present-day/books.csv
 ?example=debug/points_basic.csv
-?example=historical-country-borders/historical-country-borders-asia-001.csv&example=historical-country-borders/historical-country-borders-asia-002.csv
+?example=historical-country-borders/historical-country-borders-africa-001.csv&example=historical-country-borders/historical-country-borders-americas-001.csv&example=historical-country-borders/historical-country-borders-asia-001.csv&example=historical-country-borders/historical-country-borders-asia-002.csv&example=historical-country-borders/historical-country-borders-europe-001.csv&example=historical-country-borders/historical-country-borders-oceania-001.csv
 ```
 This always works and does not require any extra configuration.
 

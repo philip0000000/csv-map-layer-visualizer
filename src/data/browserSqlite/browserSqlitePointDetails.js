@@ -108,20 +108,34 @@ export function getBrowserSqliteGroupRows(database, query = {}) {
   };
 }
 
+/** Reconstruct the captured dataset, viewport, grid-cell, and timeline filter. */
 function buildGroupFilter(groupRef) {
   const datasetFilter = createDatasetFilter(groupRef.datasetIds);
+  const crossesAntimeridian = groupRef.bounds.west > groupRef.bounds.east;
+  const latSpan = Math.max(
+    groupRef.bounds.north - groupRef.bounds.south,
+    0.000001,
+  );
+  const lonSpan = Math.max(
+    crossesAntimeridian
+      ? 360 - groupRef.bounds.west + groupRef.bounds.east
+      : groupRef.bounds.east - groupRef.bounds.west,
+    0.000001,
+  );
   const clauses = [
     datasetFilter.sql,
     'point_features.lat BETWEEN $south AND $north',
-    groupRef.bounds.west > groupRef.bounds.east
+    crossesAntimeridian
       ? '(point_features.lon >= $west OR point_features.lon <= $east)'
       : 'point_features.lon BETWEEN $west AND $east',
-    `CAST(
-      (point_features.lat + 90.0) / $cellHeight AS INTEGER
-    ) = $cellLat`,
-    `CAST(
-      (point_features.lon + 180.0) / $cellWidth AS INTEGER
-    ) = $cellLon`,
+    `MIN($lastCellLat, MAX(0, CAST(
+      (point_features.lat - $south) / $cellHeight AS INTEGER
+    ))) = $cellLat`,
+    `MIN($lastCellLon, MAX(0, CAST((CASE
+      WHEN $crossesAntimeridian = 1 AND point_features.lon < $west
+        THEN point_features.lon + 360.0 - $west
+      ELSE point_features.lon - $west
+    END) / $cellWidth AS INTEGER))) = $cellLon`,
   ];
   const params = {
     ...datasetFilter.params,
@@ -133,6 +147,9 @@ function buildGroupFilter(groupRef) {
     $cellWidth: groupRef.grid.cellWidth,
     $cellLat: groupRef.grid.cellLat,
     $cellLon: groupRef.grid.cellLon,
+    $lastCellLat: getLastCellIndex(latSpan, groupRef.grid.cellHeight),
+    $lastCellLon: getLastCellIndex(lonSpan, groupRef.grid.cellWidth),
+    $crossesAntimeridian: crossesAntimeridian ? 1 : 0,
   };
 
   if (groupRef.timeline) {
@@ -152,6 +169,12 @@ function buildGroupFilter(groupRef) {
   };
 }
 
+/** Recover the clamped grid edge from the dimensions stored in groupRef. */
+function getLastCellIndex(span, cellSize) {
+  return Math.max(0, Math.round(span / cellSize) - 1);
+}
+
+/** Validate the complete immutable query snapshot required for grouped paging. */
 function normalizeGroupRef(value) {
   if (!isRecord(value) || value.sortOrder !== GROUP_ROWS_SORT_ORDER) {
     return null;

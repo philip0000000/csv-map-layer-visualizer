@@ -34,13 +34,15 @@ function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAUL
   const overBudget = totalMatchingCount > budget;
   // Save the same grid used for rendering so detail paging can reproduce each group.
   const groupGrid = overBudget ? getGridSpec(normalizedBounds, budget) : null;
+  const groupedDatasetIds = overBudget ? selectEnabledDatasetIds(db) : null;
   // Under budget stays exact; over budget switches to compact render summaries.
   const rows = overBudget
-    ? selectGroupedFeatures(db, filter, groupGrid, budget)
+    ? selectGroupedFeatures(db, filter, groupGrid)
     : selectMatchingFeatures(db, filter, budget);
   const points = overBudget
     ? rows.map((row) => rowToGroupedPointFeature(row, {
       bounds: normalizedBounds,
+      datasetIds: groupedDatasetIds,
       timeline: filter.timeline,
       grid: groupGrid,
     }))
@@ -164,7 +166,7 @@ function selectMatchingFeatures(db, filter, renderBudget) {
  * Return one compact render item per occupied grid cell for dense viewport results.
  * Reuses the already-built bounds/timeline filter so grouping happens after filtering.
  */
-function selectGroupedFeatures(db, filter, grid, renderBudget) {
+function selectGroupedFeatures(db, filter, grid) {
   return db.prepare(`
     WITH matching AS (
       SELECT
@@ -174,9 +176,22 @@ function selectGroupedFeatures(db, filter, grid, renderBudget) {
         lat,
         lon,
         compact_json,
-        -- b1-b2: Shift coordinates into positive space so cell ids stay stable and sortable.
-        CAST((lat + 90.0) / @cellHeight AS INTEGER) AS cell_lat,
-        CAST((lon + 180.0) / @cellWidth AS INTEGER) AS cell_lon
+        CASE
+          WHEN @crossesAntimeridian = 1 AND lon < @west
+            THEN lon + 360.0
+          ELSE lon
+        END AS grouping_lon,
+        -- Viewport-relative, clamped ids guarantee at most rows * columns cells.
+        MIN(@lastCellLat, MAX(0,
+          CAST((lat - @south) / @cellHeight AS INTEGER)
+        )) AS cell_lat,
+        MIN(@lastCellLon, MAX(0, CAST((
+          CASE
+            WHEN @crossesAntimeridian = 1 AND lon < @west
+              THEN lon + 360.0 - @west
+            ELSE lon - @west
+          END
+        ) / @cellWidth AS INTEGER))) AS cell_lon
       FROM features
       ${filter.sql}
     ),
@@ -190,11 +205,11 @@ function selectGroupedFeatures(db, filter, grid, renderBudget) {
         cell_lon,
         COUNT(*) OVER (PARTITION BY cell_lat, cell_lon) AS group_count,
         AVG(lat) OVER (PARTITION BY cell_lat, cell_lon) AS group_lat,
-        AVG(lon) OVER (PARTITION BY cell_lat, cell_lon) AS group_lon,
-        -- b1-b2: Pick a deterministic representative for marker styling, never random sampling.
+        AVG(grouping_lon) OVER (PARTITION BY cell_lat, cell_lon) AS group_lon,
+        -- Southern markers render higher in Leaflet's z-order; later source rows break ties.
         ROW_NUMBER() OVER (
           PARTITION BY cell_lat, cell_lon
-          ORDER BY dataset_id, source_row_index
+          ORDER BY lat ASC, dataset_id DESC, source_row_index DESC
         ) AS group_rank
       FROM matching
     )
@@ -211,18 +226,29 @@ function selectGroupedFeatures(db, filter, grid, renderBudget) {
     FROM ranked
     WHERE group_rank = 1
     ORDER BY cell_lat, cell_lon
-    LIMIT @limit
   `).all({
     ...filter.params,
     cellHeight: grid.cellHeight,
     cellWidth: grid.cellWidth,
-    limit: renderBudget,
+    lastCellLat: grid.rows - 1,
+    lastCellLon: grid.columns - 1,
+    crossesAntimeridian: filter.params.west > filter.params.east ? 1 : 0,
   });
 }
 
+/** Capture the enabled dataset identities used by a grouped viewport query. */
+function selectEnabledDatasetIds(db) {
+  return db.prepare(`
+    SELECT id
+    FROM datasets
+    WHERE enabled = 1
+    ORDER BY id
+  `).all().map((row) => String(row.id));
+}
+
 /**
- * Choose a simple viewport-sized grid that aims for no more cells than the render budget.
- * The current bounds already reflect zoom, so zoom affects grouping through viewport span.
+ * Choose a viewport-relative grid whose maximum possible cell count fits the budget.
+ * Floor the row count so grouped results never need a truncating SQL LIMIT.
  */
 function getGridSpec(bounds, renderBudget) {
   const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
@@ -234,10 +260,15 @@ function getGridSpec(bounds, renderBudget) {
   );
   const targetCells = Math.max(1, renderBudget);
   const ratio = Math.max(lonSpan / latSpan, 0.000001);
-  const columns = Math.max(1, Math.ceil(Math.sqrt(targetCells * ratio)));
-  const rows = Math.max(1, Math.ceil(targetCells / columns));
+  const columns = Math.max(
+    1,
+    Math.min(targetCells, Math.ceil(Math.sqrt(targetCells * ratio))),
+  );
+  const rows = Math.max(1, Math.floor(targetCells / columns));
 
   return {
+    rows,
+    columns,
     cellHeight: Math.max(latSpan / rows, 0.000001),
     cellWidth: Math.max(lonSpan / columns, 0.000001),
   };
@@ -353,7 +384,7 @@ function rowToPointFeature(row) {
  * Convert one grouped SQL row into compact map render data only.
  * Full rows stay out of render results; groupRef supports separate paged lookup.
  */
-function rowToGroupedPointFeature(row, { bounds, timeline, grid }) {
+function rowToGroupedPointFeature(row, { bounds, datasetIds, timeline, grid }) {
   const compactFields = parseCompactFields(row.compact_json);
   const count = Math.max(1, normalizeCount(row.group_count));
   const groupId = `grid:${row.cell_lat}:${row.cell_lon}`;
@@ -362,7 +393,7 @@ function rowToGroupedPointFeature(row, { bounds, timeline, grid }) {
     id: groupId,
     renderType: count > 1 ? "grouped" : "representative",
     lat: Number(row.group_lat),
-    lon: Number(row.group_lon),
+    lon: normalizeLongitude(row.group_lon) ?? Number(row.group_lon),
     count,
     groupId,
     // Capture the originating query so later paging cannot drift with current UI state.
@@ -374,6 +405,7 @@ function rowToGroupedPointFeature(row, { bounds, timeline, grid }) {
         east: bounds.east,
         west: bounds.west,
       },
+      datasetIds: [...datasetIds],
       timeline,
       grid: {
         cellLat: normalizeCount(row.cell_lat),
@@ -413,17 +445,30 @@ function parseCoordinates(value) {
   }
 }
 
+/** Normalize Leaflet bounds without collapsing a viewport spanning a full world. */
 function normalizeBounds(bounds) {
   if (!bounds || typeof bounds !== "object") return null;
 
   const north = normalizeLatitude(bounds.north);
   const south = normalizeLatitude(bounds.south);
-  const east = normalizeLongitude(bounds.east);
-  const west = normalizeLongitude(bounds.west);
+  const rawEast = Number(bounds.east);
+  const rawWest = Number(bounds.west);
 
-  if (north == null || south == null || east == null || west == null) {
+  if (
+    north == null ||
+    south == null ||
+    !Number.isFinite(rawEast) ||
+    !Number.isFinite(rawWest)
+  ) {
     return null;
   }
+
+  // At low zoom Leaflet can expose more than one wrapped copy of the world.
+  // Normalizing those endpoints separately would collapse the viewport into
+  // a moving longitude slice, making markers appear stuck to one side.
+  const coversWholeWorld = rawEast >= rawWest && rawEast - rawWest >= 360;
+  const east = coversWholeWorld ? 180 : normalizeLongitude(rawEast);
+  const west = coversWholeWorld ? -180 : normalizeLongitude(rawWest);
 
   return {
     north: Math.max(north, south),

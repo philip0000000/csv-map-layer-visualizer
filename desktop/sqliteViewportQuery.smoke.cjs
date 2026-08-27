@@ -14,10 +14,69 @@ const ROW_JSON_SENTINEL = "sqlite-viewport-smoke-full-row";
 function runSmokeCheck() {
   // Keep scenarios isolated so one fixture cannot hide a query regression in another.
   runUnderBudgetExactSmoke();
+  runWrappedWorldViewportSmoke();
   runOverBudgetGroupingSmoke();
+  runCompleteGridCoverageSmoke();
   runTimelineBeforeGroupingSmoke();
   runDatasetVisibilitySmoke();
   console.log("SQLite viewport smoke: compact render results passed.");
+}
+
+/** Prove very wide, panned Leaflet bounds always query the complete world. */
+function runWrappedWorldViewportSmoke() {
+  const { closeSqliteStore } = require("./sqliteStore.cjs");
+  const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
+  const db = createSmokeDatabase([
+    { id: "western-point", lat: 0, lon: -170 },
+    { id: "central-point", lat: 0, lon: 0 },
+    { id: "eastern-point", lat: 0, lon: 170 },
+  ]);
+
+  try {
+    for (const bounds of [
+      { north: 90, south: -90, east: 540, west: -540 },
+      { north: 90, south: -90, east: 500, west: 100 },
+    ]) {
+      const result = querySqliteMapView({ db, bounds, renderBudget: 10 });
+      assert.equal(result.stats.totalMatchingCount, 3);
+      assert.deepEqual(
+        result.points.map((point) => point.lon).sort((a, b) => a - b),
+        [-170, 0, 170],
+      );
+    }
+    console.log("SQLite viewport smoke: wrapped full-world bounds passed.");
+  } finally {
+    closeSqliteStore(db);
+  }
+}
+
+/** Prove occupied cells are merged to fit rather than truncated after grouping. */
+function runCompleteGridCoverageSmoke() {
+  const { closeSqliteStore } = require("./sqliteStore.cjs");
+  const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
+  const db = createSmokeDatabase([
+    { id: "north-west", lat: 9, lon: 1 },
+    { id: "north-east", lat: 9, lon: 9 },
+    { id: "south-west", lat: 1, lon: 1 },
+    { id: "south-east", lat: 1, lon: 9 },
+  ]);
+
+  try {
+    const result = querySqliteMapView({
+      db,
+      bounds: { north: 10, south: 0, east: 10, west: 0 },
+      renderBudget: 3,
+    });
+    assert.equal(result.points.length <= 3, true);
+    assert.equal(
+      result.points.reduce((sum, point) => sum + point.count, 0),
+      4,
+    );
+    assert.equal(result.stats.hiddenByRenderBudget, 0);
+    console.log("SQLite viewport smoke: complete occupied-cell coverage passed.");
+  } finally {
+    closeSqliteStore(db);
+  }
 }
 
 function runDatasetVisibilitySmoke() {
@@ -251,22 +310,22 @@ function runOverBudgetGroupingSmoke() {
       })),
       [
         {
-          id: "grid:18:36",
+          id: "grid:0:0",
           renderType: "grouped",
           lat: 1,
           lon: 1,
           count: 3,
-          groupId: "grid:18:36",
+          groupId: "grid:0:0",
           sourceRef: null,
-          marker: "blue",
+          marker: "green",
         },
         {
-          id: "grid:19:37",
+          id: "grid:0:1",
           renderType: "representative",
           lat: 9,
           lon: 9,
           count: 1,
-          groupId: "grid:19:37",
+          groupId: "grid:0:1",
           sourceRef: null,
           marker: "purple",
         },
@@ -281,35 +340,37 @@ function runOverBudgetGroupingSmoke() {
       result.points.map((point) => point.groupRef),
       [
         {
-          groupId: 'grid:18:36',
+          groupId: 'grid:0:0',
           bounds: {
             north: 10,
             south: 0,
             east: 10,
             west: 0,
           },
+          datasetIds: [SMOKE_DATASET_ID],
           timeline: null,
           grid: {
-            cellLat: 18,
-            cellLon: 36,
-            cellHeight: 5,
+            cellLat: 0,
+            cellLon: 0,
+            cellHeight: 10,
             cellWidth: 5,
           },
           sortOrder: 'dataset-source-row',
         },
         {
-          groupId: 'grid:19:37',
+          groupId: 'grid:0:1',
           bounds: {
             north: 10,
             south: 0,
             east: 10,
             west: 0,
           },
+          datasetIds: [SMOKE_DATASET_ID],
           timeline: null,
           grid: {
-            cellLat: 19,
-            cellLon: 37,
-            cellHeight: 5,
+            cellLat: 0,
+            cellLon: 1,
+            cellHeight: 10,
             cellWidth: 5,
           },
           sortOrder: 'dataset-source-row',
@@ -411,10 +472,10 @@ function runTimelineBeforeGroupingSmoke() {
       })),
       [
         {
-          id: "grid:9:36",
+          id: "grid:0:0",
           renderType: "grouped",
           count: 3,
-          marker: "blue",
+          marker: "green",
         },
       ],
     );
@@ -426,21 +487,22 @@ function runTimelineBeforeGroupingSmoke() {
     assert.equal(result.stats.limitedToRenderBudget, 2);
     assert.equal(result.stats.hiddenByRenderBudget, 0);
     assert.deepEqual(result.points[0].groupRef, {
-      groupId: 'grid:9:36',
+      groupId: 'grid:0:0',
       bounds: {
         north: 10,
         south: 0,
         east: 10,
         west: 0,
       },
+      datasetIds: [SMOKE_DATASET_ID],
       timeline: {
         timelineEnabled: true,
         startYear: 2000,
         endYear: 2005,
       },
       grid: {
-        cellLat: 9,
-        cellLon: 36,
+        cellLat: 0,
+        cellLon: 0,
         cellHeight: 10,
         cellWidth: 5,
       },

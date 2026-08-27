@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // Import core components from react-leaflet.
 // MapContainer is the main map wrapper.
 // Marker and Popup are used to show points on the map.
@@ -20,12 +20,16 @@ import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import "leaflet-polylinedecorator";
 
-import { getClusterMarkerIcon, getMarkerIcon } from "./markerIcons";
+import { getClusterMarkerIcon, getCountedMarkerIcon, getMarkerIcon } from "./markerIcons";
 import { buildMarkerDetailFields } from "./markerDetailFields";
+import {
+  getGroupedMarkerCellPolygons,
+  updateGroupedMarkerCellInteractions,
+} from "./groupedMarkerCell";
 import MapCoordinateControls from "./MapCoordinateControls";
 import MapTileLayers from "./MapTileLayers";
 import {
-  findMarkersNearClickedMarker,
+  groupMarkersByProximity,
   MARKER_PROXIMITY_RADIUS_PIXELS,
 } from "./markerProximitySelection";
 import {
@@ -531,18 +535,21 @@ function ExactPointMarkers({
   onMarkerSelect,
 }) {
   const map = useMap();
+  const [, setProjectionRevision] = useState(0);
 
-  /** Project from the clicked marker anchor and forward its ordered nearby matches. */
-  function selectWithProximity(clickedMarker) {
-    const nearbyMarkers = findMarkersNearClickedMarker(
+  useEffect(() => {
+    if (clusterMarkersEnabled) return undefined;
+    const refreshProjection = () => setProjectionRevision((revision) => revision + 1);
+    map.on("zoomend", refreshProjection);
+    return () => map.off("zoomend", refreshProjection);
+  }, [clusterMarkersEnabled, map]);
+
+  const proximityGroups = clusterMarkersEnabled
+    ? []
+    : groupMarkersByProximity(
       points,
-      clickedMarker,
-      // Container-point projection measures from each marker's map anchor,
-      // rather than from the mouse pointer inside the marker icon.
       (marker) => map.latLngToContainerPoint([marker.lat, marker.lon]),
     );
-    onMarkerSelect?.(clickedMarker, nearbyMarkers);
-  }
 
   if (clusterMarkersEnabled) {
     return (
@@ -579,15 +586,18 @@ function ExactPointMarkers({
     );
   }
 
-  return points.map((point) => {
-    const icon = getMarkerIcon(point.marker);
+  return proximityGroups.map(({ representative, members }) => {
+    const icon = getCountedMarkerIcon(representative.marker, members.length);
 
     return (
       <Marker
-        key={point.id}
-        position={[point.lat, point.lon]}
+        key={representative.id}
+        position={[representative.lat, representative.lon]}
         {...(icon ? { icon } : {})}
-        eventHandlers={{ click: () => selectWithProximity(point) }}
+        eventHandlers={{
+          // The displayed group and click selection share the same 18-pixel rule.
+          click: () => onMarkerSelect?.(representative, members),
+        }}
       />
     );
   });
@@ -599,7 +609,7 @@ export default function GeoMap({
 
   // When true, markers within the configured radius are clustered visually;
   // radius zero limits clustering to markers with identical coordinates.
-  // When false, markers are rendered normally (current behavior).
+  // When false, exact markers use the shared proximity-grouping behavior.
   getSourceRow,
   getFeatureDetails,
   clusterMarkersEnabled = false,
@@ -615,11 +625,51 @@ export default function GeoMap({
   onZoneEditingError,
 }) {
   const markerClusterGroupRef = useRef(null);
+  const groupedCellInteractionsRef = useRef(new Set());
+  const [activeGroupedCell, setActiveGroupedCell] = useState(null);
   const markerPoints = points.filter((p) => !p.image);
   // Data-source groups are already summarized, so keep them out of client clustering.
   const exactMarkerPoints = markerPoints.filter((p) => !isGroupedPointFeature(p));
   const groupedMarkerPoints = markerPoints.filter(isGroupedPointFeature);
   const imagePoints = points.filter((p) => !!p.image);
+  const activeGroupedCellPolygons = useMemo(
+    () => getGroupedMarkerCellPolygons(activeGroupedCell?.groupRef),
+    [activeGroupedCell],
+  );
+
+  /** Keep the cell visible while its marker is hovered, focused, or both. */
+  function setGroupedCellInteraction(point, interaction, active) {
+    const nextState = updateGroupedMarkerCellInteractions(
+      groupedCellInteractionsRef.current,
+      point.id,
+      interaction,
+      active,
+    );
+    groupedCellInteractionsRef.current = nextState.interactions;
+    if (active) {
+      setActiveGroupedCell(point);
+      return;
+    }
+
+    setActiveGroupedCell((current) => {
+      if (current?.id !== point.id) return current;
+      return nextState.remainsActive ? current : null;
+    });
+  }
+
+  useEffect(() => {
+    // A relative grid id can be reused after a pan, so refresh the saved bounds
+    // or remove an overlay whose representative left the returned map view.
+    setActiveGroupedCell((current) => {
+      if (!current) return null;
+      const replacement = points.find((point) => (
+        point.id === current.id && isGroupedPointFeature(point)
+      ));
+      if (replacement) return replacement;
+      groupedCellInteractionsRef.current.clear();
+      return null;
+    });
+  }, [points]);
 
   // Hide the original cluster icon while MarkerClusterGroup spiderfies exact-overlap markers.
   useEffect(() => {
@@ -654,6 +704,9 @@ export default function GeoMap({
       // Initial zoom level.
       // Lower value = more zoomed out.
       zoom={5}
+      // Tile layers repeat horizontally, but markers exist on one world copy.
+      // Recenter wrapped pans so overlays remain aligned at very low zoom.
+      worldCopyJump
       style={{
         height: "100%",
         width: "100%",
@@ -688,13 +741,29 @@ export default function GeoMap({
         />
       )}
 
+      {/* The saved grid cell is highlighted locally; hover never queries SQLite. */}
+      {activeGroupedCellPolygons.map((positions, index) => (
+        <Polygon
+          key={`group-cell:${activeGroupedCell.id}:${index}`}
+          positions={positions}
+          pathOptions={{
+            color: "#2563eb",
+            weight: 2,
+            opacity: 0.9,
+            fillColor: "#3b82f6",
+            fillOpacity: 0.18,
+          }}
+          interactive={false}
+        />
+      ))}
+
       {/*
         Render markers for each point derived from enabled CSV files.
 
         Optional marker clustering.
         - When clustering is enabled, markers are grouped into clusters (Leaflet.markercluster behavior).
         - Clicking a cluster zooms in and reveals the markers inside.
-        - When disabled, markers are shown normally (current behavior).
+        - When disabled, exact markers are combined into 18-pixel proximity groups.
       */}
       <ExactPointMarkers
         points={exactMarkerPoints}
@@ -706,14 +775,20 @@ export default function GeoMap({
 
       {/* Render grouped SQLite summaries as count markers, separate from exact marker clustering. */}
       {groupedMarkerPoints.map((p) => {
-        const icon = getClusterMarkerIcon(p.marker, p.count);
+        const icon = getCountedMarkerIcon(p.marker, p.count);
 
         return (
           <Marker
             key={p.id}
             position={[p.lat, p.lon]}
             {...(icon ? { icon } : {})}
-            eventHandlers={{ click: () => onMarkerSelect?.(p) }}
+            eventHandlers={{
+              click: () => onMarkerSelect?.(p),
+              mouseover: () => setGroupedCellInteraction(p, "hover", true),
+              mouseout: () => setGroupedCellInteraction(p, "hover", false),
+              focus: () => setGroupedCellInteraction(p, "focus", true),
+              blur: () => setGroupedCellInteraction(p, "focus", false),
+            }}
           />
         );
       })}

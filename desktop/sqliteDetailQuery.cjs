@@ -88,21 +88,40 @@ function getSqliteGroupRows({
   };
 }
 
+/** Reconstruct the exact captured dataset, viewport, grid-cell, and timeline filter. */
 function buildGroupWhereClause(groupRef) {
-  const { bounds, grid, timeline } = groupRef;
+  const { bounds, datasetIds, grid, timeline } = groupRef;
+  const datasetFilter = createDatasetFilter(datasetIds);
+  const crossesAntimeridian = bounds.west > bounds.east;
+  const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
+  const lonSpan = Math.max(
+    crossesAntimeridian
+      ? 360 - bounds.west + bounds.east
+      : bounds.east - bounds.west,
+    0.000001,
+  );
+  const lastCellLat = getLastCellIndex(latSpan, grid.cellHeight);
+  const lastCellLon = getLastCellIndex(lonSpan, grid.cellWidth);
   // Rebuild the original point group from its viewport, grid cell, and timeline.
   const clauses = [
-    'dataset_id IN (SELECT id FROM datasets WHERE enabled = 1)',
+    datasetFilter.sql,
     // Region vertices render as polygons and therefore cannot belong to a point marker.
     "COALESCE(LOWER(TRIM(json_extract(compact_json, '$.featureType'))), 'point') <> 'region'",
     'lat BETWEEN @south AND @north',
-    bounds.west > bounds.east
+    crossesAntimeridian
       ? '(lon >= @west OR lon <= @east)'
       : 'lon BETWEEN @west AND @east',
-    'CAST((lat + 90.0) / @cellHeight AS INTEGER) = @cellLat',
-    'CAST((lon + 180.0) / @cellWidth AS INTEGER) = @cellLon',
+    'MIN(@lastCellLat, MAX(0, CAST((lat - @south) / @cellHeight AS INTEGER))) = @cellLat',
+    [
+      'MIN(@lastCellLon, MAX(0, CAST((CASE',
+      '  WHEN @crossesAntimeridian = 1 AND lon < @west',
+      '    THEN lon + 360.0 - @west',
+      '  ELSE lon - @west',
+      'END) / @cellWidth AS INTEGER))) = @cellLon',
+    ].join('\n'),
   ];
   const params = {
+    ...datasetFilter.params,
     north: bounds.north,
     south: bounds.south,
     east: bounds.east,
@@ -111,6 +130,9 @@ function buildGroupWhereClause(groupRef) {
     cellLon: grid.cellLon,
     cellHeight: grid.cellHeight,
     cellWidth: grid.cellWidth,
+    lastCellLat,
+    lastCellLon,
+    crossesAntimeridian: crossesAntimeridian ? 1 : 0,
   };
 
   if (timeline) {
@@ -130,14 +152,35 @@ function buildGroupWhereClause(groupRef) {
   };
 }
 
+/** Build a parameterized filter for the dataset snapshot captured in groupRef. */
+function createDatasetFilter(datasetIds) {
+  const params = {};
+  const placeholders = datasetIds.map((datasetId, index) => {
+    const key = `dataset${index}`;
+    params[key] = datasetId;
+    return `@${key}`;
+  });
+  return {
+    sql: `dataset_id IN (${placeholders.join(', ')})`,
+    params,
+  };
+}
+
+/** Recover the clamped grid edge from the dimensions stored in groupRef. */
+function getLastCellIndex(span, cellSize) {
+  return Math.max(0, Math.round(span / cellSize) - 1);
+}
+
+/** Validate the complete immutable query snapshot required for grouped paging. */
 function normalizeGroupRef(groupRef) {
   if (!groupRef || typeof groupRef !== 'object') return null;
 
   const bounds = normalizeBounds(groupRef.bounds);
   const grid = normalizeGridRef(groupRef.grid);
   const timeline = normalizeTimeline(groupRef.timeline);
+  const datasetIds = normalizeDatasetIds(groupRef.datasetIds);
 
-  if (!bounds || !grid || timeline === undefined) return null;
+  if (!bounds || !grid || timeline === undefined || datasetIds.length === 0) return null;
   if (groupRef.sortOrder !== GROUP_ROWS_SORT_ORDER) return null;
 
   // Reject mismatched IDs instead of accidentally running a wider query.
@@ -147,10 +190,17 @@ function normalizeGroupRef(groupRef) {
   return {
     groupId: expectedGroupId,
     bounds,
+    datasetIds,
     grid,
     timeline,
     sortOrder: GROUP_ROWS_SORT_ORDER,
   };
+}
+
+/** Normalize the non-empty dataset snapshot used to reproduce a marker group. */
+function normalizeDatasetIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(getNullableString).filter(Boolean))].sort();
 }
 
 function normalizeSourceRef(sourceRef) {

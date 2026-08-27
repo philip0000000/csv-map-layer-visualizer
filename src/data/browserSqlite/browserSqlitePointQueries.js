@@ -42,7 +42,7 @@ export function queryBrowserSqliteMapView(database, query = {}) {
   const overBudget = totalMatchingCount > renderBudget;
   const grid = overBudget ? getGridSpec(bounds, renderBudget) : null;
   const rows = overBudget
-    ? selectGroupedPoints(database, filter, grid, renderBudget)
+    ? selectGroupedPoints(database, filter, grid)
     : selectExactPoints(database, filter, renderBudget);
   const points = overBudget
     ? rows.map((row) => groupedRowToPoint(row, {
@@ -142,7 +142,7 @@ function selectExactPoints(database, filter, renderBudget) {
 }
 
 /** Return one deterministic representative for each occupied viewport cell. */
-function selectGroupedPoints(database, filter, grid, renderBudget) {
+function selectGroupedPoints(database, filter, grid) {
   return readAll(database, `
     WITH matching AS (
       SELECT
@@ -151,8 +151,22 @@ function selectGroupedPoints(database, filter, grid, renderBudget) {
         lat,
         lon,
         compact_json,
-        CAST((lat + 90.0) / $cellHeight AS INTEGER) AS cell_lat,
-        CAST((lon + 180.0) / $cellWidth AS INTEGER) AS cell_lon
+        CASE
+          WHEN $crossesAntimeridian = 1 AND lon < $west
+            THEN lon + 360.0
+          ELSE lon
+        END AS grouping_lon,
+        -- Viewport-relative, clamped ids guarantee at most rows * columns cells.
+        MIN($lastCellLat, MAX(0,
+          CAST((lat - $south) / $cellHeight AS INTEGER)
+        )) AS cell_lat,
+        MIN($lastCellLon, MAX(0, CAST((
+          CASE
+            WHEN $crossesAntimeridian = 1 AND lon < $west
+              THEN lon + 360.0 - $west
+            ELSE lon - $west
+          END
+        ) / $cellWidth AS INTEGER))) AS cell_lon
       FROM point_features
       ${filter.sql}
     ),
@@ -165,10 +179,11 @@ function selectGroupedPoints(database, filter, grid, renderBudget) {
         cell_lon,
         COUNT(*) OVER (PARTITION BY cell_lat, cell_lon) AS group_count,
         AVG(lat) OVER (PARTITION BY cell_lat, cell_lon) AS group_lat,
-        AVG(lon) OVER (PARTITION BY cell_lat, cell_lon) AS group_lon,
+        AVG(grouping_lon) OVER (PARTITION BY cell_lat, cell_lon) AS group_lon,
         ROW_NUMBER() OVER (
           PARTITION BY cell_lat, cell_lon
-          ORDER BY dataset_id, source_row_index
+          -- Southern markers are visually topmost; later source rows break ties.
+          ORDER BY lat ASC, dataset_id DESC, source_row_index DESC
         ) AS group_rank
       FROM matching
     )
@@ -184,12 +199,13 @@ function selectGroupedPoints(database, filter, grid, renderBudget) {
     FROM ranked
     WHERE group_rank = 1
     ORDER BY cell_lat, cell_lon
-    LIMIT $limit
   `, {
     ...filter.params,
     $cellHeight: grid.cellHeight,
     $cellWidth: grid.cellWidth,
-    $limit: renderBudget,
+    $lastCellLat: grid.rows - 1,
+    $lastCellLon: grid.columns - 1,
+    $crossesAntimeridian: filter.params.$west > filter.params.$east ? 1 : 0,
   });
 }
 
@@ -225,7 +241,7 @@ function groupedRowToPoint(row, context) {
     id: groupId,
     renderType: count > 1 ? 'grouped' : 'representative',
     lat: Number(row.group_lat),
-    lon: Number(row.group_lon),
+    lon: normalizeLongitude(row.group_lon) ?? Number(row.group_lon),
     count,
     groupId,
     groupRef: {
@@ -349,7 +365,7 @@ function createDatasetFilter(datasetIds, column = 'dataset_id') {
   };
 }
 
-/** Choose a viewport-relative grid whose occupied results fit the render budget. */
+/** Choose a viewport-relative grid whose possible cell count fits the budget. */
 function getGridSpec(bounds, renderBudget) {
   const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
   const lonSpan = Math.max(
@@ -359,23 +375,41 @@ function getGridSpec(bounds, renderBudget) {
     0.000001,
   );
   const ratio = Math.max(lonSpan / latSpan, 0.000001);
-  const columns = Math.max(1, Math.ceil(Math.sqrt(renderBudget * ratio)));
-  const rows = Math.max(1, Math.ceil(renderBudget / columns));
+  const columns = Math.max(
+    1,
+    Math.min(renderBudget, Math.ceil(Math.sqrt(renderBudget * ratio))),
+  );
+  // Flooring is what makes rows * columns safe without a result LIMIT.
+  const rows = Math.max(1, Math.floor(renderBudget / columns));
   return {
+    rows,
+    columns,
     cellHeight: Math.max(latSpan / rows, 0.000001),
     cellWidth: Math.max(lonSpan / columns, 0.000001),
   };
 }
 
+/** Normalize Leaflet bounds without collapsing a viewport spanning a full world. */
 function normalizeBounds(value) {
   if (!isRecord(value)) return null;
   const north = normalizeLatitude(value.north);
   const south = normalizeLatitude(value.south);
-  const east = normalizeLongitude(value.east);
-  const west = normalizeLongitude(value.west);
-  if (north == null || south == null || east == null || west == null) {
+  const rawEast = Number(value.east);
+  const rawWest = Number(value.west);
+  if (
+    north == null ||
+    south == null ||
+    !Number.isFinite(rawEast) ||
+    !Number.isFinite(rawWest)
+  ) {
     return null;
   }
+
+  // A low-zoom Leaflet viewport may include multiple wrapped map copies.
+  // Treat its full longitude span as the world before normalizing endpoints.
+  const coversWholeWorld = rawEast >= rawWest && rawEast - rawWest >= 360;
+  const east = coversWholeWorld ? 180 : normalizeLongitude(rawEast);
+  const west = coversWholeWorld ? -180 : normalizeLongitude(rawWest);
   return {
     north: Math.max(north, south),
     south: Math.min(north, south),

@@ -5,9 +5,14 @@ import { createServer } from 'vite';
 
 import {
   findMarkersNearClickedMarker,
+  groupMarkersByProximity,
   MARKER_PROXIMITY_RADIUS_PIXELS,
 } from './markerProximitySelection.js';
 import { getInitialMapToolsState } from './useMapToolsState.js';
+import {
+  getGroupedMarkerCellPolygons,
+  updateGroupedMarkerCellInteractions,
+} from './groupedMarkerCell.js';
 
 assert.equal(getInitialMapToolsState().clusterMarkersEnabled, false);
 assert.equal(MARKER_PROXIMITY_RADIUS_PIXELS, 18);
@@ -54,6 +59,85 @@ assert.deepEqual(
   ),
   [clicked],
 );
+
+const topmostTie = { id: 'topmost-tie' };
+const topmost = { id: 'topmost' };
+const nearbyTop = { id: 'nearby-top' };
+const separate = { id: 'separate' };
+const groupPoints = new Map([
+  [topmostTie, { x: 102, y: 110 }],
+  [topmost, { x: 100, y: 110 }],
+  [nearbyTop, { x: 100, y: 95 }],
+  [separate, { x: 200, y: 0 }],
+]);
+const proximityGroups = groupMarkersByProximity(
+  [nearbyTop, topmostTie, topmost, separate],
+  (marker) => groupPoints.get(marker),
+);
+
+assert.deepEqual(
+  proximityGroups.map((group) => ({
+    representative: group.representative.id,
+    members: group.members.map((marker) => marker.id),
+  })),
+  [
+    {
+      // Equal projected Y values use the later source marker as the topmost tie.
+      representative: 'topmost',
+      members: ['topmost', 'topmost-tie', 'nearby-top'],
+    },
+    { representative: 'separate', members: ['separate'] },
+  ],
+);
+assert.equal(
+  proximityGroups.flatMap((group) => group.members).length,
+  4,
+);
+
+assert.deepEqual(getGroupedMarkerCellPolygons({
+  bounds: { north: 10, south: 0, east: 10, west: 0 },
+  grid: { cellLat: 0, cellLon: 1, cellHeight: 10, cellWidth: 5 },
+}), [[
+  [0, 5],
+  [0, 10],
+  [10, 10],
+  [10, 5],
+]]);
+assert.deepEqual(getGroupedMarkerCellPolygons({
+  bounds: { north: 10, south: 0, east: -170, west: 170 },
+  grid: { cellLat: 0, cellLon: 0, cellHeight: 10, cellWidth: 20 },
+}), [
+  [[0, 170], [0, 180], [10, 180], [10, 170]],
+  [[0, -180], [0, -170], [10, -170], [10, -180]],
+]);
+
+let interactionState = updateGroupedMarkerCellInteractions(
+  new Set(),
+  'grouped-point',
+  'hover',
+  true,
+);
+assert.equal(interactionState.remainsActive, true);
+interactionState = updateGroupedMarkerCellInteractions(
+  interactionState.interactions,
+  'grouped-point',
+  'focus',
+  true,
+);
+interactionState = updateGroupedMarkerCellInteractions(
+  interactionState.interactions,
+  'grouped-point',
+  'hover',
+  false,
+);
+assert.equal(interactionState.remainsActive, true);
+interactionState = updateGroupedMarkerCellInteractions(
+  interactionState.interactions,
+  'grouped-point',
+  'focus',
+  false,
+);
+assert.equal(interactionState.remainsActive, false);
 
 const vite = await createServer({
   appType: 'custom',

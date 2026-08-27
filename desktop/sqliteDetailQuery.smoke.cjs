@@ -82,21 +82,22 @@ function runGroupedPagingSmoke(db) {
   } = require('./sqliteDetailQuery.cjs');
   // The fixture includes other dates, cells, and a region vertex to prove the saved group filter.
   const groupRef = {
-    groupId: 'grid:18:36',
+    groupId: 'grid:0:0',
     bounds: {
       north: 10,
       south: 0,
       east: 10,
       west: 0,
     },
+    datasetIds: [DATASET_A, DATASET_B],
     timeline: {
       timelineEnabled: true,
       startYear: 2000,
       endYear: 2005,
     },
     grid: {
-      cellLat: 18,
-      cellLon: 36,
+      cellLat: 0,
+      cellLon: 0,
       cellHeight: 5,
       cellWidth: 5,
     },
@@ -148,6 +149,7 @@ function runGroupedPagingSmoke(db) {
 
   const { setSqliteDatasetEnabled } = require('./sqliteDatasetService.cjs');
   setSqliteDatasetEnabled({ db, datasetId: DATASET_B, enabled: false });
+  // Paging retains the dataset snapshot even if current visibility changes.
   assert.deepEqual(getSqliteGroupRows({
     db,
     groupRef,
@@ -165,10 +167,15 @@ function runGroupedPagingSmoke(db) {
         latitude: '1',
         longitude: '1',
       },
+      {
+        name: 'match-three',
+        latitude: '1',
+        longitude: '1',
+      },
     ],
     offset: 0,
     limit: 10,
-    totalRows: 2,
+    totalRows: 3,
   });
   setSqliteDatasetEnabled({ db, datasetId: DATASET_B, enabled: true });
   assert.deepEqual(

@@ -422,15 +422,36 @@ function normalizeSourceRef(value) {
   return datasetId && rowIndex != null ? { datasetId, rowIndex } : null;
 }
 
+/** Normalize the complete desktop group snapshot before sending a paging request. */
 function normalizeGroupRef(value) {
   if (!isRecord(value) || value.sortOrder !== 'dataset-source-row') return null;
   const groupId = normalizeId(value.groupId);
   const bounds = normalizeBounds(value.bounds);
   const grid = normalizeGrid(value.grid);
   const timeline = normalizeTimeline(value.timeline);
-  if (!groupId || !bounds || !grid || timeline === undefined) return null;
+  const datasetIds = normalizeDatasetIds(value.datasetIds);
+  if (
+    !groupId ||
+    !bounds ||
+    !grid ||
+    timeline === undefined ||
+    datasetIds.length === 0
+  ) return null;
   if (groupId !== ['grid', grid.cellLat, grid.cellLon].join(':')) return null;
-  return { groupId, bounds, grid, timeline, sortOrder: 'dataset-source-row' };
+  return {
+    groupId,
+    bounds,
+    datasetIds,
+    grid,
+    timeline,
+    sortOrder: 'dataset-source-row',
+  };
+}
+
+/** Normalize a non-empty, deterministic dataset snapshot for grouped paging. */
+function normalizeDatasetIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(normalizeId).filter(Boolean))].sort();
 }
 
 function normalizeBounds(value) {

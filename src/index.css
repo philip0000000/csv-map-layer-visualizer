@@ -36,7 +36,7 @@ body {
   transform: translateX(-50%);
 }
 
-/* Cluster icons reuse the marker body and add a count badge. */
+/* Cluster and non-clustered group icons share the marker body and count badge. */
 .csv-marker-group {
   position: relative;
   display: inline-flex;
@@ -44,6 +44,18 @@ body {
   justify-content: center;
   width: 32px;
   height: 32px;
+}
+
+/* Counted default markers retain Leaflet's familiar pin silhouette. */
+.csv-marker-group-default-pin {
+  width: 32px;
+  height: 41px;
+  align-items: flex-start;
+}
+
+.csv-marker-counted-default-pin {
+  width: 25px;
+  height: 41px;
 }
 
 /* Body can be text, emoji, an image marker, or a neutral fallback. */

@@ -117,6 +117,23 @@ try {
     wrapped.points.map((item) => item.id),
     ['dataset-a:6', 'dataset-a:7'],
   );
+  const wrappedGrouped = queryBrowserSqliteMapView(database, {
+    bounds: { north: 1, south: -1, east: -170, west: 170 },
+    renderBudget: 1,
+  });
+  assert.equal(wrappedGrouped.points[0].count, 2);
+  assert.equal(Math.abs(wrappedGrouped.points[0].lon), 180);
+  for (const bounds of [
+    { north: 90, south: -90, east: 540, west: -540 },
+    { north: 90, south: -90, east: 500, west: 100 },
+  ]) {
+    const fullWorld = queryBrowserSqliteMapView(database, {
+      bounds,
+      datasetIds: ['dataset-a'],
+      renderBudget: 10,
+    });
+    assert.equal(fullWorld.stats.totalMatchingCount, 6);
+  }
   assert.equal(queryBrowserSqliteMapView(database, {
     bounds: { north: -50, south: -60, east: 10, west: 0 },
   }).points.length, 0);
@@ -209,6 +226,24 @@ try {
     }).points.length,
     7,
   );
+
+  importDataset(database, 'dataset-grid-coverage', [
+    point('North west', 9, 1, 2000),
+    point('North east', 9, 9, 2000),
+    point('South west', 1, 1, 2000),
+    point('South east', 1, 9, 2000),
+  ]);
+  const completeCoverage = queryBrowserSqliteMapView(database, {
+    bounds: { north: 10, south: 0, east: 10, west: 0 },
+    datasetIds: ['dataset-grid-coverage'],
+    renderBudget: 3,
+  });
+  assert.equal(completeCoverage.points.length <= 3, true);
+  assert.equal(
+    completeCoverage.points.reduce((sum, item) => sum + item.count, 0),
+    4,
+  );
+  assert.equal(completeCoverage.stats.hiddenByRenderBudget, 0);
 
   const mappingBeforeFailure = readMapping(database, 'dataset-a');
   database.run(`

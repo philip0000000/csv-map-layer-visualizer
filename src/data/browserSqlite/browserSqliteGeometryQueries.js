@@ -257,15 +257,25 @@ function createDatasetFilter(datasetIds, column = 'geometry_features.dataset_id'
   };
 }
 
+/** Keep geometry bounds aligned with point bounds for wrapped full-world views. */
 function normalizeBounds(value) {
   if (!isRecord(value)) return null;
   const north = normalizeLatitude(value.north);
   const south = normalizeLatitude(value.south);
-  const east = normalizeLongitude(value.east);
-  const west = normalizeLongitude(value.west);
-  if (north == null || south == null || east == null || west == null) {
+  const rawEast = Number(value.east);
+  const rawWest = Number(value.west);
+  if (
+    north == null ||
+    south == null ||
+    !Number.isFinite(rawEast) ||
+    !Number.isFinite(rawWest)
+  ) {
     return null;
   }
+  // Keep geometry filtering aligned with point filtering for multi-world views.
+  const coversWholeWorld = rawEast >= rawWest && rawEast - rawWest >= 360;
+  const east = coversWholeWorld ? 180 : normalizeLongitude(rawEast);
+  const west = coversWholeWorld ? -180 : normalizeLongitude(rawWest);
   return {
     north: Math.max(north, south),
     south: Math.min(north, south),

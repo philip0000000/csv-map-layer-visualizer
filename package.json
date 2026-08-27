@@ -35,6 +35,7 @@
     "smoke:distance-measurement": "node src/components/distanceMeasurement.smoke.js",
     "smoke:zone-transform": "node src/components/zoneTransform.smoke.js",
     "smoke:marker-proximity": "node src/components/markerProximitySelection.smoke.js",
+    "smoke:marker-icons": "node src/components/markerIcons.smoke.js",
     "smoke:marker-detail-inline": "node src/components/markerDetailInlineContent.smoke.js",
     "smoke:custom-tile-layers": "node src/components/customTileLayers.smoke.js",
     "smoke:custom-tile-warnings": "node src/components/customTileLayerWarnings.smoke.js",

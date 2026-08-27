@@ -8,6 +8,7 @@ let droppedFilesRequest = null;
 const groupRef = {
   groupId: 'grid:1:2',
   bounds: { north: 10, south: 0, east: 20, west: 0 },
+  datasetIds: ['dataset-1'],
   timeline: null,
   grid: { cellLat: 1, cellLon: 2, cellHeight: 1, cellWidth: 1 },
   sortOrder: 'dataset-source-row',

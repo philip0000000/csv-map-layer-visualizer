@@ -31,6 +31,7 @@
     "smoke:browser-sqlite-ui": "node src/components/browserSqliteUiCoordination.smoke.js",
     "smoke:message-dismissal": "node src/components/messageDismissalState.smoke.js",
     "smoke:map-tools": "node src/components/mapToolsState.smoke.js",
+    "smoke:map-zoom-limits": "node src/components/mapZoomLimits.smoke.js",
     "smoke:coordinates": "node src/components/coordinateNavigation.smoke.js",
     "smoke:distance-measurement": "node src/components/distanceMeasurement.smoke.js",
     "smoke:zone-transform": "node src/components/zoneTransform.smoke.js",

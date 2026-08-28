@@ -28,6 +28,7 @@ import {
 } from "./groupedMarkerCell";
 import MapCoordinateControls from "./MapCoordinateControls";
 import MapTileLayers from "./MapTileLayers";
+import { INITIAL_MAP_MAX_ZOOM } from "./mapZoomLimits";
 import {
   groupMarkersByProximity,
   MARKER_PROXIMITY_RADIUS_PIXELS,
@@ -704,6 +705,8 @@ export default function GeoMap({
       // Initial zoom level.
       // Lower value = more zoomed out.
       zoom={5}
+      // Keep clustering safe before the active background synchronizes its own limit.
+      maxZoom={INITIAL_MAP_MAX_ZOOM}
       // Tile layers repeat horizontally, but markers exist on one world copy.
       // Recenter wrapped pans so overlays remain aligned at very low zoom.
       worldCopyJump

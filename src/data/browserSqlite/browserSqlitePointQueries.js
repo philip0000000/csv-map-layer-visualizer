@@ -77,9 +77,6 @@ export function queryBrowserSqliteMapView(database, query = {}) {
       ),
       overBudget,
     },
-    // Dataset-wide extent is returned by getDatasetSummary; per-row entries
-    // would defeat the compact viewport contract.
-    timelineIndex: { entries: [] },
   }, geometryResult);
 }
 
@@ -524,7 +521,6 @@ function createEmptyResult({ skippedPoints = 0 } = {}) {
       hiddenByRenderBudget: 0,
       overBudget: false,
     },
-    timelineIndex: { entries: [] },
   };
 }
 

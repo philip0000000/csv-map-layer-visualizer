@@ -75,6 +75,7 @@ try {
     renderBudget: 10,
   };
   const exact = queryBrowserSqliteMapView(database, exactQuery);
+  assert.deepEqual(Object.keys(exact), ['points', 'lines', 'regions', 'stats']);
   assert.equal(exact.points.length, 5);
   assert.equal(exact.stats.skippedPoints, 1);
   assert.equal(exact.stats.overBudget, false);

@@ -355,14 +355,15 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  */
 
 /**
+ * Compact render results only. Backends apply timeline filtering before
+ * returning this result; complete source rows must be requested through
+ * details or paging operations and must not be embedded here.
+ *
  * @typedef {object} MapViewResult
  * @property {PointFeature[]} points
  * @property {LineFeature[]} lines
  * @property {RegionFeature[]} regions
  * @property {MapViewStats} stats
- * @property {TimelineIndex} timelineIndex
- *   Compact render results only. Complete source rows must be requested through
- *   details or paging operations and must not be embedded here.
  */
 
 /**
@@ -499,18 +500,6 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {number} [hiddenGeometryCount]
  * @property {number|null} [geometryLimit]
  * @property {boolean} [geometryOverLimit]
- */
-
-/**
- * @typedef {object} TimelineIndex
- * @property {TimelineIndexEntry[]} entries
- */
-
-/**
- * @typedef {object} TimelineIndexEntry
- * @property {string} featureId
- * @property {number} startYear
- * @property {number} endYear
  */
 
 /**

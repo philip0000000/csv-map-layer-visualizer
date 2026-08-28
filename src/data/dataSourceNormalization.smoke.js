@@ -267,13 +267,8 @@ const mapView = normalizeMapViewResult({
     skippedLinesByTimeline: 2,
     skippedRegionsByTimeline: 3,
   },
-  timelineIndex: {
-    entries: [
-      { featureId: 'point-1', startYear: 2025, endYear: 1000 },
-      { featureId: '', startYear: 1, endYear: 2 },
-    ],
-  },
 });
+assert.deepEqual(Object.keys(mapView), ['points', 'lines', 'regions', 'stats']);
 assert.deepEqual(
   [mapView.points.length, mapView.lines.length, mapView.regions.length],
   [2, 1, 1],
@@ -293,11 +288,6 @@ assert.deepEqual(
 );
 assert.equal(mapView.stats.hiddenByRenderBudget, 6);
 assert.equal(mapView.stats.skippedByTimeline, 6);
-assert.deepEqual(mapView.timelineIndex.entries, [{
-  featureId: 'point-1',
-  startYear: 1000,
-  endYear: 2025,
-}]);
 
 const details = normalizeFeatureDetailsResult({
   featureId: 'point-1',

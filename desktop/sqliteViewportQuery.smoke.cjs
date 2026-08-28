@@ -527,6 +527,8 @@ function runTimelineBeforeGroupingSmoke() {
  * Guard the render contract against accidentally returning stored detail data.
  */
 function assertCompactRenderResult(result) {
+  // Keep the top-level viewport payload limited to render collections and statistics.
+  assert.deepEqual(Object.keys(result), ["points", "lines", "regions", "stats"]);
   assert.equal(
     JSON.stringify(result).includes(ROW_JSON_SENTINEL),
     false,

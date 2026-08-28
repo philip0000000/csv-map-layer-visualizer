@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // Import core components from react-leaflet.
 // MapContainer is the main map wrapper.
+// LayerGroup keeps each line and its optional arrow decorators together.
 // Marker and Popup are used to show points on the map.
 import {
   MapContainer,
+  LayerGroup,
   Marker,
   ImageOverlay,
   CircleMarker,

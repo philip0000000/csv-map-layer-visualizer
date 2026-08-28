@@ -8,6 +8,7 @@ const MAX_IMAGE_SIZE_METERS = 100000;
 
 /**
  * Query compact point and region render data from the desktop SQLite store.
+ * Bounds and timeline filters run in SQLite before render-budget grouping.
  * This intentionally avoids row_json; full details use a separate lookup path.
  */
 function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAULT_RENDER_BUDGET }) {
@@ -76,9 +77,6 @@ function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAUL
       hiddenGeometryCount: Math.max(0, regionResult.totalMatchingCount - regionResult.regions.length),
       geometryLimit: regionResult.totalMatchingCount > regionResult.regions.length ? budget : null,
       geometryOverLimit: regionResult.totalMatchingCount > regionResult.regions.length,
-    },
-    timelineIndex: {
-      entries: [],
     },
   };
 }
@@ -549,9 +547,6 @@ function createEmptyMapViewResult({
       returnedCount: 0,
       hiddenByRenderBudget: 0,
       overBudget: false,
-    },
-    timelineIndex: {
-      entries: [],
     },
   };
 }

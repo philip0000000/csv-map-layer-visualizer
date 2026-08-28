@@ -181,8 +181,9 @@ gaps that are now implemented.
   inputs, results, and failures.
 - Keep `PreviewPageResult` and `GroupRowsResult` as distinct types even if both
   contain rows, offsets, limits, and totals.
-- Extend map statistics and normalize points, lines, regions, source refs,
-  group refs, and timeline indexes at every adapter boundary.
+- Extend map statistics and normalize points, lines, regions, source refs, and
+  group refs at every adapter boundary. Backends apply timeline filters before
+  returning map-view results.
 - Keep complete source rows out of `MapViewResult`.
 
 ### Failures

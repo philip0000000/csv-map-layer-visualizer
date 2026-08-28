@@ -994,7 +994,6 @@ function toLegacyMapFeatures(mapView) {
       skippedByTimeline: mapView?.stats?.skippedRegionsByTimeline ?? 0,
     },
     getSourceRow: () => null,
-    timelineIndex: mapView?.timelineIndex ?? { entries: [] },
     stats: mapView?.stats ?? null,
   };
 }

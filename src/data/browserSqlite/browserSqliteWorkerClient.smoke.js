@@ -238,7 +238,6 @@ await completeSuccess(worker, client.queryMapView(mapQuery), {
   lines: [],
   regions: [],
   stats: {},
-  timelineIndex: { entries: [] },
 });
 assert.deepEqual(worker.posted.at(-1), {
   requestId: worker.posted.at(-1).requestId,

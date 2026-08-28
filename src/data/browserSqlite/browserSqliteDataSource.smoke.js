@@ -166,7 +166,6 @@ class FakeWorkerClient {
       lines: [],
       regions: [],
       stats: { totalMatchingCount: 1, returnedCount: 1 },
-      timelineIndex: { entries: [] },
     });
   }
 

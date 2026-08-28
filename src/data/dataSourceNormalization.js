@@ -437,7 +437,6 @@ export function normalizeMapViewResult(value) {
     lines,
     regions,
     stats: normalizeMapViewStats(source.stats, points.length + lines.length + regions.length),
-    timelineIndex: normalizeTimelineIndex(source.timelineIndex),
   };
 }
 
@@ -694,23 +693,6 @@ function normalizeCapturedTimeline(value) {
     startDay: normalizeDayOfYear(value.startDay),
     endDay: normalizeDayOfYear(value.endDay),
   };
-}
-
-function normalizeTimelineIndex(value) {
-  const entries = [];
-  for (const item of Array.isArray(value?.entries) ? value.entries : []) {
-    if (!isRecord(item)) continue;
-    const featureId = normalizeNullableId(item.featureId);
-    const startYear = normalizeOptionalInteger(item.startYear);
-    const endYear = normalizeOptionalInteger(item.endYear);
-    if (!featureId || startYear == null || endYear == null) continue;
-    entries.push({
-      featureId,
-      startYear: Math.min(startYear, endYear),
-      endYear: Math.max(startYear, endYear),
-    });
-  }
-  return { entries };
 }
 
 function normalizeCoordinates(value, minimumLength, closeRing) {

@@ -40,6 +40,7 @@
     "smoke:marker-detail-inline": "node src/components/markerDetailInlineContent.smoke.js",
     "smoke:custom-tile-layers": "node src/components/customTileLayers.smoke.js",
     "smoke:custom-tile-warnings": "node src/components/customTileLayerWarnings.smoke.js",
+    "validate:map-line-rendering": "node desktop/run-electron.cjs desktop/mapLineRenderingValidation.cjs",
     "smoke:browser-sqlite-points": "node src/data/browserSqlite/browserSqlitePointQueries.smoke.js",
     "validate:browser-sqlite-worker": "node desktop/run-electron.cjs desktop/browserSqliteWorkerValidation.cjs",
     "smoke:csv-compatibility": "node src/data/csvParsingCompatibility.smoke.js",

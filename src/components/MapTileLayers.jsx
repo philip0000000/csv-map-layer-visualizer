@@ -14,6 +14,7 @@ import {
   enableCustomTileWarningPeriod,
   reportCustomTileError,
 } from "./customTileLayerWarnings";
+import { getEffectiveMapMaxZoom } from "./mapZoomLimits";
 
 const BUILT_IN_TILESETS = {
   osm: {
@@ -51,9 +52,22 @@ const DEFAULT_FORM = Object.freeze({
   type: "background",
 });
 
+/** Return only the active background's configured limit so overlays cannot control navigation. */
+function getActiveBackgroundMaxZoom(activeBackgroundId, customLayers) {
+  if (activeBackgroundId === BUILT_IN_BACKGROUND_IDS.osm) {
+    return BUILT_IN_TILESETS.osm.maxZoom;
+  }
+  if (activeBackgroundId === BUILT_IN_BACKGROUND_IDS.satellite) {
+    return BUILT_IN_TILESETS.satellite.maxZoom;
+  }
+  if (activeBackgroundId === BUILT_IN_BACKGROUND_IDS.blank) return null;
+  return customLayers.find((layer) => layer.id === activeBackgroundId)?.maxZoom ?? null;
+}
+
 /** Own built-in and custom raster layer registration without changing CSV map layers. */
 export default function MapTileLayers() {
   const { BaseLayer, Overlay } = LayersControl;
+  const map = useMap();
   const addButtonRef = useRef(null);
   const desktopBridge = getDesktopCustomTileBridge();
   const [customLayers, setCustomLayers] = useState([]);
@@ -63,6 +77,14 @@ export default function MapTileLayers() {
   const [persistenceWarning, setPersistenceWarning] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [layersReady, setLayersReady] = useState(!desktopBridge);
+  const effectiveMaxZoom = getEffectiveMapMaxZoom(
+    getActiveBackgroundMaxZoom(activeBackgroundId, customLayers),
+  );
+
+  useEffect(() => {
+    // This runtime fallback does not alter persisted custom tile-layer definitions.
+    map.setMaxZoom(effectiveMaxZoom);
+  }, [effectiveMaxZoom, map]);
 
   useEffect(() => {
     const bridge = desktopBridge;

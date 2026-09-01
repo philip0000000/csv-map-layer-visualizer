@@ -11,6 +11,9 @@
     "present-day/filtered_places_pop_ge_9000_filtered_output.csv",
     "present-day/litteraturkartan.csv",
     "present-day/norse-world-attestations-enriched-2026-08-28.csv",
+    "present-day/fornsok/fornsok_lines.csv",
+    "present-day/fornsok/fornsok_points.csv",
+    "present-day/fornsok/fornsok_regions.csv",
     "medieval/runes.csv",
     "medieval/swedish_cities.csv"
   ]

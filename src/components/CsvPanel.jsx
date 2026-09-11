@@ -79,7 +79,7 @@ export default function CsvPanel({
     });
   }
 
-  // local editable inputs for "Year domain" (min/max + Begin)
+  // local editable inputs for "Year domain" (min/max + Apply)
   // These are UI-only text boxes so the user can type without instantly snapping/clamping.
   const yearMinDraft = timelineState?.yearMinDraft ?? "";
   const yearMaxDraft = timelineState?.yearMaxDraft ?? "";
@@ -211,7 +211,7 @@ export default function CsvPanel({
                 <div className="csvTimelineTitle">Timeline filter</div>
               </div>
 
-              {/* domain controls (Min/Max + Begin) */}
+              {/* domain controls (Min/Max + Apply) */}
               <div className="csvTimelineDomainRow">
                 <label className="csvTimelineField">
                   <span className="csvTimelineLabel">Timeline start</span>

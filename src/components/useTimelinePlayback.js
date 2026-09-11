@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from "react";
 /**
  * useTimelinePlayback
  * Handles timer start/stop and timeline playback updates.
+ * Returns playback controls; playing status lives in timelineState.playback.
  */
 export function useTimelinePlayback({ timelineState, onTimelinePatch }) {
   const timerRef = useRef(null);
@@ -160,7 +161,6 @@ export function useTimelinePlayback({ timelineState, onTimelinePatch }) {
   }, []);
 
   return {
-    isPlaying: !!timelineState?.playback?.isPlaying,
     startPlayback,
     stopPlayback,
   };

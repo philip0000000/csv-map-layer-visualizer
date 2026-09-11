@@ -37,6 +37,7 @@ const DEFAULT_STATE = {
   },
 };
 
+/** Persist timeline settings and expose state with a shallow patch function. */
 export function useTimelineFilterState() {
   const [state, setState] = useSessionStorageState(STORAGE_KEY, DEFAULT_STATE);
 
@@ -64,51 +65,13 @@ export function useTimelineFilterState() {
     }));
   }, [state?.playback, setState]);
 
+  // Nested settings such as playback must be merged by the caller.
   const patch = useCallback((partial) => {
     setState((prev) => ({ ...prev, ...partial }));
-  }, [setState]);
-
-  /*
-   * Sets the year domain without changing drafts or the selected range.
-   *
-   * This legacy helper remains available to callers that intentionally want
-   * that narrow update; imports and dataset changes never call it.
-   */
-  const setYearDomain = useCallback((yearMin, yearMax) => {
-    setState((prev) => ({
-      ...prev,
-      yearMin: yearMin ?? null,
-      yearMax: yearMax ?? null,
-    }));
-  }, [setState]);
-
-  const setYearRange = useCallback((startYear, endYear) => {
-    setState((prev) => ({
-      ...prev,
-      startYear: startYear ?? null,
-      endYear: endYear ?? null,
-    }));
-  }, [setState]);
-
-  const setDayRange = useCallback((startDay, endDay) => {
-    setState((prev) => ({
-      ...prev,
-      startDay: clampInt(startDay, 1, 365),
-      endDay: clampInt(endDay, 1, 365),
-    }));
   }, [setState]);
 
   return {
     state,
     patch,
-    setYearDomain,
-    setYearRange,
-    setDayRange,
   };
-}
-
-function clampInt(n, min, max) {
-  const x = Number.parseInt(n, 10);
-  if (!Number.isFinite(x)) return min;
-  return Math.max(min, Math.min(max, x));
 }

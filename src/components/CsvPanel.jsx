@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import DualRangeSlider from "./DualRangeSlider";
+import TimelineYearInput from "./TimelineYearInput";
 import CsvPreviewTable from "./csv-panel/CsvPreviewTable";
 import SelectedFileMetadata from "./csv-panel/SelectedFileMetadata";
 import CoordinateMapping from "./csv-panel/CoordinateMapping";
@@ -134,6 +135,7 @@ export default function CsvPanel({
     });
   }
 
+  /** Stop playback before publishing a manual timeline change. */
   function patchTimelineWithStop(partial) {
     // Stop first, so timer is cleared.
     onTimelinePlaybackStop?.();
@@ -260,31 +262,21 @@ export default function CsvPanel({
               <div className="csvTimelineReadoutRow">
                 <label className="csvTimelineField">
                   <span className="csvTimelineLabel">From</span>
-                  <input
-                    className="csvSelect"
-                    type="number"
-                    value={timelineState?.startYear ?? ""}
-                    min={timelineState?.yearMin ?? undefined}
-                    max={timelineState?.yearMax ?? undefined}
-                    onChange={(e) => {
-                      const v = toIntOrNull(e.target.value);
-                      patchTimelineWithStop({ startYear: v });
-                    }}
+                  <TimelineYearInput
+                    range={timelineState}
+                    boundary="startYear"
+                    onCommit={patchTimelineWithStop}
+                    onEdit={onTimelinePlaybackStop}
                   />
                 </label>
 
                 <label className="csvTimelineField">
                   <span className="csvTimelineLabel">To</span>
-                  <input
-                    className="csvSelect"
-                    type="number"
-                    value={timelineState?.endYear ?? ""}
-                    min={timelineState?.yearMin ?? undefined}
-                    max={timelineState?.yearMax ?? undefined}
-                    onChange={(e) => {
-                      const v = toIntOrNull(e.target.value);
-                      patchTimelineWithStop({ endYear: v });
-                    }}
+                  <TimelineYearInput
+                    range={timelineState}
+                    boundary="endYear"
+                    onCommit={patchTimelineWithStop}
+                    onEdit={onTimelinePlaybackStop}
                   />
                 </label>
               </div>

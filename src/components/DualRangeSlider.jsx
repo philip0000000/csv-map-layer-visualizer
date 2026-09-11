@@ -30,7 +30,6 @@ export default function DualRangeSlider({
     if (!Number.isFinite(normalizedMin) || !Number.isFinite(normalizedMax)) {
       return null;
     }
-    if (normalizedMin === normalizedMax) return null;
     return {
       min: Math.min(normalizedMin, normalizedMax),
       max: Math.max(normalizedMin, normalizedMax),
@@ -187,6 +186,8 @@ export default function DualRangeSlider({
 
 /** Convert a domain value to its horizontal position as a percentage. */
 function valueToPercent(value, domain) {
+  // A single-year domain has one fixed position instead of a divisible span.
+  if (domain.min === domain.max) return 50;
   return ((value - domain.min) / (domain.max - domain.min)) * 100;
 }
 

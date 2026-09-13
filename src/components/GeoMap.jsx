@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // Import core components from react-leaflet.
 // MapContainer is the main map wrapper.
 // LayerGroup keeps each line and its optional arrow decorators together.
-// Marker and Popup are used to show points on the map.
+// Shape selection uses non-interactive paths above the normal geometry layers.
 import {
   MapContainer,
   LayerGroup,
@@ -11,7 +11,7 @@ import {
   CircleMarker,
   Polygon,
   Polyline,
-  Popup,
+  Pane,
   ZoomControl,
   useMap,
 } from "react-leaflet";
@@ -23,7 +23,7 @@ import L from "leaflet";
 import "leaflet-polylinedecorator";
 
 import { getClusterMarkerIcon, getCountedMarkerIcon, getMarkerIcon } from "./markerIcons";
-import { buildMarkerDetailFields } from "./markerDetailFields";
+import { getDisplayedRegion, isFeatureSelected } from "./featureSelection";
 import {
   getGroupedMarkerCellPolygons,
   updateGroupedMarkerCellInteractions,
@@ -42,10 +42,6 @@ import {
   shouldApplyZoneCommit,
   transformZoneParts,
 } from "./zoneTransform";
-
-function getFeaturePopupRow(feature, getSourceRow) {
-  return feature?.row ?? getSourceRow?.(feature?.sourceFileId, feature?.sourceRowIndex) ?? null;
-}
 
 function isGroupedPointFeature(point) {
   return point?.renderType === "grouped" || point?.renderType === "representative";
@@ -92,83 +88,28 @@ function setClusterIconVisibility(cluster, isVisible) {
   }
 }
 
-function FeaturePopup({ feature, fallbackTitle, getSourceRow, getFeatureDetails }) {
-  const requestRef = useRef(0);
-  const [isOpen, setIsOpen] = useState(false);
-  const [detailState, setDetailState] = useState({
-    status: "idle",
-    details: null,
-  });
-  const loadsFromBackend =
-    typeof getFeatureDetails === "function" && !!feature?.sourceRef;
-  const row = loadsFromBackend
-    ? detailState.details?.row ?? null
-    : getFeaturePopupRow(feature, getSourceRow);
-  const latField = detailState.details?.latField ?? feature.latField;
-  const lonField = detailState.details?.lonField ?? feature.lonField;
-
-  // Opening a popup is the detail boundary. Compact viewport responses never
-  // cause eager source-row reads for every rendered line or region.
-  useEffect(() => {
-    if (!isOpen || !loadsFromBackend) {
-      requestRef.current += 1;
-      return undefined;
-    }
-    const requestId = requestRef.current + 1;
-    requestRef.current = requestId;
-    queueMicrotask(() => {
-      if (requestRef.current !== requestId) return;
-      setDetailState({ status: "loading", details: null });
-      Promise.resolve(getFeatureDetails({
-        featureId: feature.id,
-        sourceRef: feature.sourceRef,
-      })).then((details) => {
-        if (requestRef.current !== requestId) return;
-        setDetailState({
-          status: details?.row ? "loaded" : "empty",
-          details: details?.row ? details : null,
-        });
-      }).catch(() => {
-        if (requestRef.current === requestId) {
-          setDetailState({ status: "error", details: null });
-        }
-      });
-    });
-    return () => {
-      if (requestRef.current === requestId) requestRef.current += 1;
-    };
-  }, [feature.id, feature.sourceRef, getFeatureDetails, isOpen, loadsFromBackend]);
-
-  const title = String(row?.name ?? feature?.featureId ?? fallbackTitle);
+/** Add a contrast edge and yellow halo while retaining the feature's original stroke. */
+function ShapeSelectionHighlight({ feature, kind }) {
+  const Shape = kind === "region" ? Polygon : Polyline;
+  const weight = Number.isFinite(feature.style?.weight) ? feature.style.weight : 3;
   return (
-    <Popup
-      eventHandlers={{
-        add: () => setIsOpen(true),
-        remove: () => setIsOpen(false),
-      }}
-    >
-      <div style={{ minWidth: 220 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
-        {loadsFromBackend && detailState.status === "loading" && (
-          <div>Loading details...</div>
-        )}
-        {loadsFromBackend && detailState.status === "empty" && (
-          <div>No details found.</div>
-        )}
-        {loadsFromBackend && detailState.status === "error" && (
-          <div>Could not load details.</div>
-        )}
-        {(!loadsFromBackend || detailState.status === "loaded") &&
-          buildMarkerDetailFields(row, latField, lonField).map(([key, value]) => (
-            <div key={key} style={{ marginBottom: 4 }}>
-              <b>{key}:</b> {String(value ?? "")}
-            </div>
-          ))}
-      </div>
-    </Popup>
+    <>
+      {[{ color: "#0f172a", weight: weight + 8 },
+        { color: "#facc15", weight: weight + 6 },
+        { ...feature.style, weight }].map((style, index) => (
+        <Shape
+          key={index}
+          positions={feature.coordinates}
+          pane="featureSelection"
+          interactive={false}
+          pathOptions={{ ...style, fill: false, opacity: index === 2 ? feature.style?.opacity ?? 1 : 1 }}
+        />
+      ))}
+    </>
   );
 }
 
+/** Keep CSV arrow styling visible above selection halos without capturing clicks. */
 function LineArrowDecorator({ line }) {
   const map = useMap();
 
@@ -203,6 +144,8 @@ function LineArrowDecorator({ line }) {
             weight: 1,
             fillOpacity: 1,
             fillColor: color,
+            pane: "featureArrows",
+            interactive: false,
           },
         }),
       });
@@ -220,6 +163,8 @@ function LineArrowDecorator({ line }) {
             weight: 1,
             fillOpacity: 1,
             fillColor: color,
+            pane: "featureArrows",
+            interactive: false,
           },
         }),
       });
@@ -283,8 +228,8 @@ function EditableRegions({
   getLogicalZone,
   updateLogicalZone,
   onError,
-  getSourceRow,
-  getFeatureDetails,
+  selectedFeature,
+  onFeatureSelect,
 }) {
   const map = useMap();
   const [selectedZone, setSelectedZone] = useState(null);
@@ -341,46 +286,44 @@ function EditableRegions({
 
   useEffect(() => () => endDragInteraction(), [endDragInteraction]);
 
+  const selectedDatasetId = selectedFeature?.selectionKind === "region"
+    ? selectedFeature.sourceRef?.datasetId : null;
+  const selectedFeatureId = selectedFeature?.selectionKind === "region"
+    ? selectedFeature.featureId : null;
+
   useEffect(() => {
-    const datasetAvailable = selectedZone?.datasetId
-      && enabledDatasetIds?.includes(selectedZone.datasetId);
-    if (enabled && (!selectedZone || datasetAvailable)) return;
-    selectionRequestRef.current += 1;
+    // A panel close, another feature selection, or edit-mode exit cancels the old editor.
+    const requestId = ++selectionRequestRef.current;
     zoneInteractionRef.current += 1;
     endDragInteraction();
     storePreviewParts(null);
     storeSelectedZone(null);
-  }, [enabled, enabledDatasetIds, endDragInteraction, selectedZone]);
+    if (!enabled || !selectedDatasetId || !selectedFeatureId
+      || !enabledDatasetIds.includes(selectedDatasetId) || !getLogicalZone) return;
 
-  /** Select the full logical feature, scoped by the clicked part's dataset. */
-  async function selectRegion(region, event) {
-    if (!enabled || typeof getLogicalZone !== "function") return;
-    L.DomEvent.stopPropagation(event.originalEvent);
-    const datasetId = region.sourceRef?.datasetId;
-    const featureId = region.featureId;
-    if (!datasetId || !featureId) return;
-    if (
-      selectedZoneRef.current?.datasetId === datasetId
-      && selectedZoneRef.current?.featureId === featureId
-    ) return;
-    const requestId = selectionRequestRef.current + 1;
-    selectionRequestRef.current = requestId;
-    try {
-      const zone = await getLogicalZone({ datasetId, featureId });
-      // Ignore a slower lookup after the user has already requested another zone.
-      if (selectionRequestRef.current !== requestId || !enabledRef.current) return;
-      // A completed selection invalidates any save response belonging to the old zone.
-      zoneInteractionRef.current += 1;
-      storePreviewParts(null);
-      storeSelectedZone(zone?.parts?.length ? zone : null);
-    } catch (error) {
+    Promise.resolve().then(() => getLogicalZone({
+      datasetId: selectedDatasetId, featureId: selectedFeatureId,
+    })).then((zone) => {
+      if (selectionRequestRef.current === requestId) {
+        storeSelectedZone(zone?.parts?.length ? zone : null);
+      }
+    }).catch((error) => {
       if (selectionRequestRef.current === requestId) onError?.(error);
-    }
+    });
+    return () => { selectionRequestRef.current += 1; };
+  }, [enabled, enabledDatasetIds, selectedDatasetId, selectedFeatureId,
+    getLogicalZone, endDragInteraction, onError]);
+
+  /** Ordinary and edit-mode clicks select the same logical zone and reveal its details. */
+  function selectRegion(region, event) {
+    if (enabled) L.DomEvent.stopPropagation(event.originalEvent);
+    onFeatureSelect?.({ ...region, selectionKind: "region" });
   }
 
   /** Lock one operation at primary-button down and preview only in memory. */
   function beginRegionDrag(region, event) {
-    if (!enabled || event.originalEvent?.button !== 0 || dragRef.current) return;
+    if (!enabled || event.originalEvent?.button !== 0 || dragRef.current
+      || !isFeatureSelected(region, "region", selectedFeature)) return;
     const zone = selectedZoneRef.current;
     if (
       !zone
@@ -467,59 +410,26 @@ function EditableRegions({
     document.addEventListener("mouseup", handleUp, true);
   }
 
-  const selectedKey = selectedZone
-    ? `${selectedZone.datasetId}\u0000${selectedZone.featureId}`
-    : null;
-  const visibleRegions = selectedKey
-    ? regions.filter((region) => (
-      `${region.sourceRef?.datasetId}\u0000${region.featureId}` !== selectedKey
-    ))
-    : regions;
-  const selectedParts = previewParts ?? selectedZone?.parts ?? [];
-
   return (
     <>
-      {visibleRegions.map((region) => (
-        <Polygon
-          key={region.id}
-          positions={region.coordinates}
-          pathOptions={region.style}
-          bubblingMouseEvents={!enabled}
-          eventHandlers={{
-            click: (event) => selectRegion(region, event),
-            mousedown: (event) => beginRegionDrag(region, event),
-          }}
-        >
-          {!enabled && (
-            <FeaturePopup
-              feature={region}
-              fallbackTitle="Region"
-              getSourceRow={getSourceRow}
-              getFeatureDetails={getFeatureDetails}
-            />
-          )}
-        </Polygon>
-      ))}
-      {selectedZone && selectedParts.map((part) => {
-        const region = {
-          id: `${selectedZone.datasetId}:${selectedZone.featureId}:${part.part}`,
-          featureId: selectedZone.featureId,
-          part: part.part,
-          coordinates: part.coordinates,
-          style: part.style,
-          sourceRef: { datasetId: selectedZone.datasetId, rowIndex: 0 },
-        };
+      {regions.map((sourceRegion) => {
+        // The editor may load every part for a transform, but only query-visible parts render.
+        const region = getDisplayedRegion(sourceRegion, selectedFeature, selectedZone, previewParts);
         return (
-          <Polygon
-            key={`editing:${region.id}`}
-            positions={region.coordinates}
-            pathOptions={{ ...region.style, color: "#facc15", weight: 4 }}
-            bubblingMouseEvents={false}
-            eventHandlers={{
-              click: (event) => selectRegion(region, event),
-              mousedown: (event) => beginRegionDrag(region, event),
-            }}
-          />
+          <LayerGroup key={region.id}>
+            <Polygon
+              positions={region.coordinates}
+              pathOptions={region.style}
+              bubblingMouseEvents={!enabled}
+              eventHandlers={{
+                click: (event) => selectRegion(sourceRegion, event),
+                mousedown: (event) => beginRegionDrag(sourceRegion, event),
+              }}
+            />
+            {isFeatureSelected(region, "region", selectedFeature) && (
+              <ShapeSelectionHighlight feature={region} kind="region" />
+            )}
+          </LayerGroup>
         );
       })}
     </>
@@ -613,13 +523,11 @@ export default function GeoMap({
   // When true, markers within the configured radius are clustered visually;
   // radius zero limits clustering to markers with identical coordinates.
   // When false, exact markers use the shared proximity-grouping behavior.
-  getSourceRow,
-  getFeatureDetails,
   clusterMarkersEnabled = false,
   clusterRadius = 80,   // default strength
   onViewportChange,
-  onMarkerSelect,
-  selectedMarker,
+  onFeatureSelect,
+  selectedFeature,
   zoneEditingEnabled = false,
   onZoneEditingToggle,
   getLogicalZone,
@@ -627,6 +535,10 @@ export default function GeoMap({
   enabledDatasetIds = [],
   onZoneEditingError,
 }) {
+  /** Point selections retain nearby-marker lists and their existing grouping behavior. */
+  const onMarkerSelect = (point, nearbyMarkers) => onFeatureSelect?.(
+    { ...point, selectionKind: "point" }, nearbyMarkers,
+  );
   const markerClusterGroupRef = useRef(null);
   const groupedCellInteractionsRef = useRef(new Set());
   const [activeGroupedCell, setActiveGroupedCell] = useState(null);
@@ -728,13 +640,15 @@ export default function GeoMap({
       {/* Zoom controls moved away from the CSV overlay */}
       <ZoomControl position="bottomright" />
 
+      <Pane name="featureSelection" style={{ zIndex: 450, pointerEvents: "none" }} />
+      <Pane name="featureArrows" style={{ zIndex: 460, pointerEvents: "none" }} />
       {/* Built-in and user-configured raster layers share the Leaflet layer control. */}
       <MapTileLayers />
 
       {/* A map-native ring highlights selection without modifying marker icons. */}
-      {selectedMarker && (
+      {selectedFeature && selectedFeature.selectionKind === "point" && (
         <CircleMarker
-          center={[selectedMarker.lat, selectedMarker.lon]}
+          center={[selectedFeature.lat, selectedFeature.lon]}
           radius={MARKER_PROXIMITY_RADIUS_PIXELS}
           pathOptions={{
             color: "#facc15",
@@ -815,20 +729,20 @@ export default function GeoMap({
         getLogicalZone={getLogicalZone}
         updateLogicalZone={updateLogicalZone}
         onError={onZoneEditingError}
-        getSourceRow={getSourceRow}
-        getFeatureDetails={getFeatureDetails}
+        selectedFeature={selectedFeature}
+        onFeatureSelect={onFeatureSelect}
       />
 
       {lines.map((line) => (
         <LayerGroup key={line.id}>
-          <Polyline positions={line.coordinates} pathOptions={line.style}>
-            <FeaturePopup
-              feature={line}
-              fallbackTitle="Line"
-              getSourceRow={getSourceRow}
-              getFeatureDetails={getFeatureDetails}
-            />
-          </Polyline>
+          <Polyline
+            positions={line.coordinates}
+            pathOptions={line.style}
+            eventHandlers={{ click: () => onFeatureSelect?.({ ...line, selectionKind: "line" }) }}
+          />
+          {isFeatureSelected(line, "line", selectedFeature) && (
+            <ShapeSelectionHighlight feature={line} kind="line" />
+          )}
           <LineArrowDecorator line={line} />
         </LayerGroup>
       ))}

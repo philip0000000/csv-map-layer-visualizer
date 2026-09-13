@@ -8,8 +8,10 @@ import {
   prepareMarkerDetailInlineContent,
 } from './markerDetailInlineContent';
 
-export function PointMarkerDetails({
-  point,
+/** Load one feature on activation and render shared fields with a geometry-specific heading. */
+export function FeatureDetails({
+  feature,
+  kind = 'point',
   latField,
   lonField,
   getSourceRow,
@@ -22,8 +24,8 @@ export function PointMarkerDetails({
     details: null,
   });
   const shouldLoadDetails =
-    typeof getFeatureDetails === 'function' && !!point?.sourceRef;
-  const synchronousRow = getFeatureDetailRow(point, getSourceRow);
+    typeof getFeatureDetails === 'function' && !!feature?.sourceRef;
+  const synchronousRow = getFeatureDetailRow(feature, getSourceRow);
   const row = shouldLoadDetails
     ? detailState.details?.row ?? null
     : synchronousRow;
@@ -31,7 +33,7 @@ export function PointMarkerDetails({
   const resolvedLonField = detailState.details?.lonField ?? lonField;
 
   useEffect(() => {
-    // Browser rows are synchronous; desktop sourceRef rows load on activation.
+    // Both SQLite runtimes load sourceRef rows on activation; fixtures may supply rows directly.
     if (!isActive || !shouldLoadDetails) {
       requestVersionRef.current += 1;
       return undefined;
@@ -46,8 +48,8 @@ export function PointMarkerDetails({
       setDetailState({ status: 'loading', details: null });
 
       Promise.resolve(getFeatureDetails({
-        featureId: point.id,
-        sourceRef: point.sourceRef,
+        featureId: feature.id,
+        sourceRef: feature.sourceRef,
       })).then((details) => {
         if (requestVersionRef.current !== requestVersion) return;
 
@@ -69,23 +71,28 @@ export function PointMarkerDetails({
   }, [
     getFeatureDetails,
     isActive,
-    point.id,
-    point.sourceRef,
+    feature.id,
+    feature.sourceRef,
     shouldLoadDetails,
   ]);
 
   return (
     <div style={{ minWidth: 220 }}>
-      <div style={{ fontWeight: 700, marginBottom: 6 }}>Point</div>
-
-      <div>
-        <b>lat:</b> {point.lat}
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>
+        {kind === 'line' ? 'Line' : kind === 'region' ? 'Zone' : 'Point'}
       </div>
-      <div>
-        <b>lon:</b> {point.lon}
-      </div>
-
-      <hr style={{ opacity: 0.25 }} />
+      {kind === 'point' ? (
+        <>
+          <div><b>lat:</b> {feature.lat}</div>
+          <div><b>lon:</b> {feature.lon}</div>
+          <hr style={{ opacity: 0.25 }} />
+        </>
+      ) : (
+        // A vertex coordinate is not a location header for an entire line or zone.
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>
+          {String(row?.name || feature.featureId || '')}
+        </div>
+      )}
 
       {shouldLoadDetails && (
         detailState.status === 'idle' || detailState.status === 'loading'
@@ -158,8 +165,8 @@ function NearbyMarkerDetailsItem({
         Marker {index + 1}{index === 0 ? ' (selected)' : ''}
       </summary>
       <div style={{ padding: '6px 0 2px 12px' }}>
-        <PointMarkerDetails
-          point={point}
+        <FeatureDetails
+          feature={point}
           latField={point.latField}
           lonField={point.lonField}
           getSourceRow={getSourceRow}
@@ -185,7 +192,7 @@ export function GroupedMarkerDetails({ point, getGroupRows, isActive }) {
   const loadPage = useCallback((offset, replaceRows) => {
     if (!canLoadGroupRows) return;
 
-    // groupRef keeps every page tied to the marker's original map query.
+    // groupRef keeps paging tied to the selected cell and its last confirmed filter snapshot.
     const requestVersion = requestVersionRef.current + 1;
     requestVersionRef.current = requestVersion;
     setPagingState((previous) => ({

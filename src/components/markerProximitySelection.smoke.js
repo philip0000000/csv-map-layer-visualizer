@@ -151,8 +151,8 @@ try {
   const markup = renderToStaticMarkup(React.createElement(
     MarkerDetailsPanel,
     {
-      marker: clicked,
-      markers: [clicked, equallyNearFirst],
+      feature: clicked,
+      nearbyMarkers: [clicked, equallyNearFirst],
       leftOffset: 420,
       isCollapsed: false,
       onToggleCollapse() {},
@@ -167,8 +167,8 @@ try {
   const singleMarkup = renderToStaticMarkup(React.createElement(
     MarkerDetailsPanel,
     {
-      marker: clicked,
-      markers: [clicked],
+      feature: clicked,
+      nearbyMarkers: [clicked],
       leftOffset: 420,
       isCollapsed: false,
       onToggleCollapse() {},
@@ -178,20 +178,20 @@ try {
 
   assert.match(singleMarkup, />Point</);
   assert.doesNotMatch(singleMarkup, /Markers near this location/);
-  assert.match(singleMarkup, /aria-label="Marker details"/);
+  assert.match(singleMarkup, /aria-label="Feature details"/);
   assert.doesNotMatch(singleMarkup, />Marker details</);
 
   for (const renderType of ['grouped', 'representative']) {
     const groupedMarkup = renderToStaticMarkup(React.createElement(
       MarkerDetailsPanel,
       {
-        marker: {
+        feature: {
           ...clicked,
           renderType,
           count: 2,
           groupRef: { queryId: 'group-query' },
         },
-        markers: [],
+        nearbyMarkers: [],
         leftOffset: 420,
         getGroupRows() {},
         isCollapsed: false,
@@ -207,11 +207,27 @@ try {
     assert.doesNotMatch(groupedMarkup, /max-width:420px/);
   }
 
+  // Geometry details reuse inline content without inheriting the point coordinate header.
+  for (const [selectionKind, heading] of [['line', 'Line'], ['region', 'Zone']]) {
+    const shapeMarkup = renderToStaticMarkup(React.createElement(MarkerDetailsPanel, {
+      feature: {
+        id: 'shape', selectionKind, featureId: 'logical-shape',
+        latField: 'lat', lonField: 'lon',
+        row: { name: 'Named shape', lat: 59, lon: 18, details: '[Example](https://example.com)' },
+      },
+      leftOffset: 420,
+    }));
+    assert.match(shapeMarkup, new RegExp(`>${heading}<`));
+    assert.match(shapeMarkup, /Named shape/);
+    assert.match(shapeMarkup, /href="https:\/\/example.com/);
+    assert.doesNotMatch(shapeMarkup, /<b>lat:<\/b>|<b>lon:<\/b>|>Point</);
+  }
+
   const collapsedMarkup = renderToStaticMarkup(React.createElement(
     MarkerDetailsPanel,
     {
-      marker: clicked,
-      markers: [clicked],
+      feature: clicked,
+      nearbyMarkers: [clicked],
       leftOffset: 420,
       isCollapsed: true,
       onToggleCollapse() {},
@@ -225,7 +241,7 @@ try {
   );
   assert.match(
     collapsedMarkup,
-    /class="markerDetailsPanelExpandRail"[^>]*aria-label="Expand marker details"/,
+    /class="markerDetailsPanelExpandRail"[^>]*aria-label="Expand feature details"/,
   );
   assert.doesNotMatch(collapsedMarkup, /&gt;/);
   assert.match(

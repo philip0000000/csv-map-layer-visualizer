@@ -386,6 +386,8 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  *   Compact lookup context captured when a grouped render result is created.
  *   It must not contain full source rows or other detail payloads.
  * @property {FeatureSourceRef|null} [sourceRef]
+ * @property {{startYear: number, endYear: number}|null} [timelineExtent]
+ *   Stored SQL timeline bounds for render features; endpoint order must be preserved.
  * @property {string|null} [marker]
  * @property {string|null} [image]
  * @property {number|null} [imageWidthMeters]
@@ -402,6 +404,8 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {object|null} [style]
  * @property {"none"|"start"|"end"|"both"|null} [arrow]
  * @property {FeatureSourceRef|null} [sourceRef]
+ * @property {{startYear: number, endYear: number}|null} [timelineExtent]
+ *   Stored SQL timeline bounds for render features; endpoint order must be preserved.
  * @property {string|null} [latField]
  * @property {string|null} [lonField]
  */
@@ -414,6 +418,8 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {Array<[number, number]>} coordinates
  * @property {object|null} [style]
  * @property {FeatureSourceRef|null} [sourceRef]
+ * @property {{startYear: number, endYear: number}|null} [timelineExtent]
+ *   Stored SQL timeline bounds for render features; endpoint order must be preserved.
  * @property {string|null} [latField]
  * @property {string|null} [lonField]
  */

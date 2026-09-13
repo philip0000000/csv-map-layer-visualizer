@@ -18,7 +18,7 @@ app.whenReady().then(run).catch((error) => {
   });
 });
 
-/** Render the line-validation page in a hidden, sandboxed Electron window. */
+/** Render the feature-selection validation page in a hidden, sandboxed Electron window. */
 async function run() {
   const { createServer } = await import("vite");
   viteServer = await createServer({
@@ -42,19 +42,19 @@ async function run() {
     },
   });
   await window.loadURL(
-    `http://127.0.0.1:${address.port}/map-line-rendering-validation.html`,
+    `http://127.0.0.1:${address.port}/map-feature-selection-validation.html`,
   );
 
   const timeout = setTimeout(() => {
     void finish({
       status: "failed",
-      message: `Map line-rendering validation exceeded ${VALIDATION_TIMEOUT_MS} ms.`,
+      message: `Map feature-selection validation exceeded ${VALIDATION_TIMEOUT_MS} ms.`,
     });
   }, VALIDATION_TIMEOUT_MS);
   const poll = setInterval(async () => {
     if (finished || window?.isDestroyed()) return;
     const result = await window.webContents.executeJavaScript(
-      "globalThis.__mapLineRenderingValidationResult ?? null",
+      "globalThis.__mapFeatureSelectionValidationResult ?? null",
       true,
     );
     if (!result) return;

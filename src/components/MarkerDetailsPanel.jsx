@@ -1,22 +1,25 @@
+import { featureSelectionKey } from './featureSelection';
 import { useEffect, useRef, useState } from 'react';
 
 import {
   GroupedMarkerDetails,
   NearbyMarkerDetails,
-  PointMarkerDetails,
+  FeatureDetails,
 } from './MarkerDetails';
 
 const DEFAULT_PANEL_WIDTH = 360;
 const MIN_PANEL_WIDTH = 280;
 const COLLAPSED_PANEL_WIDTH = 34;
 
+/** Share panel layout and controls across point, line, and logical-zone selections. */
 export function MarkerDetailsPanel({
-  marker,
-  markers = [],
+  feature,
+  nearbyMarkers = [],
   leftOffset,
   getSourceRow,
   getFeatureDetails,
   getGroupRows,
+  refreshError,
   isCollapsed,
   onToggleCollapse,
   onClose,
@@ -63,14 +66,15 @@ export function MarkerDetailsPanel({
     };
   }, [leftOffset]);
 
-  if (!marker) return null;
+  if (!feature) return null;
 
-  const grouped = isGroupedMarker(marker);
-  const showsProximityResults = !grouped && markers.length > 1;
+  const grouped = isGroupedMarker(feature);
+  const showsProximityResults = !grouped && (!feature.selectionKind || feature.selectionKind === 'point')
+    && nearbyMarkers.length > 1;
   // Remount details when selection changes so old loading/paging state cannot leak.
   const detailKey = showsProximityResults
-    ? `nearby:${marker.id}:${markers.length}`
-    : `${marker.renderType ?? 'exact'}:${marker.id}`;
+    ? `nearby:${featureSelectionKey(feature)}:${nearbyMarkers.map((point) => featureSelectionKey(point)).join('|')}`
+    : `${feature.renderType ?? 'exact'}:${featureSelectionKey(feature)}`;
 
   return (
     <aside
@@ -81,14 +85,14 @@ export function MarkerDetailsPanel({
         width: isCollapsed ? COLLAPSED_PANEL_WIDTH : panelWidth,
         maxWidth: `calc(100vw - ${leftOffset}px)`,
       }}
-      aria-label='Marker details'
+      aria-label='Feature details'
     >
       {/* Keep Close visible while the remaining collapsed rail expands. */}
       <button
         type='button'
         className='markerDetailsPanelClose markerDetailsPanelCollapsedClose'
         onClick={onClose}
-        aria-label='Close marker details'
+        aria-label='Close feature details'
         title='Close'
         hidden={!isCollapsed}
       >
@@ -98,8 +102,8 @@ export function MarkerDetailsPanel({
         type='button'
         className='markerDetailsPanelExpandRail'
         onClick={onToggleCollapse}
-        aria-label='Expand marker details'
-        title='Expand marker details'
+        aria-label='Expand feature details'
+        title='Expand feature details'
         hidden={!isCollapsed}
       />
 
@@ -109,7 +113,7 @@ export function MarkerDetailsPanel({
             type='button'
             className='markerDetailsPanelCollapse'
             onClick={onToggleCollapse}
-            aria-label='Collapse marker details'
+            aria-label='Collapse feature details'
             title='Collapse'
           >
             &lt;
@@ -118,7 +122,7 @@ export function MarkerDetailsPanel({
             type='button'
             className='markerDetailsPanelClose'
             onClick={onClose}
-            aria-label='Close marker details'
+            aria-label='Close feature details'
             title='Close'
           >
             ×
@@ -128,26 +132,28 @@ export function MarkerDetailsPanel({
 
       {/* hidden keeps detail state mounted while the panel is collapsed. */}
       <div className='markerDetailsPanelContent' hidden={isCollapsed}>
+        {refreshError && <div role='status'>{refreshError}</div>}
         {showsProximityResults ? (
           <NearbyMarkerDetails
             key={detailKey}
-            points={markers}
+            points={nearbyMarkers}
             getSourceRow={getSourceRow}
             getFeatureDetails={getFeatureDetails}
           />
         ) : grouped ? (
           <GroupedMarkerDetails
             key={detailKey}
-            point={marker}
+            point={feature}
             getGroupRows={getGroupRows}
             isActive
           />
         ) : (
-          <PointMarkerDetails
+          <FeatureDetails
             key={detailKey}
-            point={marker}
-            latField={marker.latField}
-            lonField={marker.lonField}
+            feature={feature}
+            kind={feature.selectionKind}
+            latField={feature.latField}
+            lonField={feature.lonField}
             getSourceRow={getSourceRow}
             getFeatureDetails={getFeatureDetails}
             isActive
@@ -159,7 +165,7 @@ export function MarkerDetailsPanel({
         className='markerDetailsPanelDivider'
         role='separator'
         aria-orientation='vertical'
-        aria-label='Resize marker details panel'
+        aria-label='Resize feature details panel'
         hidden={isCollapsed}
         onMouseDown={(event) => {
           event.preventDefault();
@@ -173,9 +179,9 @@ export function MarkerDetailsPanel({
   );
 }
 
-function isGroupedMarker(marker) {
-  return marker?.renderType === 'grouped' ||
-    marker?.renderType === 'representative';
+function isGroupedMarker(feature) {
+  return feature?.renderType === 'grouped' ||
+    feature?.renderType === 'representative';
 }
 
 function clamp(value, min, max) {

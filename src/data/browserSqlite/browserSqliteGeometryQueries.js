@@ -82,6 +82,8 @@ function selectGeometries(database, filter, geometryLimit) {
       geometry_features.feature_id,
       geometry_features.part,
       geometry_features.source_row_index,
+      geometry_features.timeline_start_year,
+      geometry_features.timeline_end_year,
       geometry_features.coordinates_json,
       geometry_features.style_json,
       geometry_features.arrow_mode,
@@ -133,6 +135,8 @@ function storedRowToGeometry(row) {
       ? { arrow: normalizeArrowMode(row.arrow_mode) }
       : {}),
     sourceRef: { datasetId, rowIndex: sourceRowIndex },
+    // Carry compact stored bounds independently of the lazy source-row detail request.
+    timelineExtent: { startYear: row.timeline_start_year, endYear: row.timeline_end_year },
     latField: normalizeNullableString(mapping.latField),
     lonField: normalizeNullableString(mapping.lonField),
   };

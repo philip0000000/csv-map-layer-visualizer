@@ -130,7 +130,9 @@ function selectExactPoints(database, filter, renderBudget) {
       source_row_index,
       lat,
       lon,
-      compact_json
+      compact_json,
+      timeline_start_year,
+      timeline_end_year
     FROM point_features
     ${filter.sql}
     ORDER BY dataset_id, source_row_index
@@ -219,6 +221,8 @@ function exactRowToPoint(row) {
     groupId: null,
     groupRef: null,
     sourceRef: { datasetId, rowIndex },
+    // Preserve the stored bounds so selection uses exactly the same overlap rule as SQL.
+    timelineExtent: { startYear: row.timeline_start_year, endYear: row.timeline_end_year },
     marker: normalizeNullableString(compact.marker),
     image: normalizeNullableString(compact.image),
     imageWidthMeters: normalizePositiveNumber(compact.imageWidthMeters),

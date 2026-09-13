@@ -495,6 +495,14 @@ function normalizeLogicalZonePart(value) {
     : null;
 }
 
+/** Preserve stored endpoint order; sorting here would change desktop SQL eligibility. */
+function normalizeFeatureTimelineExtent(value) {
+  if (!isRecord(value)) return null;
+  const startYear = normalizeOptionalInteger(value.startYear);
+  const endYear = normalizeOptionalInteger(value.endYear);
+  return startYear == null || endYear == null ? null : { startYear, endYear };
+}
+
 function normalizePointFeature(value) {
   if (!isRecord(value)) return null;
   const id = normalizeNullableId(value.id);
@@ -515,6 +523,7 @@ function normalizePointFeature(value) {
     groupId: normalizeNullableId(value.groupId),
     groupRef: normalizeGroupRef(value.groupRef),
     sourceRef: normalizeFeatureSourceRef(value.sourceRef),
+    timelineExtent: normalizeFeatureTimelineExtent(value.timelineExtent),
     marker: normalizeNullableString(value.marker),
     image: normalizeNullableString(value.image),
     imageWidthMeters: normalizeOptionalPositiveNumber(value.imageWidthMeters),
@@ -537,6 +546,7 @@ function normalizeLineFeature(value) {
     style: normalizeStyle(value.style),
     arrow: LINE_ARROW_MODES.has(value.arrow) ? value.arrow : 'none',
     sourceRef: normalizeFeatureSourceRef(value.sourceRef),
+    timelineExtent: normalizeFeatureTimelineExtent(value.timelineExtent),
     latField: normalizeNullableString(value.latField),
     lonField: normalizeNullableString(value.lonField),
   };
@@ -555,6 +565,7 @@ function normalizeRegionFeature(value) {
     coordinates,
     style: normalizeStyle(value.style),
     sourceRef: normalizeFeatureSourceRef(value.sourceRef),
+    timelineExtent: normalizeFeatureTimelineExtent(value.timelineExtent),
     latField: normalizeNullableString(value.latField),
     lonField: normalizeNullableString(value.lonField),
   };

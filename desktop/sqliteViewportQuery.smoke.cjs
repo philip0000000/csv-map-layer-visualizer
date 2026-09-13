@@ -13,6 +13,7 @@ const ROW_JSON_SENTINEL = "sqlite-viewport-smoke-full-row";
  */
 function runSmokeCheck() {
   // Keep scenarios isolated so one fixture cannot hide a query regression in another.
+  runStoredTimelineSelectionSmoke();
   runUnderBudgetExactSmoke();
   runWrappedWorldViewportSmoke();
   runOverBudgetGroupingSmoke();
@@ -20,6 +21,25 @@ function runSmokeCheck() {
   runTimelineBeforeGroupingSmoke();
   runDatasetVisibilitySmoke();
   console.log("SQLite viewport smoke: compact render results passed.");
+}
+
+/** Confirm selection metadata reproduces SQL even for desktop's unsorted source ranges. */
+function runStoredTimelineSelectionSmoke() {
+  const { closeSqliteStore } = require("./sqliteStore.cjs");
+  const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
+  const db = createSmokeDatabase([
+    { id: "reversed", lat: 1, lon: 1, timelineStartYear: 1200, timelineEndYear: 900 },
+  ]);
+  const bounds = { north: 10, south: 0, east: 10, west: 0 };
+  try {
+    const result = querySqliteMapView({ db, bounds });
+    assert.deepEqual(result.points[0].timelineExtent, { startYear: 1200, endYear: 900 });
+    const filtered = querySqliteMapView({ db, bounds,
+      timeline: { timelineEnabled: true, startYear: 1000, endYear: 1100 } });
+    assert.equal(filtered.points.length, 0);
+  } finally {
+    closeSqliteStore(db);
+  }
 }
 
 /** Prove very wide, panned Leaflet bounds always query the complete world. */

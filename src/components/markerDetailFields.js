@@ -6,7 +6,7 @@ export function buildMarkerDetailFields(
 ) {
   if (!row || typeof row !== 'object') return [];
 
-  // Coordinates are rendered separately at the top of marker details.
+  // Point details show coordinates in their header; lines and zones omit individual vertex coordinates.
   const keys = Object.keys(row).filter(
     (key) => key !== latField && key !== lonField,
   );

@@ -93,6 +93,7 @@ try {
     timeline: { timelineEnabled: true, startYear: 2001, endYear: 2001 },
   });
   assert.deepEqual(timeline.points.map((item) => item.id), ['dataset-a:1']);
+  assert.deepEqual(timeline.points[0].timelineExtent, { startYear: 2001, endYear: 2001 });
   assert.equal(timeline.stats.skippedPointsByTimeline, 4);
 
   const dateTimeline = queryBrowserSqliteMapView(database, {
@@ -102,6 +103,7 @@ try {
     renderBudget: 10,
   });
   assert.deepEqual(dateTimeline.points.map((item) => item.id), ['dataset-c:1']);
+  assert.deepEqual(dateTimeline.points[0].timelineExtent, { startYear: 2000, endYear: 2002 });
   assert.equal(dateTimeline.stats.skippedPointsByTimeline, 2);
 
   const reversedTimeline = queryBrowserSqliteMapView(database, {

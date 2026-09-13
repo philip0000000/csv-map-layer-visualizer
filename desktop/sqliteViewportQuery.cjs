@@ -115,7 +115,7 @@ function queryMatchingRegions(db, bounds, timeline, renderBudget) {
     : totalMatchingCount;
   const rows = db.prepare(`
     SELECT dataset_id, feature_id, part, source_row_index,
-           coordinates_json, style_json
+           coordinates_json, style_json, timeline_start_year, timeline_end_year
     FROM geometry_features
     WHERE ${clauses.join(" AND ")}
     ORDER BY dataset_id, part_order_index, feature_id, part
@@ -127,6 +127,7 @@ function queryMatchingRegions(db, bounds, timeline, renderBudget) {
     regions: rows.map((row) => ({
       id: `${row.dataset_id}:${row.feature_id}:${row.part}`,
       featureId: String(row.feature_id),
+      timelineExtent: { startYear: row.timeline_start_year, endYear: row.timeline_end_year },
       part: String(row.part),
       coordinates: parseCoordinates(row.coordinates_json),
       style: parseCompactFields(row.style_json),
@@ -357,6 +358,8 @@ function rowToPointFeature(row) {
   return {
     id: String(row.id),
     renderType: "exact",
+    // Do not reorder stored bounds: selection must agree with this backend's SQL filter.
+    timelineExtent: { startYear: row.timeline_start_year, endYear: row.timeline_end_year },
     lat: Number(row.lat),
     lon: Number(row.lon),
     count: 1,

@@ -8,6 +8,7 @@ import { CsvPanelOverlay } from "./components/CsvPanelOverlay";
 import { useCsvFileDrop } from "./components/useCsvFileDrop";
 import { useExampleCsvFilesFromUrl } from "./components/useExampleCsvFilesFromUrl";
 import { useTimelinePlayback } from "./components/useTimelinePlayback";
+import { useFeatureSelection } from "./components/useFeatureSelection";
 import { MarkerDetailsPanel } from "./components/MarkerDetailsPanel";
 import { useRuntimeDataSource } from "./components/useRuntimeDataSource";
 import {
@@ -104,10 +105,18 @@ export default function App() {
     return typeof unsubscribe === "function" ? unsubscribe : undefined;
   }, [dataSource, databaseImportAvailable, desktopCapabilities.importProgress]);
 
-  // App owns marker selection so the map and details panel share one lifecycle.
-  const [selectedMarker, setSelectedMarker] = useState(null);
-  const [selectedMarkers, setSelectedMarkers] = useState([]);
-  const [isMarkerPanelCollapsed, setIsMarkerPanelCollapsed] = useState(false);
+  // The shared selection owns detail loading independently of viewport refreshes.
+  const featureSelection = useFeatureSelection({
+    dataSource,
+    datasets: desktopDatasetState.datasets,
+    timeline: timelineState,
+  });
+  const {
+    selectedFeature,
+    nearbyMarkers,
+    selectFeature: handleFeatureSelect,
+    close: handleFeaturePanelClose,
+  } = featureSelection;
 
   // The details panel uses the CSV panel's visible edge as its left position.
   const [csvPanelVisibleWidth, setCsvPanelVisibleWidth] = useState(420);
@@ -395,28 +404,6 @@ export default function App() {
     }
   }, [dataSource, databasePreviewState]);
 
-  const handleMarkerSelect = useCallback((marker, nearbyMarkers) => {
-    // Selecting a marker always reveals its details, even after a collapse.
-    setSelectedMarker(marker);
-    setSelectedMarkers(
-      Array.isArray(nearbyMarkers) && nearbyMarkers.length > 0
-        ? nearbyMarkers
-        : [marker],
-    );
-    setIsMarkerPanelCollapsed(false);
-  }, []);
-
-  const handleMarkerPanelCollapse = useCallback(() => {
-    setIsMarkerPanelCollapsed((isCollapsed) => !isCollapsed);
-  }, []);
-
-  const handleMarkerPanelClose = useCallback(() => {
-    // Clearing the selection unmounts both the panel and its collapsed control.
-    setSelectedMarker(null);
-    setSelectedMarkers([]);
-    setIsMarkerPanelCollapsed(false);
-  }, []);
-
   const updateDesktopDatasetEnabled = useCallback(async (datasetId, enabled) => {
     if (!desktopDatasetVisibilityAvailable) return;
 
@@ -444,9 +431,6 @@ export default function App() {
             : dataset
         )),
       }));
-      setSelectedMarker(null);
-      setSelectedMarkers([]);
-      setIsMarkerPanelCollapsed(false);
       setDesktopDataRevision((revision) => revision + 1);
       setDesktopVisibilityState((current) => ({
         pendingDatasetIds: current.pendingDatasetIds.filter(
@@ -503,9 +487,6 @@ export default function App() {
         ...current,
         datasets: current.datasets.filter((item) => item.id !== datasetId),
       }));
-      setSelectedMarker(null);
-      setSelectedMarkers([]);
-      setIsMarkerPanelCollapsed(false);
       if (databaseSelectedId === datasetId) {
         previewRequestRef.current += 1;
         setDatabaseSelectedId(null);
@@ -582,9 +563,7 @@ export default function App() {
           dataset.id === datasetId ? { ...dataset, ...result.dataset } : dataset
         )),
       }));
-      setSelectedMarker(null);
-      setSelectedMarkers([]);
-      setIsMarkerPanelCollapsed(false);
+      handleFeaturePanelClose();
       setDesktopDataRevision((revision) => revision + 1);
       setDatabaseMappingState({ pendingDatasetId: null, error: null });
     } catch (error) {
@@ -598,6 +577,7 @@ export default function App() {
   }, [
     dataSource,
     desktopCapabilities.datasetMapping,
+    handleFeaturePanelClose,
     usesViewportQueries,
   ]);
 
@@ -799,27 +779,14 @@ export default function App() {
     mapViewport,
   ]);
 
+  // Keep the last completed map visible while a timeline or viewport query runs.
+  // The newest response replaces it atomically, avoiding flicker for features that still match.
   const desktopMapFeatures = useMemo(
     () => toLegacyMapFeatures(desktopMapViewState.result),
     [desktopMapViewState.result],
   );
   const activeMapFeatures = desktopMapFeatures;
   const viewportQueryStats = desktopMapViewState.result?.stats ?? null;
-  // Compact SQLite results load complete source rows only on demand.
-  const getDesktopFeatureDetails = useCallback(
-    (query) => dataSource.getFeatureDetails(query),
-    [dataSource],
-  );
-  const activeFeatureDetailsLoader = desktopSqliteMapAvailable
-    ? getDesktopFeatureDetails
-    : null;
-  const getDesktopGroupRows = useCallback(
-    (query) => dataSource.getGroupRows(query),
-    [dataSource],
-  );
-  const activeGroupRowsLoader = desktopSqliteMapAvailable
-    ? getDesktopGroupRows
-    : null;
   const getCompleteLogicalZone = useCallback(
     (query) => dataSource.getLogicalZone(query),
     [dataSource],
@@ -889,13 +856,11 @@ export default function App() {
           points={activeMapFeatures.points.points}
           regions={activeMapFeatures.regions.polygons}
           lines={activeMapFeatures.lines.lines}
-          getSourceRow={activeMapFeatures.getSourceRow}
-          getFeatureDetails={activeFeatureDetailsLoader}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
           clusterRadius={mapToolsApi.state.clusterRadius}
           onViewportChange={setMapViewport}
-          onMarkerSelect={handleMarkerSelect}
-          selectedMarker={selectedMarker}
+          onFeatureSelect={handleFeatureSelect}
+          selectedFeature={selectedFeature}
           zoneEditingEnabled={
             desktopCapabilities.zoneEditing && !!mapToolsApi.state.zoneEditingEnabled
           }
@@ -961,15 +926,15 @@ export default function App() {
         </CsvPanelOverlay>
 
         <MarkerDetailsPanel
-          marker={selectedMarker}
-          markers={selectedMarkers}
+          feature={selectedFeature}
+          nearbyMarkers={nearbyMarkers}
+          getFeatureDetails={featureSelection.getFeatureDetails}
           leftOffset={csvPanelVisibleWidth}
-          getSourceRow={activeMapFeatures.getSourceRow}
-          getFeatureDetails={activeFeatureDetailsLoader}
-          getGroupRows={activeGroupRowsLoader}
-          isCollapsed={isMarkerPanelCollapsed}
-          onToggleCollapse={handleMarkerPanelCollapse}
-          onClose={handleMarkerPanelClose}
+          getGroupRows={featureSelection.getGroupRows}
+          refreshError={featureSelection.groupRefreshError}
+          isCollapsed={featureSelection.isCollapsed}
+          onToggleCollapse={featureSelection.toggleCollapse}
+          onClose={handleFeaturePanelClose}
         />
       </div>
     </div>
@@ -993,7 +958,6 @@ function toLegacyMapFeatures(mapView) {
       skipped: mapView?.stats?.skippedRegions ?? 0,
       skippedByTimeline: mapView?.stats?.skippedRegionsByTimeline ?? 0,
     },
-    getSourceRow: () => null,
     stats: mapView?.stats ?? null,
   };
 }

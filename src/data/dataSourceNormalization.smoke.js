@@ -312,3 +312,13 @@ assert.deepEqual(groupRows, {
 });
 
 console.log('DataSource normalization smoke test passed.');
+
+// Compact timeline metadata must retain backend endpoint order and remain separate from details.
+const storedTimeline = normalizeMapViewResult({
+  points: [{ id: 'reversed', lat: 1, lon: 1, timelineExtent: { startYear: 1200, endYear: 900 } }],
+  lines: [{ id: 'line', coordinates: [[1, 1], [2, 2]], timelineExtent: { startYear: 1000, endYear: 1100 } }],
+  regions: [{ id: 'zone', coordinates: [[1, 1], [2, 2], [1, 2]], timelineExtent: { startYear: null, endYear: null } }],
+});
+assert.deepEqual(storedTimeline.points[0].timelineExtent, { startYear: 1200, endYear: 900 });
+assert.deepEqual(storedTimeline.lines[0].timelineExtent, { startYear: 1000, endYear: 1100 });
+assert.equal(storedTimeline.regions[0].timelineExtent, null);

@@ -183,6 +183,9 @@ export function normalizeImportFileResult(value, context = {}) {
     rowCount: normalizeNonNegativeInteger(value.rowCount),
     importedFeatureCount: normalizeNonNegativeInteger(value.importedFeatureCount),
     skippedRowCount: normalizeNonNegativeInteger(value.skippedRowCount),
+    ...(value.unmappedRowCount != null ? {
+      unmappedRowCount: normalizeNonNegativeInteger(value.unmappedRowCount),
+    } : {}),
     warnings: normalizeStringList(
       value.warnings ?? value.parseErrors,
       MAX_STRING_LIST_ITEMS,
@@ -261,6 +264,10 @@ export function normalizeDatasetSummaryItem(value) {
     headers: normalizeStringList(value.headers),
     rowCount: normalizeNonNegativeInteger(value.rowCount),
     totalRows: normalizeNonNegativeInteger(value.totalRows ?? value.rowCount),
+    // Desktop migrations can retain fewer rows than were originally parsed.
+    ...(value.missingSourceRowCount != null ? {
+      missingSourceRowCount: normalizeNonNegativeInteger(value.missingSourceRowCount),
+    } : {}),
     sizeBytes: normalizeOptionalNonNegativeInteger(value.sizeBytes ?? value.size),
     importedFeatureCount: normalizeOptionalNonNegativeInteger(value.importedFeatureCount),
     skippedRowCount: normalizeOptionalNonNegativeInteger(value.skippedRowCount),
@@ -405,13 +412,20 @@ export function normalizePreviewPageResult(value, query = {}) {
   );
   const rows = normalizeRows(source.rows).slice(0, limit);
   const totalRows = Math.max(
-    offset + rows.length,
+    // An empty page beyond the end does not imply that its offset exists.
+    rows.length > 0 ? offset + rows.length : 0,
     normalizeNonNegativeInteger(source.totalRows, rows.length),
   );
 
   return {
     datasetId,
     rows,
+    // A migrated page may have gaps in source positions; never infer identities
+    // from its offset. Older backends can omit this optional parallel array.
+    ...(Array.isArray(source.sourceRowIndices) ? {
+      sourceRowIndices: rows.map((_, index) =>
+        normalizeOptionalNonNegativeInteger(source.sourceRowIndices[index])),
+    } : {}),
     offset,
     limit,
     totalRows,

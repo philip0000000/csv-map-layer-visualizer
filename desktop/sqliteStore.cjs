@@ -4,7 +4,7 @@ const Database = require("better-sqlite3");
 const { rebuildSqliteDatasetRegions } = require("./sqliteZoneService.cjs");
 
 /**
- * Open the SQLite database and make sure the prototype schema exists.
+ * Open the SQLite database and apply compatible storage migrations.
  */
 function openSqliteStore(dbPath) {
   if (!dbPath || typeof dbPath !== "string") {
@@ -17,8 +17,7 @@ function openSqliteStore(dbPath) {
 }
 
 /**
- * Create the import schema and future query indexes.
- * Later issues can query these tables without changing the browser CSV flow.
+ * Create desktop storage and upgrade legacy datasets without rereading CSV files.
  */
 function initializeSchema(db) {
   db.pragma("journal_mode = WAL");
@@ -89,6 +88,43 @@ function initializeSchema(db) {
   ensureDatasetEnabledColumn(db);
   ensureDatasetRecommendedTimelineColumns(db);
   migratePersistentRegions(db);
+  migrateSourceRows(db);
+}
+
+/** Preserve legacy edited rows and install source storage once, atomically. */
+function migrateSourceRows(db) {
+  const version = Number(db.pragma("user_version", { simple: true })) || 0;
+  if (version >= 2) return;
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE source_rows (
+        dataset_id TEXT NOT NULL,
+        source_row_index INTEGER NOT NULL CHECK (source_row_index >= 0),
+        row_json TEXT NOT NULL,
+        PRIMARY KEY (dataset_id, source_row_index),
+        FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE
+      ) WITHOUT ROWID;
+
+      -- Preserve gaps and committed edits; discarded rows cannot be recovered here.
+      INSERT INTO source_rows (dataset_id, source_row_index, row_json)
+      SELECT dataset_id, source_row_index, row_json FROM features;
+
+      -- Keep the feature copy for existing detail and zone-edit callers. Triggers
+      -- synchronize their writes in the same transaction, including older callers.
+      CREATE TRIGGER features_insert_source_row AFTER INSERT ON features
+      BEGIN
+        INSERT INTO source_rows (dataset_id, source_row_index, row_json)
+        VALUES (NEW.dataset_id, NEW.source_row_index, NEW.row_json)
+        ON CONFLICT (dataset_id, source_row_index) DO UPDATE SET row_json = excluded.row_json;
+      END;
+      CREATE TRIGGER features_update_source_row AFTER UPDATE OF row_json ON features
+      BEGIN
+        UPDATE source_rows SET row_json = NEW.row_json
+        WHERE dataset_id = NEW.dataset_id AND source_row_index = NEW.source_row_index;
+      END;
+    `);
+    db.pragma("user_version = 2");
+  })();
 }
 
 /** Materialize regions once for databases imported before zone storage existed. */

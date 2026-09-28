@@ -58,9 +58,33 @@ assert.equal(getFirstImportedDatasetId(failedBatch), null);
 
 const vite = await createServer({
   appType: 'custom',
+  // This SSR-only check does not need a background browser dependency scan.
+  optimizeDeps: { noDiscovery: true, include: [] },
   server: { middlewareMode: true },
 });
 try {
+  const { default: CsvFileControls } = await vite.ssrLoadModule(
+    '/src/components/csv-panel/CsvFileControls.jsx',
+  );
+  // Render both counter meanings through the same component; desktop invalid
+  // coordinates remain retained, while browser parsing skips are not relabeled.
+  const desktopCounts = renderToStaticMarkup(React.createElement(CsvFileControls, {
+    files: [{ id: 'desktop', name: 'unmapped.csv', rowCount: 65,
+      importedFeatureCount: 0, missingSourceRowCount: 0, rows: [{ name: 'Only loaded row' }] }],
+    desktopImport: { isAvailable: true, status: 'imported', summary: { results: [{ ok: true,
+      fileName: 'unmapped.csv', rowCount: 65, importedFeatureCount: 0,
+      skippedRowCount: 65, unmappedRowCount: 65 }] } },
+  }));
+  assert.match(desktopCounts, /class="csvFileRows">65</);
+  assert.match(desktopCounts, /Retained 65 rows; 0 map feature\(s\); 65 row\(s\) unavailable for map features/);
+  const browserCounts = renderToStaticMarkup(React.createElement(CsvFileControls, {
+    files: [{ id: 'browser', name: 'browser.csv', rowCount: 65, importedFeatureCount: 60 }],
+    desktopImport: { isAvailable: true, status: 'imported', summary: { results: [{ ok: true,
+      fileName: 'browser.csv', rowCount: 65, importedFeatureCount: 60, skippedRowCount: 2 }] } },
+  }));
+  assert.match(browserCounts, /class="csvFileRows">60</);
+  assert.match(browserCounts, /Imported 60 of 65 rows, skipped 2/);
+  assert.doesNotMatch(browserCounts, /unavailable for map features/);
   const { default: CsvPreviewTable } = await vite.ssrLoadModule(
     '/src/components/csv-panel/CsvPreviewTable.jsx',
   );

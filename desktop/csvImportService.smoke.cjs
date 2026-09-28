@@ -37,6 +37,7 @@ function verifyMixedBatchImport() {
     assert.equal(result.ok, true);
     assert.equal(result.successfulCount, 2);
     assert.equal(result.failedCount, 1);
+    assert.equal(result.results[2].unmappedRowCount, 1);
     assert.deepEqual(result.results.map((item) => ({
       ok: item.ok,
       fileName: item.fileName,

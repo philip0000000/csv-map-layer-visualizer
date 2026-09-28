@@ -118,7 +118,8 @@ function updateSqliteLogicalZone({ db, datasetId, featureId, parts }) {
     WHERE dataset_id = ? AND feature_id = ? AND part = ?
   `);
 
-  // better-sqlite3 rolls every source-row and part update back if any statement fails.
+  // Feature-write triggers synchronize source_rows for Preview/export. SQLite
+  // rolls those writes and every part update back together if a statement fails.
   const commit = db.transaction(() => {
     for (const part of submittedParts) {
       const vertices = verticesByPart.get(part.part);

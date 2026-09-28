@@ -68,7 +68,7 @@ function importCsvFileToSqlite({ db, filePath }) {
     recommendedTimelineRange,
   };
 
-  insertImportResult(db, summary, importRows.features);
+  insertImportResult(db, summary, importRows.features, parsed.rows);
 
   return summary;
 }
@@ -117,10 +117,14 @@ function importCsvFilesToSqlite({ db, filePaths, onProgress = null }) {
       const summary = importCsvFileToSqlite({ db, filePath });
       const result = {
         ok: true,
+        datasetId: summary.datasetId,
         fileName: summary.fileName,
         rowCount: summary.rowCount,
         importedFeatureCount: summary.importedFeatureCount,
         skippedRowCount: summary.skippedRowCount,
+        // Retain the legacy counter for existing callers, while describing its
+        // desktop meaning explicitly to the shared import-results interface.
+        unmappedRowCount: summary.skippedRowCount,
         detectedFields: summary.detectedFields,
         parseErrors: summary.parseErrors,
       };
@@ -239,7 +243,8 @@ function detectFields(headers) {
 
 /**
  * Convert parsed CSV rows into rows that match the prototype SQLite schema.
- * Rows without valid coordinates are counted as skipped.
+ * Rows without valid coordinates are excluded from map features, but retained
+ * separately as source rows for Preview and export.
  */
 function buildImportRows({ datasetId, rows, detectedFields }) {
   const features = [];
@@ -288,10 +293,10 @@ function buildImportRows({ datasetId, rows, detectedFields }) {
 }
 
 /**
- * Store dataset metadata and feature rows in one transaction.
+ * Store all source rows, metadata, and derived features in one transaction.
  * This keeps partial imports out of the database if an insert fails.
  */
-function insertImportResult(db, summary, features) {
+function insertImportResult(db, summary, features, sourceRows) {
   const insertDataset = db.prepare(`
     INSERT INTO datasets (
       id,
@@ -323,6 +328,10 @@ function insertImportResult(db, summary, features) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
+  const insertSourceRow = db.prepare(`
+    INSERT INTO source_rows (dataset_id, source_row_index, row_json)
+    VALUES (?, ?, ?)
+  `);
   const runImport = db.transaction(() => {
     insertDataset.run(
       summary.datasetId,
@@ -337,6 +346,10 @@ function insertImportResult(db, summary, features) {
       new Date().toISOString(),
     );
 
+    // Source positions remain stable even when a row cannot produce geometry.
+    sourceRows.forEach((row, rowIndex) => {
+      insertSourceRow.run(summary.datasetId, rowIndex, JSON.stringify(row));
+    });
     for (const feature of features) {
       insertFeature.run(
         feature.id,

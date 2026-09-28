@@ -70,6 +70,8 @@ export default function App() {
     error: null,
   });
   const previewRequestRef = React.useRef(0);
+  const selectionRequestRef = React.useRef(0);
+  const [previewRevision, setPreviewRevision] = useState(0);
   const mapQueryRequestRef = React.useRef(0);
   const [desktopVisibilityState, setDesktopVisibilityState] = useState({
     pendingDatasetIds: [],
@@ -292,19 +294,30 @@ export default function App() {
         queryError: null,
       };
 
-  /** Select one database dataset and invalidate preview requests for the old one. */
+  /** Resolve the latest selection without canceling a still-valid page on a same-file click. */
   const selectDatabaseDataset = useCallback(async (datasetId) => {
     if (!usesViewportQueries || !desktopCapabilities.datasetSelection) return;
-    const requestId = previewRequestRef.current + 1;
-    previewRequestRef.current = requestId;
-    const result = await dataSource.selectDataset(datasetId);
-    if (result?.ok && previewRequestRef.current === requestId) {
-      setDatabaseSelectedId(result.datasetId);
+    const requestId = ++selectionRequestRef.current;
+    try {
+      const result = await dataSource.selectDataset(datasetId);
+      if (selectionRequestRef.current !== requestId) return;
+      if (!result?.ok) throw new Error(result?.error?.message ?? "Could not select the CSV dataset.");
+      if (result.datasetId !== databaseSelectedId) {
+        previewRequestRef.current += 1;
+        setDatabaseSelectedId(result.datasetId);
+      }
+    } catch (error) {
+      if (selectionRequestRef.current !== requestId) return;
+      setDatabasePreviewState((current) => ({
+        ...current, error: error?.message ?? "Could not select the CSV dataset.",
+      }));
     }
-  }, [dataSource, desktopCapabilities.datasetSelection, usesViewportQueries]);
+  }, [dataSource, databaseSelectedId, desktopCapabilities.datasetSelection, usesViewportQueries]);
 
   /** Load the first bounded preview page and reject stale dataset responses. */
   useEffect(() => {
+    // Also invalidate appended-page requests when selection is cleared or edited.
+    const requestId = ++previewRequestRef.current;
     if (
       !usesViewportQueries ||
       !desktopCapabilities.previewPaging ||
@@ -322,8 +335,6 @@ export default function App() {
       return undefined;
     }
 
-    const requestId = previewRequestRef.current + 1;
-    previewRequestRef.current = requestId;
     setDatabasePreviewState({
       status: "loading",
       datasetId: databaseSelectedId,
@@ -343,6 +354,7 @@ export default function App() {
         status: "loaded",
         datasetId: databaseSelectedId,
         rows: page.rows,
+        sourceRowIndices: page.sourceRowIndices,
         totalRows: page.totalRows,
         hasMore: page.hasMore,
         error: null,
@@ -360,13 +372,12 @@ export default function App() {
     });
 
     return () => {
-      if (previewRequestRef.current === requestId) {
-        previewRequestRef.current += 1;
-      }
+      previewRequestRef.current += 1;
     };
   }, [
     dataSource,
     databaseSelectedId,
+    previewRevision,
     desktopCapabilities.previewPaging,
     initialization,
     usesViewportQueries,
@@ -375,7 +386,8 @@ export default function App() {
   /** Append one deterministic preview page without reloading earlier rows. */
   const loadMoreDatabasePreview = useCallback(async () => {
     const current = databasePreviewState;
-    if (current.status !== "loaded" || !current.hasMore || !current.datasetId) return;
+    if (current.status !== "loaded" || !current.hasMore || !current.datasetId
+      || current.datasetId !== databaseSelectedId) return;
     const requestId = previewRequestRef.current + 1;
     previewRequestRef.current = requestId;
     setDatabasePreviewState((state) => ({ ...state, status: "loading-more" }));
@@ -390,6 +402,9 @@ export default function App() {
         status: "loaded",
         datasetId: current.datasetId,
         rows: [...current.rows, ...page.rows],
+        sourceRowIndices: page.sourceRowIndices
+          ? [...(current.sourceRowIndices ?? []), ...page.sourceRowIndices]
+          : undefined,
         totalRows: page.totalRows,
         hasMore: page.hasMore,
         error: null,
@@ -402,7 +417,7 @@ export default function App() {
         error: error?.message ? String(error.message) : "Could not load more preview rows.",
       });
     }
-  }, [dataSource, databasePreviewState]);
+  }, [dataSource, databasePreviewState, databaseSelectedId]);
 
   const updateDesktopDatasetEnabled = useCallback(async (datasetId, enabled) => {
     if (!desktopDatasetVisibilityAvailable) return;
@@ -491,6 +506,8 @@ export default function App() {
         previewRequestRef.current += 1;
         setDatabaseSelectedId(null);
       }
+      // A delayed selection of a now-removed file must not restore it.
+      selectionRequestRef.current += 1;
       setDesktopDataRevision((revision) => revision + 1);
       setDesktopRemovalState((current) => ({
         pendingDatasetIds: current.pendingDatasetIds.filter(
@@ -607,6 +624,9 @@ export default function App() {
       if (result?.ok) {
         const firstImportedDatasetId = getFirstImportedDatasetId(result);
         if (firstImportedDatasetId) {
+          // A selection started before import completed must not replace the new file.
+          selectionRequestRef.current += 1;
+          previewRequestRef.current += 1;
           setDatabaseSelectedId(firstImportedDatasetId);
         }
         setDesktopImportState({
@@ -793,7 +813,9 @@ export default function App() {
   );
   const updateCompleteLogicalZone = useCallback(async (request) => {
     const result = await dataSource.updateLogicalZone(request);
-    // One revision refreshes the viewport from committed SQLite geometry.
+    // Refresh Preview from committed source rows as well as the map geometry.
+    previewRequestRef.current += 1;
+    setPreviewRevision((revision) => revision + 1);
     setDesktopDataRevision((revision) => revision + 1);
     return result;
   }, [dataSource]);
@@ -813,6 +835,7 @@ export default function App() {
     ...dataset,
     size: dataset.sizeBytes,
     rows: dataset.id === databaseSelectedId ? databasePreviewState.rows : [],
+    sourceRowIndices: dataset.id === databaseSelectedId ? databasePreviewState.sourceRowIndices : undefined,
     previewStatus: dataset.id === databaseSelectedId
       ? databasePreviewState.status
       : "idle",

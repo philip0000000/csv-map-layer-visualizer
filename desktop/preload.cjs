@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld("csvMapDesktop", {
   },
   queryMapView: (query) => ipcRenderer.invoke("desktop:queryMapView", query),
   getDatasetSummary: () => ipcRenderer.invoke("desktop:getDatasetSummary"),
+  getPreviewPage: (query) => ipcRenderer.invoke("desktop:getPreviewPage", query),
   setDatasetEnabled: (datasetId, enabled) => ipcRenderer.invoke(
     "desktop:setDatasetEnabled",
     { datasetId, enabled },

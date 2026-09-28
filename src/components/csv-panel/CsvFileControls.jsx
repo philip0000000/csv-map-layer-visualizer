@@ -205,12 +205,7 @@ export default function CsvFileControls({
                       <div className="csvDesktopImportTitle">{result.fileName}</div>
                       {result.ok ? (
                         <>
-                          <div>
-                            Imported {result.importedFeatureCount} of {result.rowCount} rows
-                            {result.skippedRowCount
-                              ? `, skipped ${result.skippedRowCount}`
-                              : ""}.
-                          </div>
+                          <div>{formatImportCounts(result)}</div>
                           <div>Fields: {formatFieldList(result.detectedFields)}</div>
                           {result.warnings?.length > 0 && (
                             <div>{result.warnings.length} parsing warning(s).</div>
@@ -356,7 +351,11 @@ export default function CsvFileControls({
                 type="button"
                 className="csvFileNameButton"
                 aria-disabled={!canSelect}
-                onClick={() => onSelect?.(file.id)}
+                onClick={(event) => {
+                  // A filename click is one selection, not a second request from the row.
+                  event.stopPropagation();
+                  onSelect?.(file.id);
+                }}
               >
                 {file.name}
               </button>
@@ -485,7 +484,23 @@ function getImportErrorMessage(error) {
   return "Import failed.";
 }
 
+/** Distinguish retained desktop rows from browser rows skipped during parsing. */
+function formatImportCounts(result) {
+  if (result.unmappedRowCount != null) {
+    return `Retained ${result.rowCount} rows; ${result.importedFeatureCount} map feature(s)`
+      + (result.unmappedRowCount ? `; ${result.unmappedRowCount} row(s) unavailable for map features` : "")
+      + ".";
+  }
+  // Preserve browser import semantics: skipped rows may never have been stored.
+  return `Imported ${result.importedFeatureCount} of ${result.rowCount} rows`
+    + (result.skippedRowCount ? `, skipped ${result.skippedRowCount}` : "") + ".";
+}
+
+/** Display retained desktop totals, never just the rows loaded in the current page. */
 function getDisplayedRowCount(file) {
+  // Desktop summaries track legacy losses explicitly, including zero for new imports.
+  // Keep the browser's existing feature-count presentation unchanged.
+  if (file?.missingSourceRowCount != null) return normalizeCount(file.rowCount);
   if (file?.importedFeatureCount != null) {
     return normalizeCount(file.importedFeatureCount);
   }

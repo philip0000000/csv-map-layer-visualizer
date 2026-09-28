@@ -17,6 +17,7 @@ import {
   normalizeInitializationResult,
   normalizeMapViewResult,
   normalizeLogicalZoneResult,
+  normalizePreviewPageResult,
 } from './dataSourceNormalization.js';
 
 const DEFAULT_SQLITE_RENDER_BUDGET = 1000;
@@ -26,6 +27,7 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
   let disposed = false;
   let importSequence = 0;
   let activeImportId = null;
+  let selectedDatasetId = null;
   const progressCleanups = new Set();
   const capabilities = normalizeBackendCapabilities({
     persistence: 'persistent',
@@ -38,12 +40,12 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
       typeof desktopApi?.importDroppedCsvFiles === 'function',
     importProgress: typeof desktopApi?.onCsvImportProgress === 'function',
     importCancellation: false,
-    datasetSelection: false,
+    datasetSelection: typeof desktopApi?.getPreviewPage === 'function',
     datasetVisibility: typeof desktopApi?.setDatasetEnabled === 'function',
     datasetRemoval: typeof desktopApi?.removeDataset === 'function',
     datasetCsvExport: typeof desktopApi?.saveDatasetAsCsv === 'function',
     datasetMapping: false,
-    previewPaging: false,
+    previewPaging: typeof desktopApi?.getPreviewPage === 'function',
     points: typeof desktopApi?.queryMapView === 'function',
     lines: typeof desktopApi?.queryMapView === 'function',
     regions: typeof desktopApi?.queryMapView === 'function',
@@ -146,21 +148,41 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
       return normalizeImportCancellationResult(null, importId);
     },
 
+    /** Reconcile session selection against the retained datasets without loading rows. */
     async getDatasetSummary() {
       assertActive(DATA_SOURCE_METHODS.getDatasetSummary);
       requireMethod(desktopApi?.getDatasetSummary, DATA_SOURCE_METHODS.getDatasetSummary);
       try {
         const result = await desktopApi.getDatasetSummary();
         if (!isRecord(result)) throw new TypeError('Malformed dataset summary');
-        return normalizeDatasetSummary(result);
+        const summary = normalizeDatasetSummary(result);
+        if (!summary.datasets.some((dataset) => dataset.id === selectedDatasetId)) {
+          selectedDatasetId = capabilities.datasetSelection ? summary.datasets[0]?.id ?? null : null;
+        }
+        return { ...summary, selectedDatasetId };
       } catch {
         throw queryFailure(DATA_SOURCE_METHODS.getDatasetSummary);
       }
     },
 
-    selectDataset(datasetId) {
+    /** Selection is session state only; it never changes persistent visibility. */
+    async selectDataset(datasetId) {
       assertActive(DATA_SOURCE_METHODS.selectDataset);
-      return unsupportedMutation(DATA_SOURCE_METHODS.selectDataset, datasetId);
+      if (!capabilities.datasetSelection) {
+        return unsupportedMutation(DATA_SOURCE_METHODS.selectDataset, datasetId);
+      }
+      const id = normalizeId(datasetId);
+      try {
+        const summary = normalizeDatasetSummary(await desktopApi.getDatasetSummary());
+        const dataset = id ? summary.datasets.find((item) => item.id === id) : summary.datasets[0];
+        if (id && !dataset) return normalizeDatasetMutationResult(null, { datasetId: id });
+        const nextId = dataset?.id ?? null;
+        const changed = nextId !== selectedDatasetId;
+        selectedDatasetId = nextId;
+        return normalizeDatasetMutationResult({ ok: true, changed, datasetId: nextId, dataset });
+      } catch {
+        return failedMutation(DATA_SOURCE_METHODS.selectDataset, id);
+      }
     },
 
     async setDatasetEnabled(datasetId, enabled) {
@@ -243,13 +265,21 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
       };
     },
 
-    getPreviewPage(query = {}) {
+    /** Request only bounded source rows through the fixed desktop bridge. */
+    async getPreviewPage(query = {}) {
       assertActive(DATA_SOURCE_METHODS.getPreviewPage);
-      throw unsupportedFailure(
-        DATA_SOURCE_METHODS.getPreviewPage,
-        'Dataset preview is unavailable in the desktop backend.',
-        { datasetId: query.datasetId },
-      );
+      requireMethod(desktopApi?.getPreviewPage, DATA_SOURCE_METHODS.getPreviewPage);
+      try {
+        const result = await desktopApi.getPreviewPage({
+          datasetId: normalizeId(query.datasetId),
+          offset: query.offset ?? 0,
+          limit: query.limit ?? 30,
+        });
+        if (!isRecord(result)) throw new TypeError('Malformed preview result');
+        return normalizePreviewPageResult(result, query);
+      } catch {
+        throw queryFailure(DATA_SOURCE_METHODS.getPreviewPage);
+      }
     },
 
     async queryMapView(query = {}) {
@@ -326,6 +356,7 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
     dispose() {
       if (disposed) return;
       disposed = true;
+      selectedDatasetId = null;
       activeImportId = null;
       for (const cleanup of [...progressCleanups]) cleanup();
     },

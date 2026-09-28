@@ -17,12 +17,12 @@ function exportSqliteDatasetCsv({ db, datasetId } = {}) {
   const headers = parseHeaders(dataset.columns_json);
   const storedRows = db.prepare(`
     SELECT row_json
-    FROM features
+    FROM source_rows
     WHERE dataset_id = ?
     ORDER BY source_row_index
   `).all(normalizedId);
 
-  // Zone commits update the original coordinate keys in row_json. Header-driven
+  // Zone commits synchronize source row_json through feature-write triggers. Header-driven
   // arrays therefore retain those coordinates and exclude every internal column.
   const rows = storedRows.map((stored) => {
     const row = parseStoredRow(stored.row_json);
@@ -47,7 +47,7 @@ function parseHeaders(value) {
   return headers;
 }
 
-/** Parse one accepted source row without accepting internal or array-shaped data. */
+/** Parse one retained source row without accepting internal or array-shaped data. */
 function parseStoredRow(value) {
   const row = parseJson(value);
   if (!row || typeof row !== "object" || Array.isArray(row)) {

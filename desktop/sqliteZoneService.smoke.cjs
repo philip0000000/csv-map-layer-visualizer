@@ -5,6 +5,7 @@ const Database = require("better-sqlite3");
 const Papa = require("papaparse");
 const { exportSqliteDatasetCsv } = require("./sqliteDatasetExport.cjs");
 const { initializeSchema } = require("./sqliteStore.cjs");
+const { getSqlitePreviewPage } = require("./sqliteDatasetService.cjs");
 const { querySqliteMapView } = require("./sqliteViewportQuery.cjs");
 const {
   getSqliteLogicalZone,
@@ -82,6 +83,7 @@ try {
     { header: true, skipEmptyLines: true },
   ).data;
   assert.deepEqual(exportedRows[0], { name: "Zone", lat: "2", lon: "3" });
+  assert.deepEqual(getSqlitePreviewPage({ db, datasetId: "dataset-a" }).rows[0], exportedRows[0]);
 
   db.exec(`
     CREATE TRIGGER fail_zone_update BEFORE UPDATE ON geometry_features
@@ -96,6 +98,8 @@ try {
       coordinates: part.coordinates.map(([lat, lon]) => [lat + 1, lon + 1]),
     })),
   }));
+  // A failed geometry commit must also roll back trigger-synchronized Preview rows.
+  assert.deepEqual(getSqlitePreviewPage({ db, datasetId: "dataset-a" }).rows[0], exportedRows[0]);
   assert.deepEqual(
     db.prepare("SELECT lat, lon FROM features WHERE id = 'dataset-a:0'").get(),
     { lat: 2, lon: 3 },

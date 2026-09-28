@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Return lightweight dataset metadata without reading feature rows into memory.
+ * Return dataset metadata and retained-row counts without loading row payloads.
  */
 function getSqliteDatasetSummary({ db } = {}) {
   assertOpenDatabase(db);
@@ -11,6 +11,7 @@ function getSqliteDatasetSummary({ db } = {}) {
       id,
       file_name,
       row_count,
+      (SELECT COUNT(*) FROM source_rows WHERE dataset_id = datasets.id) AS stored_row_count,
       imported_feature_count,
       skipped_row_count,
       columns_json,
@@ -51,7 +52,7 @@ function setSqliteDatasetEnabled({ db, datasetId, enabled } = {}) {
 }
 
 /**
- * Remove one stored dataset. Its features are deleted by the database cascade.
+ * Remove one dataset; source rows and derived features are deleted by cascade.
  */
 function removeSqliteDataset({ db, datasetId } = {}) {
   assertOpenDatabase(db);
@@ -67,14 +68,16 @@ function removeSqliteDataset({ db, datasetId } = {}) {
   };
 }
 
+/** Report available rows separately from rows lost by legacy desktop imports. */
 function toDatasetSummaryItem(row) {
   return {
     id: String(row.id),
     name: String(row.file_name),
     enabled: row.enabled === 1,
     headers: parseStringArray(row.columns_json),
-    rowCount: normalizeCount(row.row_count),
-    totalRows: normalizeCount(row.row_count),
+    rowCount: normalizeCount(row.stored_row_count),
+    totalRows: normalizeCount(row.stored_row_count),
+    missingSourceRowCount: Math.max(0, normalizeCount(row.row_count) - normalizeCount(row.stored_row_count)),
     importedFeatureCount: normalizeCount(row.imported_feature_count),
     skippedRowCount: normalizeCount(row.skipped_row_count),
     recommendedTimelineRange: normalizeRecommendedTimelineRange(
@@ -83,6 +86,39 @@ function toDatasetSummaryItem(row) {
     ),
     importedAt: String(row.imported_at),
   };
+}
+
+/** Read a bounded original-order page, retaining source identities across legacy gaps. */
+function getSqlitePreviewPage({ db, datasetId, offset = 0, limit = 30 } = {}) {
+  assertOpenDatabase(db);
+  const id = normalizeDatasetId(datasetId);
+  if (!Number.isSafeInteger(offset) || offset < 0
+    || !Number.isSafeInteger(limit) || limit <= 0) {
+    throw new TypeError("Preview offset and limit must be valid integers.");
+  }
+  const pageLimit = Math.min(limit, 200);
+  // Metadata and rows share a read snapshot; no visibility or timeline filter applies.
+  return db.transaction(() => {
+    if (!db.prepare("SELECT id FROM datasets WHERE id = ?").get(id)) {
+      throw new Error("The requested dataset is unavailable.");
+    }
+    const totalRows = db.prepare(
+      "SELECT COUNT(*) AS count FROM source_rows WHERE dataset_id = ?",
+    ).get(id).count;
+    const stored = db.prepare(`
+      SELECT source_row_index, row_json FROM source_rows
+      WHERE dataset_id = ? ORDER BY source_row_index LIMIT ? OFFSET ?
+    `).all(id, pageLimit, offset);
+    return {
+      datasetId: id,
+      rows: stored.map((row) => JSON.parse(row.row_json)),
+      sourceRowIndices: stored.map((row) => row.source_row_index),
+      offset,
+      limit: pageLimit,
+      totalRows,
+      hasMore: offset + stored.length < totalRows,
+    };
+  })();
 }
 
 /** Return a complete ordered recommendation, or an explicit null absence. */
@@ -130,6 +166,7 @@ function assertOpenDatabase(db) {
 }
 
 module.exports = {
+  getSqlitePreviewPage,
   getSqliteDatasetSummary,
   removeSqliteDataset,
   setSqliteDatasetEnabled,

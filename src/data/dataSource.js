@@ -207,6 +207,8 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {number} rowCount
  * @property {number} importedFeatureCount
  * @property {number} skippedRowCount
+ * @property {number} [unmappedRowCount] Desktop rows retained as source data but
+ *   excluded from map features; skippedRowCount remains for existing callers.
  * @property {string[]} warnings
  * @property {DetectedFields|null} detectedFields
  * @property {BackendFailure|null} error
@@ -308,6 +310,8 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
 
 /**
  * @typedef {object} PreviewPageResult
+ * @property {number[]} [sourceRowIndices] Original identities parallel to rows;
+ *   desktop legacy imports may have gaps, so page offsets are not identities.
  * @property {string} datasetId
  * @property {Record<string, string>[]} rows
  * @property {number} offset
@@ -552,6 +556,8 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
 
 /**
  * @typedef {object} DatasetSummaryItem
+ * @property {number} [missingSourceRowCount] Rows lost before source-row preservation;
+ *   retained row totals exclude these unavailable legacy rows.
  * @property {string} id
  * @property {string} name
  * @property {boolean} enabled

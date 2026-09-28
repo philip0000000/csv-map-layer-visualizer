@@ -5,6 +5,8 @@
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
+    "smoke:desktop-preview": "electron desktop/sqlitePreview.smoke.cjs",
+    "validate:desktop-preview": "node desktop/desktopPreviewValidation.cjs",
     "dev": "vite",
     "build": "vite build",
     "build:desktop": "vite build --mode desktop",

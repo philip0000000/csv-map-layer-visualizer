@@ -46,6 +46,7 @@ const desktopApi = {
         rowCount: 12,
         importedFeatureCount: 10,
         skippedRowCount: 2,
+        unmappedRowCount: 2,
         parseErrors: ['Parser warning'],
       }],
     };
@@ -70,6 +71,9 @@ const desktopApi = {
       importedAt: '2026-07-22T00:00:00.000Z',
     }],
     timeline: { yearMin: '1000', yearMax: 2026.9 },
+  }),
+  getPreviewPage: async (query) => ({
+    ...query, rows: [{ name: 'Retained row' }], sourceRowIndices: [7], totalRows: 1,
   }),
   setDatasetEnabled: async () => ({ updated: true, private: 'ignored' }),
   removeDataset: async () => ({ removed: true, private: 'ignored' }),
@@ -124,7 +128,8 @@ assert.equal(initialization.capabilities.nativeFilePickerImport, true);
 assert.equal(initialization.capabilities.droppedFileImport, true);
 assert.equal(initialization.capabilities.browserFileImport, false);
 assert.equal(initialization.capabilities.datasetMapping, false);
-assert.equal(initialization.capabilities.previewPaging, false);
+assert.equal(initialization.capabilities.previewPaging, true);
+assert.equal(initialization.capabilities.datasetSelection, true);
 assert.equal(initialization.capabilities.zoneEditing, true);
 assert.equal(initialization.capabilities.datasetCsvExport, true);
 
@@ -135,6 +140,7 @@ const unsubscribe = dataSource.subscribeImportProgress((progress) => {
 const pickerResult = await dataSource.importFromPicker();
 assert.equal(pickerResult.ok, true);
 assert.equal(pickerResult.successfulCount, 1);
+assert.equal(pickerResult.results[0].unmappedRowCount, 2);
 assert.deepEqual(pickerResult.results[0].warnings, ['Parser warning']);
 assert.equal(progressEvents.length, 2);
 assert.equal(progressEvents[0].importId, pickerResult.importId);
@@ -149,18 +155,20 @@ assert.deepEqual(droppedFilesRequest, [droppedFile]);
 assert.equal(dataSource.importBrowserFiles().error.category, 'backend-unavailable');
 assert.equal(dataSource.importExample().error.category, 'backend-unavailable');
 assert.equal(dataSource.cancelImport('import-1').error.category, 'backend-unavailable');
-assert.equal(dataSource.selectDataset('dataset-1').error.category, 'backend-unavailable');
+assert.equal((await dataSource.selectDataset('dataset-1')).ok, true);
+assert.equal((await dataSource.selectDataset('missing')).ok, false);
 assert.equal(
   dataSource.updateDatasetMapping('dataset-1', { latField: 'lat' }).error.category,
   'backend-unavailable',
 );
-assert.throws(
-  () => dataSource.getPreviewPage({ datasetId: 'dataset-1' }),
-  (error) => error.category === 'backend-unavailable',
-);
+const preview = await dataSource.getPreviewPage({ datasetId: 'dataset-1' });
+assert.deepEqual(preview.rows, [{ name: 'Retained row' }]);
+assert.deepEqual(preview.sourceRowIndices, [7]);
+assert.equal(preview.limit, 30);
+assert.equal(preview.hasMore, false);
 
 const summary = await dataSource.getDatasetSummary();
-assert.equal(summary.selectedDatasetId, null);
+assert.equal(summary.selectedDatasetId, 'dataset-1');
 assert.equal(summary.datasets[0].name, 'places.csv');
 assert.deepEqual(summary.datasets[0].headers, ['name', 'lat', 'lon']);
 assert.equal(summary.datasets[0].skippedRowCount, null);

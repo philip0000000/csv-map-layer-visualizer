@@ -7,6 +7,7 @@ const { importCsvFilesToSqlite } = require("./csvImportService.cjs");
 const { importDroppedCsvFilesToSqlite } = require("./droppedCsvImport.cjs");
 const {
   getSqliteDatasetSummary,
+  getSqlitePreviewPage,
   removeSqliteDataset,
   setSqliteDatasetEnabled,
 } = require("./sqliteDatasetService.cjs");
@@ -43,6 +44,22 @@ function getDevServerUrl() {
  * Keep file paths and database access in the main process.
  */
 function registerDesktopBridgeHandlers() {
+  // Only structured bounded paging crosses the bridge; SQL and paths stay here.
+  ipcMain.handle("desktop:getPreviewPage", (_event, query = {}) => {
+    let db;
+    try {
+      // Opening and migration failures need the same safe error as page reads.
+      db = openDesktopSqliteStore();
+      return getSqlitePreviewPage({
+        db, datasetId: query?.datasetId, offset: query?.offset, limit: query?.limit,
+      });
+    } catch {
+      // Never expose raw SQLite errors or filesystem paths to the renderer.
+      throw new Error("The requested desktop preview could not be loaded.");
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
   ipcMain.handle("desktop:getStatus", () => ({
     ok: true,
     runtime: "electron",

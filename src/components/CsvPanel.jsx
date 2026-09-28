@@ -15,11 +15,11 @@ import { getParsingWarningsMessageKey } from "./messageDismissalState";
  *
  * Left-side (overlay) panel that lets the user:
  * - Import one or more CSV files
- * - Select one CSV file for preview in browser mode
+ * - Select one CSV file for paginated preview in either runtime
  * - Enable or disable CSV files for map display
  * - Unload browser files or remove desktop datasets
  * - Save one loaded dataset's current SQLite state as CSV
- * - Preview basic metadata and a few rows in browser mode
+ * - Preview basic metadata and bounded source-row pages
  *
  * This component does NOT parse CSV files itself.
  * Parsing and storage are handled by the browser hook or desktop bridge.
@@ -532,6 +532,14 @@ export default function CsvPanel({
               totalRows={selected.totalRows}
               columnCount={selected.headers.length}
             />
+            {selected.missingSourceRowCount > 0 && (
+              <div className="csvPreviewHint" role="status">
+                {selected.missingSourceRowCount} row(s) were discarded by an older desktop import.
+                Preview and export include only the retained rows. Reimport the original CSV
+                to recover missing rows. Edits made to this dataset will not automatically
+                transfer to the new import.
+              </div>
+            )}
 
             {/* =========================
                 Coordinate mapping
@@ -542,14 +550,14 @@ export default function CsvPanel({
                 The choices are saved per file and used later
                 to create map points.
             */}
-            <CoordinateMapping
+            {onUpdateMapping && <CoordinateMapping
               fileId={selected.id}
               headers={selected.headers}
               latField={selected.latField}
               lonField={selected.lonField}
               onUpdateMapping={onUpdateMapping}
               disabled={mappingState?.pendingDatasetId === selected.id}
-            />
+            />}
             {mappingState?.error && (
               <DismissibleMessage
                 className="csvDesktopImportStatus csvDesktopImportStatusError"

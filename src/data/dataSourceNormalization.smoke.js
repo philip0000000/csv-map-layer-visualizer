@@ -217,6 +217,13 @@ assert.deepEqual(preview, {
   hasMore: true,
 });
 
+// Empty pages beyond the end must preserve the backend's actual row count.
+const beyondPreviewEnd = normalizePreviewPageResult({
+  datasetId: 'dataset-1', rows: [], offset: 100, limit: 30, totalRows: 65,
+});
+assert.equal(beyondPreviewEnd.totalRows, 65);
+assert.equal(beyondPreviewEnd.hasMore, false);
+
 const mapView = normalizeMapViewResult({
   points: [
     {

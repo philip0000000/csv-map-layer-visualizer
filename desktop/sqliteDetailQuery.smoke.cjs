@@ -79,6 +79,7 @@ function runGroupedPagingSmoke(db) {
   const {
     DEFAULT_GROUP_ROWS_LIMIT,
     getSqliteGroupRows,
+    getSqliteGroupBounds,
   } = require('./sqliteDetailQuery.cjs');
   // The fixture includes other dates, cells, and a region vertex to prove the saved group filter.
   const groupRef = {
@@ -115,6 +116,13 @@ function runGroupedPagingSmoke(db) {
     groupRef,
     offset: 2,
     limit: 2,
+  });
+  const allGroupRows = [...firstPage.rows, ...secondPage.rows];
+  assert.deepEqual(getSqliteGroupBounds({ db, groupRef }), {
+    south: Math.min(...allGroupRows.map((row) => Number(row.latitude))),
+    north: Math.max(...allGroupRows.map((row) => Number(row.latitude))),
+    west: Math.min(...allGroupRows.map((row) => Number(row.longitude))),
+    east: Math.max(...allGroupRows.map((row) => Number(row.longitude))),
   });
 
   assert.deepEqual(firstPage, {

@@ -208,7 +208,8 @@ function selectGroupedPoints(database, filter, grid) {
   });
 }
 
-function exactRowToPoint(row) {
+/** Reuse the exact map identity and style for Preview-to-map selection. */
+export function exactRowToPoint(row) {
   const compact = parseJsonObject(row.compact_json);
   const datasetId = String(row.dataset_id);
   const rowIndex = normalizeCount(row.source_row_index);

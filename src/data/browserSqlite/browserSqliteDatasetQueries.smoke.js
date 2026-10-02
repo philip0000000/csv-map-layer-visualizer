@@ -64,6 +64,7 @@ try {
       { name: 'First', lat: '59.3', lon: '18.1' },
       { name: 'No coordinates', note: 'row-only sentinel' },
     ],
+    sourceRowIndices: [0, 1],
     offset: 0,
     limit: 2,
     totalRows: 3,
@@ -77,6 +78,7 @@ try {
   }), {
     datasetId: 'dataset-newer',
     rows: [{}],
+    sourceRowIndices: [2],
     offset: 2,
     limit: 1,
     totalRows: 3,
@@ -96,6 +98,7 @@ try {
   }), {
     datasetId: 'dataset-newer',
     rows: [],
+    sourceRowIndices: [],
     offset: 3,
     limit: 30,
     totalRows: 3,

@@ -18,6 +18,7 @@ import {
 } from './browserSqliteDatasetQueries.js';
 import {
   getBrowserSqliteGroupRows,
+  getBrowserSqliteGroupBounds,
   getBrowserSqlitePointDetails,
 } from './browserSqlitePointDetails.js';
 import {
@@ -170,6 +171,14 @@ try {
     groupRef: dense.points[0].groupRef,
     offset: 2,
     limit: 2,
+  });
+  const groupBounds = getBrowserSqliteGroupBounds(database, { groupRef: dense.points[0].groupRef });
+  const allGroupRows = [...firstPage.rows, ...secondPage.rows];
+  assert.deepEqual(groupBounds, {
+    south: Math.min(...allGroupRows.map((row) => Number(row.lat))),
+    north: Math.max(...allGroupRows.map((row) => Number(row.lat))),
+    west: Math.min(...allGroupRows.map((row) => Number(row.lon))),
+    east: Math.max(...allGroupRows.map((row) => Number(row.lon))),
   });
   assert.deepEqual(firstPage.rows.map((row) => row.name), ['First', 'Second']);
   assert.deepEqual(secondPage.rows.map((row) => row.name), [

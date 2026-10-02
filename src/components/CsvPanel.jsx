@@ -1,3 +1,5 @@
+import PreviewSearch from "./csv-panel/PreviewSearch";
+import { usePreviewRowMenu } from "./csv-panel/PreviewRowMenu";
 import React, { useMemo, useState } from "react";
 import DualRangeSlider from "./DualRangeSlider";
 import TimelineYearInput from "./TimelineYearInput";
@@ -20,11 +22,15 @@ import { getParsingWarningsMessageKey } from "./messageDismissalState";
  * - Unload browser files or remove desktop datasets
  * - Save one loaded dataset's current SQLite state as CSV
  * - Preview basic metadata and bounded source-row pages
+ * - Search stored rows and select their map features without navigating the map
  *
  * This component does NOT parse CSV files itself.
  * Parsing and storage are handled by the browser hook or desktop bridge.
  */
 export default function CsvPanel({
+  dataSource,
+  dataRevision,
+  onFeatureSelect,
   files,            // Array of loaded CSV file objects
   selectedId,       // ID of the currently selected CSV file
   onSelect,         // Callback to change selected CSV
@@ -60,6 +66,7 @@ export default function CsvPanel({
     () => files.find((f) => f.id === selectedId) || null,
     [files, selectedId]
   );
+  const rowMenu = usePreviewRowMenu({ dataSource, files, timeline: timelineState, revision: dataRevision, onFeatureSelect });
   const [dismissedInitializationError, setDismissedInitializationError] = useState(null);
   const [dismissedParsingWarningKeys, setDismissedParsingWarningKeys] = useState(
     () => new Set(),
@@ -163,6 +170,7 @@ export default function CsvPanel({
 
   return (
     <div className="csvPanel" role="region" aria-label="CSV files panel">
+      {rowMenu.overlay}
       {/* =========================
           Tool menus (Map)
           - Side-by-side headers
@@ -577,8 +585,14 @@ export default function CsvPanel({
               />
             )}
 
-            {/* Preview table */}
+            {/* Search shares this table area; normal Preview paging remains independent. */}
+            <PreviewSearch files={files} selected={selected} dataSource={dataSource}
+              revision={dataRevision} onRowContextMenu={rowMenu.open}>
             <CsvPreviewTable
+              showTitle={false}
+              onRowContextMenu={(event, index) => rowMenu.open(event, {
+                datasetId: selected.id, rowIndex: selected.sourceRowIndices?.[index] ?? index,
+              })}
               key={selected.id}
               headers={selected.headers}
               rows={selected.rows}
@@ -589,6 +603,7 @@ export default function CsvPanel({
               onShowMore={onLoadMorePreview}
               onDismissError={messageDismissal?.preview}
             />
+            </PreviewSearch>
 
           </>
         )}

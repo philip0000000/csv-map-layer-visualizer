@@ -365,9 +365,24 @@ function createEmptyGroupRowsResult(offset, limit) {
 }
 
 module.exports = {
+  getSqliteGroupBounds,
   DEFAULT_GROUP_ROWS_LIMIT,
   GROUP_ROWS_SORT_ORDER,
   MAX_GROUP_ROWS_LIMIT,
   getSqliteFeatureDetails,
   getSqliteGroupRows,
 };
+
+/** Aggregate every member of the captured group without loading its source rows. */
+function getSqliteGroupBounds({ db, groupRef } = {}) {
+  assertOpenDatabase(db);
+  const reference = normalizeGroupRef(groupRef);
+  if (!reference) throw new TypeError('A valid group reference is required.');
+  const filter = buildGroupWhereClause(reference);
+  const row = db.prepare(`SELECT MIN(lat) AS south, MAX(lat) AS north,
+    MIN(CASE WHEN @wrap = 1 AND lon < @westEdge THEN lon + 360 ELSE lon END) AS west,
+    MAX(CASE WHEN @wrap = 1 AND lon < @westEdge THEN lon + 360 ELSE lon END) AS east
+    FROM features ${filter.sql}`).get({ ...filter.params,
+    wrap: reference.bounds.west > reference.bounds.east ? 1 : 0, westEdge: reference.bounds.west });
+  return row?.south == null ? null : row;
+}

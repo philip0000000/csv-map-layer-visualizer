@@ -102,7 +102,8 @@ function selectGeometries(database, filter, geometryLimit) {
   `, { ...filter.params, $geometryLimit: geometryLimit });
 }
 
-function storedRowToGeometry(row) {
+/** Reuse the stored geometry identity and canonical detail row for Preview selection. */
+export function storedRowToGeometry(row) {
   const datasetId = normalizeNullableString(row.dataset_id);
   const geometryType = normalizeNullableString(row.geometry_type);
   const featureId = normalizeNullableString(row.feature_id);

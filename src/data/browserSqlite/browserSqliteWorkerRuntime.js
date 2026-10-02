@@ -1,3 +1,4 @@
+import { getBrowserSqlitePreviewFeature } from "./browserSqlitePreviewFeature.js";
 import {
   closeBrowserSqliteDatabase,
   createBrowserSqliteDatabase,
@@ -10,6 +11,7 @@ import {
 import {
   getBrowserSqliteDatasetSummary,
   getBrowserSqlitePreviewPage,
+  getBrowserSqliteSearchRows,
 } from './browserSqliteDatasetQueries.js';
 import {
   removeBrowserSqliteDataset,
@@ -20,6 +22,7 @@ import {
 } from './browserSqliteImportBatch.js';
 import {
   getBrowserSqliteGroupRows,
+  getBrowserSqliteGroupBounds,
   getBrowserSqliteFeatureDetails,
 } from './browserSqlitePointDetails.js';
 import {
@@ -173,6 +176,10 @@ export function createBrowserSqliteWorkerRuntime({
           requireDatabase(database),
           request.payload,
         );
+      case BROWSER_SQLITE_OPERATIONS.GET_SEARCH_ROWS:
+        return getBrowserSqliteSearchRows(requireDatabase(database), request.payload);
+      case BROWSER_SQLITE_OPERATIONS.GET_PREVIEW_FEATURE:
+        return getBrowserSqlitePreviewFeature(requireDatabase(database), request.payload);
       case BROWSER_SQLITE_OPERATIONS.GET_FEATURE_DETAILS:
         return getBrowserSqliteFeatureDetails(
           requireDatabase(database),
@@ -183,6 +190,8 @@ export function createBrowserSqliteWorkerRuntime({
           requireDatabase(database),
           request.payload,
         );
+      case BROWSER_SQLITE_OPERATIONS.GET_GROUP_BOUNDS:
+        return getBrowserSqliteGroupBounds(requireDatabase(database), request.payload);
       case BROWSER_SQLITE_OPERATIONS.GET_LOGICAL_ZONE:
         return getBrowserSqliteLogicalZone(
           requireDatabase(database),

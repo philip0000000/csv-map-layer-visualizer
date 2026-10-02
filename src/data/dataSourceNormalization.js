@@ -454,6 +454,26 @@ export function normalizeMapViewResult(value) {
   };
 }
 
+/** Validate bounded search pages while preserving exact source identities, including gaps. */
+export function normalizeSearchRowsResult(value) {
+  if (!Array.isArray(value?.rows) || !Array.isArray(value.sourceRowIndices)
+    || value.rows.length > 200 || value.rows.length !== value.sourceRowIndices.length
+    || value.sourceRowIndices.some((id, index, ids) => !Number.isSafeInteger(id) || id < 0
+      || (index > 0 && id <= ids[index - 1]))) throw new Error('Invalid search row response.');
+  const rows = normalizeRows(value.rows);
+  if (rows.length !== value.rows.length) throw new Error('Invalid search row response.');
+  return { rows, sourceRowIndices: [...value.sourceRowIndices], hasMore: value.hasMore === true };
+}
+
+/** Normalize a single Preview row lookup using the existing map feature contract. */
+export function normalizePreviewFeatureResult(value) {
+  const map = normalizeMapViewResult(value);
+  for (const [key, selectionKind] of [['points', 'point'], ['lines', 'line'], ['regions', 'region']]) {
+    if (map[key].length) return { ...map[key][0], selectionKind };
+  }
+  return null;
+}
+
 /** Normalize an exact feature detail lookup. */
 export function normalizeFeatureDetailsResult(value) {
   const source = isRecord(value) ? value : {};
@@ -463,6 +483,17 @@ export function normalizeFeatureDetailsResult(value) {
     latField: normalizeNullableString(source.latField),
     lonField: normalizeNullableString(source.lonField),
   };
+}
+
+/** Validate aggregate navigation bounds, including unwrapped longitudes. */
+export function normalizeGroupBoundsResult(value) {
+  if (value == null) return null;
+  const { north, south, east, west } = value;
+  if (![north, south, east, west].every(Number.isFinite)
+    || south < -90 || north > 90 || north < south || east < west || east - west > 360) {
+    throw new Error('Invalid feature bounds.');
+  }
+  return { north, south, east, west };
 }
 
 /** Normalize deterministic grouped rows separately from preview pages. */

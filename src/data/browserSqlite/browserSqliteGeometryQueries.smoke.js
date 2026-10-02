@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { getBrowserSqlitePreviewFeature } from './browserSqlitePreviewFeature.js';
 import Papa from 'papaparse';
 import initSqlJs from 'sql.js';
 import {
@@ -143,6 +144,18 @@ try {
   assert.equal(all.stats.totalMatchingRegionCount, 4);
   assert.equal(JSON.stringify(all).includes('Route detail'), false);
   assert.equal(JSON.stringify(all).includes('row_json'), false);
+
+  // Every valid vertex resolves to its canonical map identity, not just the metadata vertex.
+  for (const [rowIndex, source] of rows.entries()) {
+    const result = getBrowserSqlitePreviewFeature(database, { sourceRef: { datasetId: 'dataset-a', rowIndex } });
+    const resolved = result.points?.[0] ?? result.lines?.[0] ?? result.regions?.[0];
+    const matching = [...all.points, ...all.lines, ...all.regions].find((feature) =>
+      feature.sourceRef.datasetId === 'dataset-a' && (source.featureType === 'point'
+        ? feature.sourceRef.rowIndex === rowIndex
+        : feature.featureId === source.featureId && (source.featureType !== 'region' || feature.part === (source.part || '0'))));
+    assert.equal(resolved?.id, matching?.id, `Preview row ${rowIndex}`);
+    if (matching) assert.deepEqual(resolved.sourceRef, matching.sourceRef);
+  }
 
   const route = all.lines.find((line) => line.id === 'dataset-a:route');
   assert.deepEqual(route.coordinates, [[0, -10], [0, 10]]);

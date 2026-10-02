@@ -50,3 +50,13 @@ export function getDisplayedRegion(region, selectedFeature, selectedZone, previe
   const part = (previewParts ?? selectedZone.parts).find((item) => item.part === region.part);
   return part ? { ...region, coordinates: part.coordinates, style: part.style } : region;
 }
+
+/** Update only the still-selected committed zone; never revive a closed or different selection. */
+export function applyCommittedZoneToSelection(selection, zone) {
+  const feature = selection?.feature;
+  if (feature?.selectionKind !== 'region' || feature.sourceRef?.datasetId !== zone?.datasetId
+    || feature.featureId !== zone?.featureId) return selection;
+  const part = zone.parts?.find((item) => item.part === feature.part);
+  if (!part) return null;
+  return { ...selection, feature: { ...feature, coordinates: part.coordinates, style: part.style } };
+}

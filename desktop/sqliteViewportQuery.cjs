@@ -352,6 +352,7 @@ function buildTimelineFilter(timeline) {
   };
 }
 
+/** Reuse the exact map identity and style for Preview-to-map selection. */
 function rowToPointFeature(row) {
   const compactFields = parseCompactFields(row.compact_json);
 
@@ -557,4 +558,5 @@ function createEmptyMapViewResult({
 module.exports = {
   DEFAULT_RENDER_BUDGET,
   querySqliteMapView,
+  rowToPointFeature,
 };

@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld("csvMapDesktop", {
   },
   queryMapView: (query) => ipcRenderer.invoke("desktop:queryMapView", query),
   getDatasetSummary: () => ipcRenderer.invoke("desktop:getDatasetSummary"),
+  getSearchRows: (query) => ipcRenderer.invoke("desktop:getSearchRows", query),
+  getPreviewFeature: (query) => ipcRenderer.invoke("desktop:getPreviewFeature", query),
   getPreviewPage: (query) => ipcRenderer.invoke("desktop:getPreviewPage", query),
   setDatasetEnabled: (datasetId, enabled) => ipcRenderer.invoke(
     "desktop:setDatasetEnabled",
@@ -42,6 +44,7 @@ contextBridge.exposeInMainWorld("csvMapDesktop", {
   // Expose structured lookup requests without exposing SQLite or raw SQL.
   getFeatureDetails: (query) => ipcRenderer.invoke('desktop:getFeatureDetails', query),
   getGroupRows: (query) => ipcRenderer.invoke('desktop:getGroupRows', query),
+  getGroupBounds: (query) => ipcRenderer.invoke('desktop:getGroupBounds', query),
   getLogicalZone: (query) => ipcRenderer.invoke('desktop:getLogicalZone', query),
   updateLogicalZone: (request) => ipcRenderer.invoke('desktop:updateLogicalZone', request),
   // Custom tile settings use fixed operations; no path or channel is renderer-controlled.

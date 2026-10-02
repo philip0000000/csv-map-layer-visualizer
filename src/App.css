@@ -461,7 +461,9 @@ button.csvBtnPrimary.csvDesktopImportButton {
   pointer-events: none;
 }
 
-.csvTimelineContextMenu {
+/* File and Preview row actions share the same context-menu appearance. */
+.csvTimelineContextMenu,
+.csvPreviewRowMenu {
   position: fixed;
   z-index: 2200;
   min-width: 240px;
@@ -472,7 +474,8 @@ button.csvBtnPrimary.csvDesktopImportButton {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
-.csvTimelineContextMenu button {
+.csvTimelineContextMenu button,
+.csvPreviewRowMenu button {
   width: 100%;
   padding: 7px 9px;
   border: 0;
@@ -485,12 +488,15 @@ button.csvBtnPrimary.csvDesktopImportButton {
 }
 
 .csvTimelineContextMenu button:hover,
-.csvTimelineContextMenu button:focus-visible {
+.csvTimelineContextMenu button:focus-visible,
+.csvPreviewRowMenu button:hover,
+.csvPreviewRowMenu button:focus-visible {
   background: rgba(56, 189, 248, 0.18);
   outline: none;
 }
 
-.csvTimelineContextMenu button:disabled {
+.csvTimelineContextMenu button:disabled,
+.csvPreviewRowMenu button:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -1400,3 +1406,17 @@ button.csvBtnPrimary.csvDesktopImportButton {
   font-size: 12px;
   opacity: 0.8;
 }
+
+/* Preview search stays inside the existing sidebar layout, including narrow widths. */
+.csvPreviewSearchControls { display: grid; gap: 8px; margin-bottom: 12px; }
+.csvPreviewSearchControls input { width: 100%; box-sizing: border-box; }
+.csvPreviewSearchActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.csvPreviewSearchActions select { flex: 1; min-width: 140px; }
+.csvPreviewSearchHelp { font-size: 12px; overflow-wrap: anywhere; }
+.csvPreviewSearchHelp summary, .csvPreviewSearchGroup > summary { cursor: pointer; }
+.csvPreviewSearchHelp ul { padding-left: 20px; }
+.csvPreviewSearchGroup { margin-bottom: 12px; }
+.csvPreviewSearchGroup > summary { padding: 8px 0; overflow-wrap: anywhere; }
+/* A portal keeps the row menu above the sidebar's clipped table area. */
+.csvPreviewRowMenu { z-index: 10000; width: 250px; color: #e2e8f0; font-size: 13px; }
+.csvPreviewRowMenu [role="status"] { padding: 6px 2px; }

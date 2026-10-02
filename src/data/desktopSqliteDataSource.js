@@ -10,6 +10,7 @@ import {
   normalizeDatasetMutationResult,
   normalizeDatasetSummary,
   normalizeFeatureDetailsResult,
+  normalizeGroupBoundsResult,
   normalizeGroupRowsResult,
   normalizeImportBatchResult,
   normalizeImportCancellationResult,
@@ -18,6 +19,8 @@ import {
   normalizeMapViewResult,
   normalizeLogicalZoneResult,
   normalizePreviewPageResult,
+  normalizePreviewFeatureResult,
+  normalizeSearchRowsResult,
 } from './dataSourceNormalization.js';
 
 const DEFAULT_SQLITE_RENDER_BUDGET = 1000;
@@ -300,6 +303,26 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
       }
     },
 
+    /** Read bounded search batches or result identities independently of map filters. */
+    async getSearchRows(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getSearchRows);
+      try {
+        return normalizeSearchRowsResult(await desktopApi.getSearchRows({
+          datasetId: query.datasetId, afterRowIndex: query.afterRowIndex, rowIndices: query.rowIndices,
+        }));
+      } catch { throw queryFailure(DATA_SOURCE_METHODS.getSearchRows); }
+    },
+
+    /** Resolve a source row independently of viewport grouping and limits. */
+    async getPreviewFeature(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getPreviewFeature);
+      try {
+        return normalizePreviewFeatureResult(await desktopApi.getPreviewFeature({ sourceRef: query.sourceRef }));
+      } catch {
+        throw queryFailure(DATA_SOURCE_METHODS.getPreviewFeature);
+      }
+    },
+
     async getFeatureDetails(query = {}) {
       assertActive(DATA_SOURCE_METHODS.getFeatureDetails);
       requireMethod(desktopApi?.getFeatureDetails, DATA_SOURCE_METHODS.getFeatureDetails);
@@ -311,6 +334,16 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
         return normalizeFeatureDetailsResult(result);
       } catch {
         throw queryFailure(DATA_SOURCE_METHODS.getFeatureDetails);
+      }
+    },
+
+    /** Read complete group bounds without paging through its source rows. */
+    async getGroupBounds(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getGroupBounds);
+      try {
+        return normalizeGroupBoundsResult(await desktopApi.getGroupBounds({ groupRef: query.groupRef }));
+      } catch {
+        throw queryFailure(DATA_SOURCE_METHODS.getGroupBounds);
       }
     },
 

@@ -70,6 +70,14 @@ export default function App() {
     error: null,
   });
   const previewRequestRef = React.useRef(0);
+  const mapNavigationRef = React.useRef(null);
+  const registerMapNavigation = useCallback((navigate) => {
+    mapNavigationRef.current = navigate;
+  }, []);
+  const navigateSelectedFeature = useCallback((target, panelRight) => {
+    if (!mapNavigationRef.current) throw new Error('The map is not ready yet.');
+    mapNavigationRef.current(target, panelRight);
+  }, []);
   const selectionRequestRef = React.useRef(0);
   const [previewRevision, setPreviewRevision] = useState(0);
   const mapQueryRequestRef = React.useRef(0);
@@ -118,6 +126,7 @@ export default function App() {
     nearbyMarkers,
     selectFeature: handleFeatureSelect,
     close: handleFeaturePanelClose,
+    applyCommittedZone,
   } = featureSelection;
 
   // The details panel uses the CSV panel's visible edge as its left position.
@@ -813,12 +822,14 @@ export default function App() {
   );
   const updateCompleteLogicalZone = useCallback(async (request) => {
     const result = await dataSource.updateLogicalZone(request);
+    // The fallback highlight must use committed coordinates even outside the current viewport.
+    applyCommittedZone(result);
     // Refresh Preview from committed source rows as well as the map geometry.
     previewRequestRef.current += 1;
     setPreviewRevision((revision) => revision + 1);
     setDesktopDataRevision((revision) => revision + 1);
     return result;
-  }, [dataSource]);
+  }, [dataSource, applyCommittedZone]);
   const reportZoneEditingError = useCallback((error) => {
     setDesktopMapViewState((current) => ({
       ...current,
@@ -882,6 +893,7 @@ export default function App() {
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
           clusterRadius={mapToolsApi.state.clusterRadius}
           onViewportChange={setMapViewport}
+          onNavigationReady={registerMapNavigation}
           onFeatureSelect={handleFeatureSelect}
           selectedFeature={selectedFeature}
           zoneEditingEnabled={
@@ -902,6 +914,9 @@ export default function App() {
 
         <CsvPanelOverlay onVisibleWidthChange={setCsvPanelVisibleWidth}>
           <CsvPanel
+            dataSource={dataSource}
+            dataRevision={desktopDataRevision}
+            onFeatureSelect={handleFeatureSelect}
             files={databaseFiles}
             selectedId={databaseSelectedId}
             onSelect={desktopCapabilities.datasetSelection
@@ -949,6 +964,9 @@ export default function App() {
         </CsvPanelOverlay>
 
         <MarkerDetailsPanel
+          dataSource={dataSource}
+          navigationRevision={`${desktopDataRevision}:${JSON.stringify(timelineState)}:${enabledDatabaseIds.join(',')}`}
+          onNavigate={navigateSelectedFeature}
           feature={selectedFeature}
           nearbyMarkers={nearbyMarkers}
           getFeatureDetails={featureSelection.getFeatureDetails}

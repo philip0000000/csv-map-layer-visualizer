@@ -44,6 +44,38 @@ function getDevServerUrl() {
  * Keep file paths and database access in the main process.
  */
 function registerDesktopBridgeHandlers() {
+  // Aggregate bounds in SQLite rather than importing all grouped source rows into the UI.
+  ipcMain.handle('desktop:getGroupBounds', (_event, query = {}) => {
+    let db;
+    try {
+      db = openDesktopSqliteStore();
+      return require('./sqliteDetailQuery.cjs').getSqliteGroupBounds({ db, groupRef: query?.groupRef });
+    } catch { throw new Error('Could not load the selected group bounds.'); }
+    finally { closeSqliteStore(db); }
+  });
+  // Search accepts only bounded source identities, never SQL or filesystem paths.
+  ipcMain.handle("desktop:getSearchRows", (_event, query = {}) => {
+    let db;
+    try {
+      db = openDesktopSqliteStore();
+      return require("./sqliteDatasetService.cjs").getSqliteSearchRows({ db,
+        datasetId: query?.datasetId, afterRowIndex: query?.afterRowIndex, rowIndices: query?.rowIndices });
+    } catch {
+      throw new Error("The requested search rows could not be loaded.");
+    } finally { closeSqliteStore(db); }
+  });
+  // Resolve one row through a fixed operation; never accept renderer SQL or paths.
+  ipcMain.handle("desktop:getPreviewFeature", (_event, query = {}) => {
+    let db;
+    try {
+      db = openDesktopSqliteStore();
+      return require("./sqlitePreviewFeature.cjs").getSqlitePreviewFeature({ db, sourceRef: query?.sourceRef });
+    } catch {
+      throw new Error("The requested map feature could not be loaded.");
+    } finally {
+      closeSqliteStore(db);
+    }
+  });
   // Only structured bounded paging crosses the bridge; SQL and paths stay here.
   ipcMain.handle("desktop:getPreviewPage", (_event, query = {}) => {
     let db;

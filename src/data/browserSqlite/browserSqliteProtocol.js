@@ -14,9 +14,12 @@ export const BROWSER_SQLITE_OPERATIONS = Object.freeze({
   EXPORT_DATASET_CSV: 'export-dataset-csv',
   UPDATE_DATASET_MAPPING: 'update-dataset-mapping',
   GET_PREVIEW_PAGE: 'get-preview-page',
+  GET_SEARCH_ROWS: 'get-search-rows',
+  GET_PREVIEW_FEATURE: 'get-preview-feature',
   QUERY_MAP_VIEW: 'query-map-view',
   GET_FEATURE_DETAILS: 'get-feature-details',
   GET_GROUP_ROWS: 'get-group-rows',
+  GET_GROUP_BOUNDS: 'get-group-bounds',
   GET_LOGICAL_ZONE: 'get-logical-zone',
   UPDATE_LOGICAL_ZONE: 'update-logical-zone',
   CLOSE: 'close',
@@ -240,9 +243,13 @@ function normalizeOperationPayload(operation, payload) {
       return normalizePreviewPayload(payload);
     case BROWSER_SQLITE_OPERATIONS.QUERY_MAP_VIEW:
       return normalizeMapViewPayload(payload);
+    case BROWSER_SQLITE_OPERATIONS.GET_SEARCH_ROWS:
+      return normalizeSearchRowsPayload(payload);
+    case BROWSER_SQLITE_OPERATIONS.GET_PREVIEW_FEATURE:
     case BROWSER_SQLITE_OPERATIONS.GET_FEATURE_DETAILS:
       return normalizeFeatureDetailsPayload(payload);
     case BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS:
+    case BROWSER_SQLITE_OPERATIONS.GET_GROUP_BOUNDS:
       return normalizeGroupRowsPayload(payload);
     case BROWSER_SQLITE_OPERATIONS.GET_LOGICAL_ZONE:
       return normalizeLogicalZoneIdentityPayload(payload);
@@ -351,6 +358,20 @@ function normalizeDatasetMappingPayload(payload) {
     ),
     mapping,
   };
+}
+
+/** Validate cursor and bounded identity lookups before they reach SQLite. */
+function normalizeSearchRowsPayload(payload) {
+  requirePayload(payload, ['datasetId', 'afterRowIndex', 'rowIndices']);
+  const afterRowIndex = payload.afterRowIndex ?? -1;
+  const rowIndices = payload.rowIndices;
+  if (!Number.isSafeInteger(afterRowIndex) || afterRowIndex < -1 || (rowIndices != null && (
+    !Array.isArray(rowIndices) || rowIndices.length < 1 || rowIndices.length > 30
+    || rowIndices.some((id) => !Number.isSafeInteger(id) || id < 0)))) {
+    throwProtocolError('invalid-request', 'Invalid search row request.');
+  }
+  return { datasetId: normalizeIdentifier(payload.datasetId, 'dataset ID', 'invalid-request'),
+    afterRowIndex, ...(rowIndices != null ? { rowIndices: [...rowIndices] } : {}) };
 }
 
 function normalizePreviewPayload(payload) {

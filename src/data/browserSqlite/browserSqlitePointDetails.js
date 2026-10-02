@@ -108,6 +108,20 @@ export function getBrowserSqliteGroupRows(database, query = {}) {
   };
 }
 
+/** Aggregate complete group bounds, unwrapping longitudes across the date line. */
+export function getBrowserSqliteGroupBounds(database, query = {}) {
+  requireDatabase(database);
+  const reference = normalizeGroupRef(query.groupRef);
+  if (!reference) throw new TypeError('A valid group reference is required.');
+  const filter = buildGroupFilter(reference);
+  const row = readOne(database, `SELECT MIN(lat) AS south, MAX(lat) AS north,
+    MIN(CASE WHEN $wrap = 1 AND lon < $westEdge THEN lon + 360 ELSE lon END) AS west,
+    MAX(CASE WHEN $wrap = 1 AND lon < $westEdge THEN lon + 360 ELSE lon END) AS east
+    FROM point_features ${filter.sql}`, { ...filter.params,
+    $wrap: reference.bounds.west > reference.bounds.east ? 1 : 0, $westEdge: reference.bounds.west });
+  return row?.south == null ? null : row;
+}
+
 /** Reconstruct the captured dataset, viewport, grid-cell, and timeline filter. */
 function buildGroupFilter(groupRef) {
   const datasetFilter = createDatasetFilter(groupRef.datasetIds);

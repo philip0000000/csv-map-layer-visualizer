@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_GROUP_ROWS_LIMIT } from '../data/dataSource';
-import { refreshSelectionGroupRef, selectionMatchesTimeline, selectionTimelineKey } from './featureSelection';
+import { applyCommittedZoneToSelection, refreshSelectionGroupRef, selectionMatchesTimeline, selectionTimelineKey } from './featureSelection';
 
 /** Own one panel selection independently of viewport updates and lazy detail-loading outcomes. */
 export function useFeatureSelection({ dataSource, datasets, timeline }) {
@@ -28,6 +28,10 @@ export function useFeatureSelection({ dataSource, datasets, timeline }) {
   }, []);
 
   const feature = selection?.feature;
+  /** Keep the viewport-independent highlight synchronized with a successful zone commit. */
+  const applyCommittedZone = useCallback((zone) => {
+    setSelection((current) => applyCommittedZoneToSelection(current, zone));
+  }, []);
   const source = feature?.sourceRef;
   const request = selection?.request;
   // Reuse the selected request; expanding other nearby rows still uses the normal backend API.
@@ -105,6 +109,7 @@ export function useFeatureSelection({ dataSource, datasets, timeline }) {
     groupRefreshError: available && selection.groupError?.filterKey === requestedGroupKey
       ? selection.groupError.message : null,
     selectFeature,
+    applyCommittedZone,
     close,
     isCollapsed,
     toggleCollapse: () => setIsCollapsed((value) => !value),

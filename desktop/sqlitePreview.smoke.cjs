@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const Papa = require("papaparse");
+const { getSqlitePreviewFeature } = require("./sqlitePreviewFeature.cjs");
 const { importCsvFileToSqlite } = require("./csvImportService.cjs");
 const { openSqliteStore, closeSqliteStore } = require("./sqliteStore.cjs");
 const { getSqliteDatasetSummary, getSqlitePreviewPage, removeSqliteDataset,
@@ -34,6 +35,8 @@ function verifyCompleteImports() {
     fs.writeFileSync(csvPath, Papa.unparse(rows));
     const imported = importCsvFileToSqlite({ db, filePath: csvPath });
     const datasetId = imported.datasetId;
+    assert.equal(getSqlitePreviewFeature({ db, sourceRef: { datasetId, rowIndex: 0 } }).points[0].sourceRef.rowIndex, 0);
+    assert.deepEqual(getSqlitePreviewFeature({ db, sourceRef: { datasetId, rowIndex: 3 } }), {});
     assert.equal(imported.rowCount, 65);
     assert.equal(imported.importedFeatureCount, 34);
     assert.equal(imported.skippedRowCount, 31);

@@ -271,6 +271,18 @@ export function createBrowserSqliteWorkerClient(options = {}) {
     return sendRequest(BROWSER_SQLITE_OPERATIONS.QUERY_MAP_VIEW, query);
   }
 
+  /** Send only a cursor or a bounded set of matching source-row identities. */
+  function getSearchRows(query = {}) {
+    if (!isPlainRecord(query)) return invalidRequestPromise();
+    return sendRequest(BROWSER_SQLITE_OPERATIONS.GET_SEARCH_ROWS, query);
+  }
+
+  /** Resolve a Preview row through the validated feature-reference protocol. */
+  function getPreviewFeature(query = {}) {
+    if (!isPlainRecord(query)) return invalidRequestPromise();
+    return sendRequest(BROWSER_SQLITE_OPERATIONS.GET_PREVIEW_FEATURE, query);
+  }
+
   function getFeatureDetails(query = {}) {
     if (!isPlainRecord(query)) return invalidRequestPromise();
     return sendRequest(BROWSER_SQLITE_OPERATIONS.GET_FEATURE_DETAILS, query);
@@ -279,6 +291,12 @@ export function createBrowserSqliteWorkerClient(options = {}) {
   function getGroupRows(query = {}) {
     if (!isPlainRecord(query)) return invalidRequestPromise();
     return sendRequest(BROWSER_SQLITE_OPERATIONS.GET_GROUP_ROWS, query);
+  }
+
+  /** Request complete bounds through the same validated group reference as detail paging. */
+  function getGroupBounds(query = {}) {
+    if (!isPlainRecord(query)) return invalidRequestPromise();
+    return sendRequest(BROWSER_SQLITE_OPERATIONS.GET_GROUP_BOUNDS, query);
   }
 
   function getLogicalZone(query = {}) {
@@ -333,7 +351,10 @@ export function createBrowserSqliteWorkerClient(options = {}) {
     getPreviewPage,
     queryMapView,
     getFeatureDetails,
+    getPreviewFeature,
+    getSearchRows,
     getGroupRows,
+    getGroupBounds,
     getLogicalZone,
     updateLogicalZone,
     close,

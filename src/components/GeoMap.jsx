@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MapNavigationBridge } from './MapNavigationBridge';
 // Import core components from react-leaflet.
 // MapContainer is the main map wrapper.
 // LayerGroup keeps each line and its optional arrow decorators together.
@@ -526,6 +527,7 @@ export default function GeoMap({
   clusterMarkersEnabled = false,
   clusterRadius = 80,   // default strength
   onViewportChange,
+  onNavigationReady,
   onFeatureSelect,
   selectedFeature,
   zoneEditingEnabled = false,
@@ -632,6 +634,7 @@ export default function GeoMap({
       zoomControl={false}
     >
       <ViewportChangeReporter onViewportChange={onViewportChange} />
+      <MapNavigationBridge onReady={onNavigationReady} />
       <MapCoordinateControls
         zoneEditingEnabled={zoneEditingEnabled}
         onZoneEditingToggle={onZoneEditingToggle}
@@ -659,6 +662,14 @@ export default function GeoMap({
           interactive={false}
         />
       )}
+
+      {/* Preview can select a shape omitted by the viewport render budget. */}
+      {selectedFeature?.selectionKind === "line"
+        && !lines.some((line) => line.id === selectedFeature.id)
+        && <ShapeSelectionHighlight feature={selectedFeature} kind="line" />}
+      {selectedFeature?.selectionKind === "region"
+        && !regions.some((region) => region.id === selectedFeature.id)
+        && <ShapeSelectionHighlight feature={selectedFeature} kind="region" />}
 
       {/* The saved grid cell is highlighted locally; hover never queries SQLite. */}
       {activeGroupedCellPolygons.map((positions, index) => (

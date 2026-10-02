@@ -1,5 +1,6 @@
 import { featureSelectionKey } from './featureSelection';
 import { useEffect, useRef, useState } from 'react';
+import { getFeatureNavigationTarget } from './featureMapNavigation';
 
 import {
   GroupedMarkerDetails,
@@ -14,6 +15,9 @@ const COLLAPSED_PANEL_WIDTH = 34;
 /** Share panel layout and controls across point, line, and logical-zone selections. */
 export function MarkerDetailsPanel({
   feature,
+  dataSource,
+  navigationRevision,
+  onNavigate,
   nearbyMarkers = [],
   leftOffset,
   getSourceRow,
@@ -26,6 +30,31 @@ export function MarkerDetailsPanel({
 }) {
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const panelRef = useRef(null);
+  const navigationRequest = useRef(0);
+  const navigationKey = `${featureSelectionKey(feature)}:${navigationRevision}:${isCollapsed}`;
+  const [navigationState, setNavigationState] = useState({ key: null, pending: false, error: null });
+  const currentNavigation = navigationState.key === navigationKey ? navigationState : {};
+
+  // Closing, collapsing, editing, or changing filters invalidates pending geometry.
+  useEffect(() => {
+    navigationRequest.current += 1;
+    return () => { navigationRequest.current += 1; };
+  }, [navigationKey]);
+
+  /** Resolve fresh geometry; stale responses must never move the map. */
+  async function viewOnMap() {
+    const request = ++navigationRequest.current;
+    setNavigationState({ key: navigationKey, pending: true, error: null });
+    try {
+      const target = await getFeatureNavigationTarget(dataSource, feature);
+      if (request !== navigationRequest.current) return;
+      onNavigate(target, panelRef.current.getBoundingClientRect().right);
+      setNavigationState({ key: navigationKey, pending: false, error: null });
+    } catch (error) {
+      if (request !== navigationRequest.current) return;
+      setNavigationState({ key: navigationKey, pending: false, error: error.message || 'Unable to view this feature on the map.' });
+    }
+  }
 
   // Drag values live outside render so window-level mouse events stay stable.
   const dragRef = useRef({
@@ -112,6 +141,19 @@ export function MarkerDetailsPanel({
           <button
             type='button'
             className='markerDetailsPanelCollapse'
+            onClick={viewOnMap}
+            disabled={!!currentNavigation.pending}
+            aria-label='View on map'
+            title='View on map'
+          >
+            <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' aria-hidden='true'>
+              <circle cx='12' cy='12' r='6' />
+              <path d='M12 2v5m0 10v5M2 12h5m10 0h5' />
+            </svg>
+          </button>
+          <button
+            type='button'
+            className='markerDetailsPanelCollapse'
             onClick={onToggleCollapse}
             aria-label='Collapse feature details'
             title='Collapse'
@@ -132,6 +174,7 @@ export function MarkerDetailsPanel({
 
       {/* hidden keeps detail state mounted while the panel is collapsed. */}
       <div className='markerDetailsPanelContent' hidden={isCollapsed}>
+        {currentNavigation.error && <div role='alert'>{currentNavigation.error}</div>}
         {refreshError && <div role='status'>{refreshError}</div>}
         {showsProximityResults ? (
           <NearbyMarkerDetails

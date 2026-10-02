@@ -165,7 +165,37 @@ function assertOpenDatabase(db) {
   }
 }
 
+/** Seek bounded search batches or fetch matched identities without repeated counts or offsets. */
+function getSqliteSearchRows({ db, ...query } = {}) {
+  assertOpenDatabase(db);
+  const datasetId = normalizeDatasetId(query.datasetId);
+  const requested = query.rowIndices;
+  const after = query.afterRowIndex ?? -1;
+  if (!Number.isSafeInteger(after) || after < -1 || (requested != null && (
+    !Array.isArray(requested) || requested.length < 1 || requested.length > 30
+    || requested.some((index) => !Number.isSafeInteger(index) || index < 0)))) {
+    throw new TypeError('Invalid search row request.');
+  }
+
+  return db.transaction(() => {
+    if (!db.prepare('SELECT id FROM datasets WHERE id = ?').get(datasetId)) {
+      throw new Error('The requested dataset is unavailable.');
+    }
+    const stored = requested
+      ? db.prepare(`SELECT source_row_index, row_json FROM source_rows
+        WHERE dataset_id = ? AND source_row_index IN (${requested.map(() => '?').join(',')})
+        ORDER BY source_row_index`).all(datasetId, ...requested)
+      : db.prepare(`SELECT source_row_index, row_json FROM source_rows
+        WHERE dataset_id = ? AND source_row_index > ? ORDER BY source_row_index LIMIT 201`).all(datasetId, after);
+    // Read one extra identity instead of counting the full dataset for every batch.
+    const page = stored.slice(0, 200);
+    return { rows: page.map((row) => JSON.parse(row.row_json)),
+      sourceRowIndices: page.map((row) => Number(row.source_row_index)), hasMore: stored.length > 200 };
+  })();
+}
+
 module.exports = {
+  getSqliteSearchRows,
   getSqlitePreviewPage,
   getSqliteDatasetSummary,
   removeSqliteDataset,

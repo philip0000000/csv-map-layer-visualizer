@@ -143,7 +143,7 @@ export function getBrowserSqlitePreviewPage(database, query = {}) {
   }
 
   const rows = readAll(database, `
-    SELECT row_json
+    SELECT source_row_index, row_json
     FROM source_rows
     WHERE dataset_id = ?
     ORDER BY source_row_index
@@ -154,11 +154,38 @@ export function getBrowserSqlitePreviewPage(database, query = {}) {
   return {
     datasetId,
     rows: rows.map((row) => parseJsonObject(row.row_json)),
+    sourceRowIndices: rows.map((row) => Number(row.source_row_index)),
     offset,
     limit,
     totalRows,
     hasMore: offset + rows.length < totalRows,
   };
+}
+
+/** Seek the next search batch or fetch one result page by stable identities, without recounting. */
+export function getBrowserSqliteSearchRows(database, query = {}) {
+  const datasetId = normalizeRequiredId(query.datasetId);
+  const requested = query.rowIndices;
+  const after = query.afterRowIndex ?? -1;
+  if (!Number.isSafeInteger(after) || after < -1 || (requested != null && (
+    !Array.isArray(requested) || requested.length < 1 || requested.length > 30
+    || requested.some((index) => !Number.isSafeInteger(index) || index < 0)))) {
+    throw new TypeError('Invalid search row request.');
+  }
+
+  if (!readOne(database, "SELECT id FROM datasets WHERE id = ? AND import_state = 'complete'", [datasetId])) {
+    throw new BrowserSqliteQueryError('dataset-not-found', 'The requested dataset is unavailable.');
+  }
+  const stored = requested
+    ? readAll(database, `SELECT source_row_index, row_json FROM source_rows
+      WHERE dataset_id = ? AND source_row_index IN (${requested.map(() => '?').join(',')})
+      ORDER BY source_row_index`, [datasetId, ...requested])
+    : readAll(database, `SELECT source_row_index, row_json FROM source_rows
+      WHERE dataset_id = ? AND source_row_index > ? ORDER BY source_row_index LIMIT 201`, [datasetId, after]);
+  // One lookahead row establishes hasMore without COUNT or OFFSET.
+  const page = stored.slice(0, 200);
+  return { rows: page.map((row) => parseJsonObject(row.row_json)),
+    sourceRowIndices: page.map((row) => Number(row.source_row_index)), hasMore: stored.length > 200 };
 }
 
 function readOne(database, sql, parameters = []) {

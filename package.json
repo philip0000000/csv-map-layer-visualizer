@@ -5,6 +5,9 @@
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
+    "smoke:feature-map-navigation": "node src/components/featureMapNavigation.smoke.js",
+    "smoke:preview-search": "node src/data/previewSearch.smoke.js",
+    "smoke:sqlite-search-rows": "electron desktop/sqliteSearchRows.smoke.cjs",
     "smoke:desktop-preview": "electron desktop/sqlitePreview.smoke.cjs",
     "validate:desktop-preview": "node desktop/desktopPreviewValidation.cjs",
     "dev": "vite",

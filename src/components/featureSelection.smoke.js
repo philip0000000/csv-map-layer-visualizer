@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   featureSelectionKey,
+  applyCommittedZoneToSelection,
   getDisplayedRegion,
   isFeatureSelected,
   selectionMatchesTimeline,
@@ -51,4 +52,14 @@ const preview = { ...editedPart, coordinates: [[3, 4], [5, 6], [7, 8]] };
 assert.deepEqual(getDisplayedRegion(zone, zone, logicalZone, [preview]).coordinates, preview.coordinates);
 assert.equal(getDisplayedRegion(zone, zone, { ...logicalZone, datasetId: 'other' }, [preview]), zone);
 
+// The fallback uses the committed part even after it leaves the viewport query.
+const selection = { feature: zone, request: Promise.resolve(null) };
+const committedSelection = applyCommittedZoneToSelection(selection, logicalZone);
+assert.deepEqual(committedSelection.feature.coordinates, editedPart.coordinates);
+assert.equal(committedSelection.request, selection.request);
+assert.notDeepEqual(committedSelection.feature.coordinates, zone.coordinates);
+assert.equal(applyCommittedZoneToSelection(null, logicalZone), null);
+assert.equal(applyCommittedZoneToSelection(selection, { ...logicalZone, datasetId: 'other' }), selection);
+assert.equal(applyCommittedZoneToSelection({ feature: { ...zone, featureId: 'another' } }, logicalZone).feature.featureId, 'another');
+assert.equal(applyCommittedZoneToSelection(selection, { ...logicalZone, parts: [] }), null);
 console.log('Feature selection smoke test passed.');

@@ -13,6 +13,8 @@ export default function CsvPreviewTable({
   error,
   onShowMore,
   onDismissError,
+  showTitle = true,
+  onRowContextMenu,
 }) {
   const controlledPaging = typeof onShowMore === "function";
   const [previewRowLimit, setPreviewRowLimit] = useState(
@@ -37,7 +39,7 @@ export default function CsvPreviewTable({
 
   return (
     <>
-      <div className="csvPreviewTitle">Preview</div>
+      {showTitle && <div className="csvPreviewTitle">Preview</div>}
 
       {error && (
         <DismissibleMessage
@@ -72,7 +74,7 @@ export default function CsvPreviewTable({
 
               <tbody>
                 {previewRows.map((row, i) => (
-                  <tr key={i}>
+                  <tr key={i} onContextMenu={onRowContextMenu ? (event) => onRowContextMenu(event, i) : undefined}>
                     {headers.map((h) => (
                       <td key={h} title={String(row[h] ?? "")}>
                         {String(row[h] ?? "")}

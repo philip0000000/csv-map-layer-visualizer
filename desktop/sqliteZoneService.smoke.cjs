@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const Database = require("better-sqlite3");
 const Papa = require("papaparse");
+const { getSqlitePreviewFeature } = require("./sqlitePreviewFeature.cjs");
 const { exportSqliteDatasetCsv } = require("./sqliteDatasetExport.cjs");
 const { initializeSchema } = require("./sqliteStore.cjs");
 const { getSqlitePreviewPage } = require("./sqliteDatasetService.cjs");
@@ -60,6 +61,10 @@ try {
   });
   assert.equal(mapView.points.length, 0);
   assert.equal(mapView.regions.length, 2);
+  for (let rowIndex = 0; rowIndex < vertices.length; rowIndex += 1) {
+    const resolved = getSqlitePreviewFeature({ db, sourceRef: { datasetId: 'dataset-a', rowIndex } }).regions[0];
+    assert.deepEqual(resolved, mapView.regions.find((region) => region.part === vertices[rowIndex][0]));
+  }
   const movedParts = zone.parts.map((part) => ({
     part: part.part,
     coordinates: part.coordinates.map(([lat, lon]) => [lat + 1, lon + 2]),

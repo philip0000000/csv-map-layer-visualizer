@@ -13,11 +13,14 @@ import {
   normalizeImportProgress,
   normalizeInitializationResult,
   normalizeFeatureDetailsResult,
+  normalizeGroupBoundsResult,
   normalizeGroupRowsResult,
   normalizeMapViewResult,
   normalizeLogicalZoneResult,
   normalizeMappingMutationResult,
   normalizePreviewPageResult,
+  normalizePreviewFeatureResult,
+  normalizeSearchRowsResult,
 } from '../dataSourceNormalization.js';
 import {
   createBrowserSqliteWorkerClient,
@@ -322,6 +325,26 @@ export function createBrowserSqliteDataSource(options = {}) {
       }
     },
 
+    /** Read bounded search batches or result identities independently of map filters. */
+    async getSearchRows(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getSearchRows);
+      try {
+        return normalizeSearchRowsResult(await workerClient.getSearchRows({
+          datasetId: query.datasetId, afterRowIndex: query.afterRowIndex, rowIndices: query.rowIndices,
+        }));
+      } catch (error) { throw workerFailure(DATA_SOURCE_METHODS.getSearchRows, error); }
+    },
+
+    /** Resolve a source row independently of viewport grouping and limits. */
+    async getPreviewFeature(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getPreviewFeature);
+      try {
+        return normalizePreviewFeatureResult(await workerClient.getPreviewFeature({ sourceRef: query.sourceRef }));
+      } catch (error) {
+        throw workerFailure(DATA_SOURCE_METHODS.getPreviewFeature, error);
+      }
+    },
+
     async getFeatureDetails(query = {}) {
       assertActive(DATA_SOURCE_METHODS.getFeatureDetails);
       try {
@@ -332,6 +355,16 @@ export function createBrowserSqliteDataSource(options = {}) {
         throw workerFailure(DATA_SOURCE_METHODS.getFeatureDetails, error, {
           datasetId: query.sourceRef?.datasetId,
         });
+      }
+    },
+
+    /** Read complete group bounds without paging through its source rows. */
+    async getGroupBounds(query = {}) {
+      assertActive(DATA_SOURCE_METHODS.getGroupBounds);
+      try {
+        return normalizeGroupBoundsResult(await workerClient.getGroupBounds({ groupRef: query.groupRef }));
+      } catch (error) {
+        throw workerFailure(DATA_SOURCE_METHODS.getGroupBounds, error);
       }
     },
 

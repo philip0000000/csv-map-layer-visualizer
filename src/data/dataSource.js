@@ -24,9 +24,12 @@ export const DATA_SOURCE_METHODS = Object.freeze({
   saveDatasetAsCsv: "saveDatasetAsCsv",
   updateDatasetMapping: "updateDatasetMapping",
   getPreviewPage: "getPreviewPage",
+  getSearchRows: "getSearchRows",
+  getPreviewFeature: "getPreviewFeature",
   queryMapView: "queryMapView",
   getFeatureDetails: "getFeatureDetails",
   getGroupRows: "getGroupRows",
+  getGroupBounds: "getGroupBounds",
   getLogicalZone: "getLogicalZone",
   updateLogicalZone: "updateLogicalZone",
   dispose: "dispose",
@@ -54,6 +57,12 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
 
 /**
  * @typedef {object} DataSource
+ * @property {(query: {groupRef: object}) => Promise<object|null>} getGroupBounds
+ *   Returns complete geographic bounds for the selected group under its captured filters.
+ * @property {(query: {datasetId: string, afterRowIndex?: number, rowIndices?: number[]}) => Promise<object>} getSearchRows
+ *   Seeks up to 200 rows after a source identity, or fetches up to 30 matching identities; no total recount.
+ * @property {(query: {sourceRef: {datasetId: string, rowIndex: number}}) => Promise<object|null>} getPreviewFeature
+ *   Resolves a source row to its existing map feature, without changing filters or viewport.
  * @property {() => InitializationResult | Promise<InitializationResult>} initialize
  *   Initializes this backend once for the current page session. Repeated calls
  *   must be safe and must not activate another backend.

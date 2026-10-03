@@ -5,6 +5,8 @@
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
+    "smoke:heatmap": "node src/components/heatmap.smoke.js && node src/components/mapViewQueryScheduler.smoke.js",
+    "validate:heatmap": "node desktop/run-electron.cjs desktop/heatmapValidation.cjs",
     "smoke:feature-map-navigation": "node src/components/featureMapNavigation.smoke.js",
     "smoke:preview-search": "node src/data/previewSearch.smoke.js",
     "smoke:sqlite-search-rows": "electron desktop/sqliteSearchRows.smoke.cjs",
@@ -69,6 +71,7 @@
     "better-sqlite3": "^12.11.1",
     "leaflet": "^1.9.4",
     "leaflet-polylinedecorator": "^1.6.0",
+    "leaflet.heat": "0.2.0",
     "leaflet.markercluster": "^1.5.3",
     "papaparse": "^5.5.3",
     "react": "^19.2.0",

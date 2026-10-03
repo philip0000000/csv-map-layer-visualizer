@@ -21,6 +21,8 @@ import {
 // It groups nearby markers into clusters for readability and performance.
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
+import HeatmapLayer from './HeatmapLayer';
+import { DEFAULT_HEAT_RADIUS } from './heatmap';
 import "leaflet-polylinedecorator";
 
 import { getClusterMarkerIcon, getCountedMarkerIcon, getMarkerIcon } from "./markerIcons";
@@ -526,6 +528,10 @@ export default function GeoMap({
   // When false, exact markers use the shared proximity-grouping behavior.
   clusterMarkersEnabled = false,
   clusterRadius = 80,   // default strength
+  heatmapEnabled = false,
+  heatmapShowMarkers = true,
+  heatRadius = DEFAULT_HEAT_RADIUS,
+  heatPoints = points,
   onViewportChange,
   onNavigationReady,
   onFeatureSelect,
@@ -544,11 +550,12 @@ export default function GeoMap({
   const markerClusterGroupRef = useRef(null);
   const groupedCellInteractionsRef = useRef(new Set());
   const [activeGroupedCell, setActiveGroupedCell] = useState(null);
-  const markerPoints = points.filter((p) => !p.image);
+  const showPointMarkers = !heatmapEnabled || heatmapShowMarkers;
+  const markerPoints = showPointMarkers ? points.filter((p) => !p.image) : [];
   // Data-source groups are already summarized, so keep them out of client clustering.
   const exactMarkerPoints = markerPoints.filter((p) => !isGroupedPointFeature(p));
   const groupedMarkerPoints = markerPoints.filter(isGroupedPointFeature);
-  const imagePoints = points.filter((p) => !!p.image);
+  const imagePoints = showPointMarkers ? points.filter((p) => !!p.image) : [];
   const activeGroupedCellPolygons = useMemo(
     () => getGroupedMarkerCellPolygons(activeGroupedCell?.groupRef),
     [activeGroupedCell],
@@ -608,7 +615,7 @@ export default function GeoMap({
       group.off("spiderfied", handleSpiderfied);
       group.off("unspiderfied", handleUnspiderfied);
     };
-  }, [clusterMarkersEnabled, clusterRadius]);
+  }, [clusterMarkersEnabled, clusterRadius, showPointMarkers]);
 
   return (
     // MapContainer must have a fixed height and width.
@@ -647,9 +654,10 @@ export default function GeoMap({
       <Pane name="featureArrows" style={{ zIndex: 460, pointerEvents: "none" }} />
       {/* Built-in and user-configured raster layers share the Leaflet layer control. */}
       <MapTileLayers />
+      {heatmapEnabled && <HeatmapLayer points={heatPoints} radius={heatRadius} />}
 
       {/* A map-native ring highlights selection without modifying marker icons. */}
-      {selectedFeature && selectedFeature.selectionKind === "point" && (
+      {showPointMarkers && selectedFeature && selectedFeature.selectionKind === "point" && (
         <CircleMarker
           center={[selectedFeature.lat, selectedFeature.lon]}
           radius={MARKER_PROXIMITY_RADIUS_PIXELS}
@@ -672,7 +680,7 @@ export default function GeoMap({
         && <ShapeSelectionHighlight feature={selectedFeature} kind="region" />}
 
       {/* The saved grid cell is highlighted locally; hover never queries SQLite. */}
-      {activeGroupedCellPolygons.map((positions, index) => (
+      {showPointMarkers && activeGroupedCellPolygons.map((positions, index) => (
         <Polygon
           key={`group-cell:${activeGroupedCell.id}:${index}`}
           positions={positions}

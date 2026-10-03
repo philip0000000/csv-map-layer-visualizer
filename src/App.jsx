@@ -9,6 +9,8 @@ import { useCsvFileDrop } from "./components/useCsvFileDrop";
 import { useExampleCsvFilesFromUrl } from "./components/useExampleCsvFilesFromUrl";
 import { useTimelinePlayback } from "./components/useTimelinePlayback";
 import { useFeatureSelection } from "./components/useFeatureSelection";
+import { useMapViewQuery } from './components/useMapViewQuery';
+import { getCurrentHeatPoints } from './components/heatmap';
 import { MarkerDetailsPanel } from "./components/MarkerDetailsPanel";
 import { useRuntimeDataSource } from "./components/useRuntimeDataSource";
 import {
@@ -80,7 +82,6 @@ export default function App() {
   }, []);
   const selectionRequestRef = React.useRef(0);
   const [previewRevision, setPreviewRevision] = useState(0);
-  const mapQueryRequestRef = React.useRef(0);
   const [desktopVisibilityState, setDesktopVisibilityState] = useState({
     pendingDatasetIds: [],
     error: null,
@@ -756,60 +757,29 @@ export default function App() {
     timelineState.yearMin,
   ]);
 
-  /** Debounce viewport work and allow only the newest query to update the map. */
-  useEffect(() => {
-    if (
-      !desktopSqliteMapAvailable ||
-      initialization?.ok !== true ||
-      !mapViewport?.bounds
-    ) {
-      return undefined;
-    }
-
-    const requestId = mapQueryRequestRef.current + 1;
-    mapQueryRequestRef.current = requestId;
-    setDesktopMapViewState((current) => ({
-      ...current,
-      status: current.result ? "refreshing" : "loading",
-      error: null,
-    }));
-    const timerId = globalThis.setTimeout(() => {
-      dataSource.queryMapView({
-        bounds: mapViewport.bounds,
-        zoom: mapViewport.zoom ?? null,
-        timeline: databaseTimelineQuery,
-        renderBudget: SQLITE_RENDER_BUDGET,
-        datasetIds: enabledDatabaseIds,
-      }).then((result) => {
-        if (mapQueryRequestRef.current === requestId) {
-          setDesktopMapViewState({ status: "loaded", result, error: null });
-        }
-      }).catch((error) => {
-        if (mapQueryRequestRef.current === requestId) {
-          setDesktopMapViewState((current) => ({
-            ...current,
-            status: "error",
-            error: error?.message ? String(error.message) : "Map query failed.",
-          }));
-        }
-      });
-    }, 100);
-
-    return () => {
-      globalThis.clearTimeout(timerId);
-    };
-  }, [
+  // Visibility/mutations invalidate heat immediately; timeline ticks retain the
+  // last completed frame until another filtered result is ready, avoiding blanks.
+  const heatContextKey = JSON.stringify([enabledDatabaseIds, desktopDataRevision]);
+  const mapViewQuery = useMemo(() => ({
+    bounds: mapViewport?.bounds,
+    zoom: mapViewport?.zoom ?? null,
+    timeline: databaseTimelineQuery,
+    renderBudget: SQLITE_RENDER_BUDGET,
+    datasetIds: enabledDatabaseIds,
+  }), [mapViewport, databaseTimelineQuery, enabledDatabaseIds]);
+  useMapViewQuery({
     dataSource,
-    desktopSqliteMapAvailable,
-    desktopDataRevision,
-    databaseTimelineQuery,
-    enabledDatabaseIds,
-    initialization,
-    mapViewport,
-  ]);
+    query: mapViewQuery,
+    contextKey: heatContextKey,
+    // Only heatmap playback bypasses the existing manual-navigation debounce.
+    playback: !!mapToolsApi.state.heatmapEnabled && !!timelineState.playback?.isPlaying,
+    ready: desktopSqliteMapAvailable && initialization?.ok === true && !!mapViewport?.bounds,
+    onStateChange: setDesktopMapViewState,
+  });
 
-  // Keep the last completed map visible while a timeline or viewport query runs.
-  // The newest response replaces it atomically, avoiding flicker for features that still match.
+  // Ordinary features retain the last completed result during refreshes. Heat
+  // does likewise for timeline/viewport changes, but clears on visibility or data
+  // changes. Empty completed results clear both views rather than retaining heat.
   const desktopMapFeatures = useMemo(
     () => toLegacyMapFeatures(desktopMapViewState.result),
     [desktopMapViewState.result],
@@ -892,6 +862,10 @@ export default function App() {
           lines={activeMapFeatures.lines.lines}
           clusterMarkersEnabled={!!mapToolsApi.state.clusterMarkersEnabled}
           clusterRadius={mapToolsApi.state.clusterRadius}
+          heatmapEnabled={mapToolsApi.state.heatmapEnabled}
+          heatmapShowMarkers={mapToolsApi.state.heatmapShowMarkers}
+          heatRadius={mapToolsApi.state.heatRadius}
+          heatPoints={getCurrentHeatPoints(desktopMapViewState, heatContextKey, enabledDatabaseIds)}
           onViewportChange={setMapViewport}
           onNavigationReady={registerMapNavigation}
           onFeatureSelect={handleFeatureSelect}

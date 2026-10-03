@@ -1420,3 +1420,9 @@ button.csvBtnPrimary.csvDesktopImportButton {
 /* A portal keeps the row menu above the sidebar's clipped table area. */
 .csvPreviewRowMenu { z-index: 10000; width: 250px; color: #e2e8f0; font-size: 13px; }
 .csvPreviewRowMenu [role="status"] { padding: 6px 2px; }
+
+/* The read-only legend passes pointer events through to the map beneath it. */
+.heatmapLegend { padding: 8px 10px; background: rgb(255 255 255 / 92%); color: #172033; border-radius: 4px; box-shadow: 0 1px 5px #0004; font-size: 12px; pointer-events: none; }
+.heatmapLegendScale { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.heatmapLegendGradient { width: 90px; height: 10px; background: linear-gradient(to right, #2563eb, #22c55e 37.5%, #facc15 68.75%, #dc2626); }
+.heatmapLegendNote { margin-top: 3px; font-size: 11px; }

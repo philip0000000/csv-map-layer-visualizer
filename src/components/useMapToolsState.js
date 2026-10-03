@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { DEFAULT_HEAT_RADIUS } from './heatmap.js';
 
 export const MIN_CLUSTER_RADIUS = 0;
 export const MAX_CLUSTER_RADIUS = 300;
@@ -25,6 +26,9 @@ export function getInitialMapToolsState() {
     clusterMarkersEnabled: false,
     clusterRadius: DEFAULT_CLUSTER_RADIUS,
     clusterRadiusDraft: DEFAULT_CLUSTER_RADIUS,
+    heatmapEnabled: false,
+    heatmapShowMarkers: true,
+    heatRadius: DEFAULT_HEAT_RADIUS,
     zoneEditingEnabled: false,
   };
 }

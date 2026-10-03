@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useSessionStorageState } from "../useSessionStorageState";
+import { DEFAULT_HEAT_RADIUS, MIN_HEAT_RADIUS, MAX_HEAT_RADIUS, normalizeHeatRadius } from '../heatmap';
 import {
   DEFAULT_CLUSTER_RADIUS,
   MAX_CLUSTER_RADIUS,
@@ -135,6 +136,36 @@ export default function MapToolsMenu({
               />
               <span>Timeline</span>
             </label>
+
+            {/* Heat only consumes data-source points; clustering below remains independent. */}
+            <label className="csvToolToggle" role="menuitemcheckbox"
+              aria-checked={!!mapToolsState?.heatmapEnabled}>
+              <input type="checkbox" checked={!!mapToolsState?.heatmapEnabled}
+                onChange={(event) => onMapToolsPatch?.({ heatmapEnabled: event.target.checked })} />
+              <span>Heatmap</span>
+            </label>
+            {mapToolsState?.heatmapEnabled && (
+              <div style={{ marginTop: 8 }}>
+                <label className="csvToolToggle" role="menuitemcheckbox"
+                  aria-checked={!!mapToolsState?.heatmapShowMarkers}>
+                  <input type="checkbox" checked={!!mapToolsState?.heatmapShowMarkers}
+                    onChange={(event) => onMapToolsPatch?.({ heatmapShowMarkers: event.target.checked })} />
+                  <span>Show markers</span>
+                </label>
+                <label className="csvLabel" htmlFor="heat-radius">
+                  Heat radius: {mapToolsState?.heatRadius ?? DEFAULT_HEAT_RADIUS} px
+                </label>
+                <input id="heat-radius" type="range" style={{ width: '100%' }}
+                  aria-label="Heat radius (pixels)"
+                  aria-valuetext={`${mapToolsState?.heatRadius ?? DEFAULT_HEAT_RADIUS} pixels`}
+                  min={MIN_HEAT_RADIUS} max={MAX_HEAT_RADIUS} step={1}
+                  value={mapToolsState?.heatRadius ?? DEFAULT_HEAT_RADIUS}
+                  onChange={(event) => {
+                    // Update while dragging; Leaflet batches canvas redraws into animation frames.
+                    onMapToolsPatch?.({ heatRadius: normalizeHeatRadius(event.target.value) });
+                  }} />
+              </div>
+            )}
 
             {/* Toggle marker clustering on/off */}
             <label

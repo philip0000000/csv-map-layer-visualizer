@@ -77,6 +77,5 @@ Existing summary coordinates are approximate. Existing viewport queries exclude
 points outside their bounds, so heat near viewport edges remains an approximation.
 No data-source aggregation rewrite or numeric CSV weighting was introduced.
 
-The user's final smoke test should judge those approximations with their datasets,
-including zoom/pan transitions and timeline playback in browser and desktop.
-All implementation changes remain unstaged; no commit, push or merge was performed.
+The user completed smoke testing and confirmed the feature works as expected.
+PR #166 was merged into `main`, and issue #165 is closed.

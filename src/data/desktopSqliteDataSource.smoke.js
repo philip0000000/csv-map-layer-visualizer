@@ -153,8 +153,8 @@ assert.equal(droppedResult.ok, true);
 assert.deepEqual(droppedFilesRequest, [droppedFile]);
 
 assert.equal(dataSource.importBrowserFiles().error.category, 'backend-unavailable');
-assert.equal(dataSource.importExample().error.category, 'backend-unavailable');
-assert.equal(dataSource.cancelImport('import-1').error.category, 'backend-unavailable');
+assert.equal((await dataSource.importExample()).error.category, 'backend-unavailable');
+assert.equal((await dataSource.cancelImport('import-1')).error.category, 'backend-unavailable');
 assert.equal((await dataSource.selectDataset('dataset-1')).ok, true);
 assert.equal((await dataSource.selectDataset('missing')).ok, false);
 assert.equal(

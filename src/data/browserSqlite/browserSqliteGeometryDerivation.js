@@ -10,6 +10,7 @@ import {
 import {
   getBrowserSqliteTimelineExtent,
 } from './browserSqliteTimeline.js';
+import { resolveEmbeddedGeojson } from '../geojsonFeatureModel.js';
 
 const DEFAULT_LINE_STYLE = Object.freeze({ color: '#3388ff', weight: 3 });
 const DEFAULT_REGION_STYLE = Object.freeze({
@@ -149,6 +150,7 @@ function stageGeometryVertices(database, {
       const stored = sourceRows.getAsObject();
       const sourceRowIndex = normalizeSourceRowIndex(stored.source_row_index);
       const row = parseJsonObject(stored.row_json);
+      if (resolveEmbeddedGeojson(row).kind !== 'legacy') continue;
       const geometryType = getRowFeatureType(row, featureTypeField);
       if (geometryType !== 'line' && geometryType !== 'region') continue;
 

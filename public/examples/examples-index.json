@@ -15,6 +15,9 @@
     "present-day/fornsok/fornsok_points.csv",
     "present-day/fornsok/fornsok_regions.csv",
     "medieval/runes.csv",
-    "medieval/swedish_cities.csv"
+    "medieval/swedish_cities.csv",
+    "debug/geojson-all-geometries.geojson",
+    "debug/compact-geometry-mixed.csv",
+    "debug/compact-geometry-invalid.csv"
   ]
 }

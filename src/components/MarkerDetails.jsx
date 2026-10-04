@@ -81,6 +81,12 @@ export function FeatureDetails({
       <div style={{ fontWeight: 700, marginBottom: 6 }}>
         {kind === 'line' ? 'Line' : kind === 'region' ? 'Zone' : 'Point'}
       </div>
+      {feature.geojsonComponent === true && (
+        // Component identity is separate from imported properties, which may use these names.
+        <div style={{ marginBottom: 6 }}>
+          <b>Feature:</b> {String(detailState.details?.sourceFeatureId ?? feature.featureId)} · <b>Part:</b> {String(feature.part)}
+        </div>
+      )}
       {kind === 'point' ? (
         <>
           <div><b>lat:</b> {feature.lat}</div>

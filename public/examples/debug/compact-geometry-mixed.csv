@@ -1,0 +1,9 @@
+name,year,color,lat,lon,geometry
+Point,1300,#3366ff,0,0,"{""type"":""Point"",""coordinates"":[18,59.32,25]}"
+MultiPoint,1400,#3366ff,0,0,"{""type"":""MultiPoint"",""coordinates"":[[18.01,59.32],[18.01,59.33]]}"
+LineString,1500,#3366ff,0,0,"{""type"":""Feature"",""id"":2,""properties"":{""name"":""LineString"",""year"":""invalid"",""color"":""#cc3344"",""fillColor"":""#44aa77"",""fillOpacity"":0.35,""arrow"":""end"",""nested"":{""tags"":[""debug"",""LineString""],""enabled"":true,""count"":2}},""geometry"":{""type"":""LineString"",""coordinates"":[[18,59.36],[18.04,59.37],[18.08,59.36]]}}"
+MultiLineString,1600,#3366ff,0,0,"{""type"":""MultiLineString"",""coordinates"":[[[18.09,59.32],[18.1,59.34]],[[18.11,59.32],[18.12,59.34]]]}"
+Polygon with hole,1700,#3366ff,0,0,"{""type"":""Polygon"",""coordinates"":[[[18.02,59.32],[18.06,59.32],[18.06,59.35],[18.02,59.35],[18.02,59.32]],[[18.03,59.33],[18.04,59.33],[18.04,59.34],[18.03,59.34],[18.03,59.33]]]}"
+MultiPolygon,1800,#3366ff,0,0,"{""type"":""MultiPolygon"",""coordinates"":[[[[18.14,59.32],[18.18,59.32],[18.18,59.35],[18.14,59.35],[18.14,59.32]]],[[[18.2,59.32],[18.24,59.32],[18.24,59.35],[18.2,59.35],[18.2,59.32]]]]}"
+Mixed collection,1900,#3366ff,0,0,"{""type"":""GeometryCollection"",""geometries"":[{""type"":""Point"",""coordinates"":[17.96,59.38]},{""type"":""LineString"",""coordinates"":[[17.96,59.39],[18,59.4]]},{""type"":""Polygon"",""coordinates"":[[[17.919999999999998,59.38],[17.959999999999997,59.38],[17.959999999999997,59.410000000000004],[17.919999999999998,59.410000000000004],[17.919999999999998,59.38]],[[17.93,59.39],[17.939999999999998,59.39],[17.939999999999998,59.400000000000006],[17.93,59.400000000000006],[17.93,59.39]]]}]}"
+Legacy point with ordinary geometry text,1300,,59.31,18,ordinary custom metadata

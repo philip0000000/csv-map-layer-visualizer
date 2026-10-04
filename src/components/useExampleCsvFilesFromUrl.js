@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { normalizeExampleName } from '../data/browserExampleImport.js';
 
 export function useExampleCsvFilesFromUrl({
   importExampleFile,
@@ -8,12 +9,12 @@ export function useExampleCsvFilesFromUrl({
   const didAutoLoadRef = useRef(false);
 
   /**
-   * Optional: auto-load example CSV files from the URL.
+   * Optional: auto-load supported CSV/GeoJSON examples, with optional gzip, from the URL.
    * Example:
    *   ?example=books.csv&example=authors.csv
    *
    * Behavior:
-   * - If one or more valid ?example=*.csv values are present:
+   * - If one or more valid supported ?example= filenames are present:
    *   - The files are auto-loaded from /public/examples
    * - Otherwise:
    *   - No file is auto-loaded
@@ -53,7 +54,7 @@ export function getExampleNamesFromSearch(search) {
 
   for (const value of params.getAll("example")) {
     const trimmed = String(value ?? "").trim();
-    if (!/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.csv$/.test(trimmed)) {
+    if (!normalizeExampleName(trimmed)) {
       continue;
     }
     if (trimmed.includes("..")) continue;

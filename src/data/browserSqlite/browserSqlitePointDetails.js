@@ -1,4 +1,5 @@
 import { DEFAULT_GROUP_ROWS_LIMIT } from '../dataSource.js';
+import { getGeojsonFeatureDetails } from '../geojsonStorage.js';
 
 export const MAX_BROWSER_SQLITE_GROUP_ROWS_LIMIT = 100;
 const GROUP_ROWS_SORT_ORDER = 'dataset-source-row';
@@ -6,8 +7,8 @@ const GROUP_ROWS_SORT_ORDER = 'dataset-source-row';
 /**
  * Fetch one original source row for an exact map-feature reference.
  *
- * The reference must belong to a currently derived point, line, or region, so
- * this operation cannot expose arbitrary stored rows. Full row JSON is read
+ * The reference must belong to derived geometry or a retained GeoJSON Feature,
+ * including valid non-spatial Features. Full row JSON is read
  * only for this explicit lookup, never for viewport work. Multipart regions
  * deliberately carry the same derivation-selected reference, so every part
  * resolves the same logical metadata row.
@@ -20,6 +21,8 @@ export function getBrowserSqliteFeatureDetails(database, query = {}) {
   requireDatabase(database);
   const sourceRef = normalizeSourceRef(query.sourceRef);
   if (!sourceRef) return createEmptyDetailsResult();
+  const compact = getGeojsonFeatureDetails(database, sourceRef);
+  if (compact) return compact;
 
   const row = readOne(database, `
     SELECT source_rows.row_json, datasets.coordinate_mapping_json

@@ -1,4 +1,6 @@
 "use strict";
+const { createSqliteAdapter } = require('./sqliteAdapter.cjs');
+const { getGeojsonLogicalZone, updateGeojsonLogicalZone } = require('../src/data/geojsonStorage.js');
 
 const DEFAULT_REGION_STYLE = Object.freeze({
   color: "#3388ff",
@@ -8,41 +10,21 @@ const DEFAULT_REGION_STYLE = Object.freeze({
   fillOpacity: 0.25,
 });
 
-/** Rebuild materialized region parts for one persistent dataset. */
+/** Rebuild region parts one group at a time instead of retaining every source vertex. */
 function rebuildSqliteDatasetRegions({ db, datasetId }) {
   requireOpenDatabase(db);
-  const rows = db.prepare(`
+  const selectRows = db.prepare(`
     SELECT source_row_index, lat, lon, timeline_start_year, timeline_end_year,
-           compact_json, row_json
+           compact_json, TRIM(json_extract(compact_json, '$.featureId')) AS ordered_id,
+           COALESCE(NULLIF(TRIM(json_extract(compact_json, '$.part')), ''), '0') AS ordered_part
     FROM features
-    WHERE dataset_id = ?
-    ORDER BY source_row_index
-  `).all(datasetId);
-  const groups = new Map();
-
-  for (const stored of rows) {
-    const compact = parseObject(stored.compact_json);
-    if (String(compact.featureType ?? "").trim().toLowerCase() !== "region") continue;
-    const featureId = normalizeString(compact.featureId);
-    if (!featureId) continue;
-    const part = normalizeString(compact.part) ?? "0";
-    const key = `${featureId}\u0000${part}`;
-    let group = groups.get(key);
-    if (!group) {
-      group = { featureId, part, vertices: [] };
-      groups.set(key, group);
-    }
-    group.vertices.push({
-      sourceRowIndex: Number(stored.source_row_index),
-      order: parseOrder(compact.order),
-      lat: Number(stored.lat),
-      lon: Number(stored.lon),
-      timelineStartYear: stored.timeline_start_year,
-      timelineEndYear: stored.timeline_end_year,
-      compact,
-    });
-  }
-
+    WHERE dataset_id = ? AND LOWER(TRIM(json_extract(compact_json, '$.featureType'))) = 'region'
+      AND (TRIM(json_extract(compact_json, '$.featureId')),
+        COALESCE(NULLIF(TRIM(json_extract(compact_json, '$.part')), ''), '0'), source_row_index) > (?, ?, ?)
+    ORDER BY TRIM(json_extract(compact_json, '$.featureId')),
+      COALESCE(NULLIF(TRIM(json_extract(compact_json, '$.part')), ''), '0'), source_row_index
+    LIMIT 1000
+  `);
   db.prepare("DELETE FROM geometry_features WHERE dataset_id = ?").run(datasetId);
   const insert = db.prepare(`
     INSERT INTO geometry_features (
@@ -51,9 +33,47 @@ function rebuildSqliteDatasetRegions({ db, datasetId }) {
       timeline_end_year, coordinates_json, style_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  for (const group of groups.values()) {
+  let group = null;
+  let groupKey = null;
+
+  // Keyset batches release the read statement before writes. better-sqlite3
+  // forbids writes during iteration; OFFSET would repeatedly scan old vertices.
+  let cursor = ['', '', -1];
+  while (true) {
+    const batch = selectRows.all(datasetId, ...cursor);
+    if (!batch.length) break;
+    for (const stored of batch) {
+      const compact = parseObject(stored.compact_json);
+      if (String(compact.featureType ?? "").trim().toLowerCase() !== "region") continue;
+      const featureId = normalizeString(compact.featureId);
+      if (!featureId) continue;
+      const part = normalizeString(compact.part) ?? "0";
+      const key = `${featureId}\u0000${part}`;
+      if (groupKey !== key) {
+        if (group) writeGroup(group);
+        group = { featureId, part, vertices: [] };
+        groupKey = key;
+      }
+      group.vertices.push({
+        sourceRowIndex: Number(stored.source_row_index),
+        order: parseOrder(compact.order),
+        lat: Number(stored.lat),
+        lon: Number(stored.lon),
+        timelineStartYear: stored.timeline_start_year,
+        timelineEndYear: stored.timeline_end_year,
+        compact,
+      });
+    }
+    const last = batch.at(-1);
+    cursor = [last.ordered_id, last.ordered_part, last.source_row_index];
+  }
+
+  if (group) writeGroup(group);
+
+  /** Preserve established order, styles, closure, and timeline for the current part. */
+  function writeGroup(group) {
     group.vertices.sort(compareVertices);
-    if (group.vertices.length < 3) continue;
+    if (group.vertices.length < 3) return;
     const coordinates = group.vertices.map((vertex) => [vertex.lat, vertex.lon]);
     if (!sameCoordinate(coordinates[0], coordinates.at(-1))) {
       coordinates.push([...coordinates[0]]);
@@ -80,6 +100,8 @@ function rebuildSqliteDatasetRegions({ db, datasetId }) {
 
 /** Read every materialized part for one dataset-scoped logical region. */
 function getSqliteLogicalZone({ db, datasetId, featureId }) {
+  const compact = getGeojsonLogicalZone(createSqliteAdapter(db), { datasetId, featureId });
+  if (compact) return compact;
   requireOpenDatabase(db);
   const normalizedDatasetId = requireString(datasetId);
   const normalizedFeatureId = requireString(featureId);
@@ -103,6 +125,10 @@ function getSqliteLogicalZone({ db, datasetId, featureId }) {
 
 /** Replace a complete logical zone in one better-sqlite3 transaction. */
 function updateSqliteLogicalZone({ db, datasetId, featureId, parts }) {
+  const adapter = createSqliteAdapter(db);
+  if (getGeojsonLogicalZone(adapter, { datasetId, featureId })) {
+    return db.transaction(() => updateGeojsonLogicalZone(adapter, { datasetId, featureId, parts }))();
+  }
   requireOpenDatabase(db);
   const storedZone = getSqliteLogicalZone({ db, datasetId, featureId });
   const submittedParts = normalizeParts(parts);

@@ -1,11 +1,14 @@
 import { detectFeatureTypeField, getRowFeatureType } from '../../components/featureTypes.js';
 import { isValidLat, isValidLon, parseFlexibleFloat } from '../../components/geoColumns.js';
+import { getGeojsonLogicalZone, updateGeojsonLogicalZone } from '../geojsonStorage.js';
 
 /** Read every stored part for one dataset-scoped logical region. */
 export function getBrowserSqliteLogicalZone(database, request = {}) {
   requireDatabase(database);
   const datasetId = normalizeRequiredString(request.datasetId);
   const featureId = normalizeRequiredString(request.featureId);
+  const compact = getGeojsonLogicalZone(database, { datasetId, featureId });
+  if (compact) return compact;
   const rows = readAll(database, `
     SELECT part, coordinates_json, style_json
     FROM geometry_features
@@ -28,6 +31,17 @@ export function getBrowserSqliteLogicalZone(database, request = {}) {
 /** Atomically update all source vertices and compact parts for one logical zone. */
 export function updateBrowserSqliteLogicalZone(database, request = {}) {
   requireDatabase(database);
+  if (getGeojsonLogicalZone(database, request)) {
+    database.run('BEGIN TRANSACTION');
+    try {
+      const zone = updateGeojsonLogicalZone(database, request);
+      database.run('COMMIT');
+      return zone;
+    } catch (error) {
+      database.run('ROLLBACK');
+      throw error;
+    }
+  }
   const storedZone = getBrowserSqliteLogicalZone(database, request);
   const submittedParts = normalizeSubmittedParts(request.parts);
   validateCompletePartSet(storedZone.parts, submittedParts);

@@ -491,7 +491,7 @@ export default function App() {
 
     const confirmed = window.confirm(
       `Remove "${dataset.name}" and its imported data from this application? ` +
-      "The original CSV file will not be changed.",
+      "The original file will not be changed.",
     );
     if (!confirmed) return;
 
@@ -542,8 +542,8 @@ export default function App() {
     databaseSelectedId,
   ]);
 
-  /** Save only the requested dataset while treating dialog cancellation as success. */
-  const saveDatasetAsCsv = useCallback(async (datasetId) => {
+  /** Save one dataset in the selected format and report any unrepresentable legacy parts. */
+  const saveDatasetAsCsv = useCallback(async (datasetId, format = 'csv') => {
     if (!datasetCsvExportAvailable) return;
     setDatasetExportState((current) => ({
       pendingDatasetIds: current.pendingDatasetIds.includes(datasetId)
@@ -553,15 +553,17 @@ export default function App() {
     }));
 
     try {
-      const result = await dataSource.saveDatasetAsCsv(datasetId);
+      const result = format === 'geojson'
+        ? await dataSource.saveDatasetAsGeojson(datasetId)
+        : await dataSource.saveDatasetAsCsv(datasetId);
       if (!result.ok && !result.canceled) {
-        throw new Error(result.error?.message ?? "Could not save the CSV dataset.");
+        throw new Error(result.error?.message ?? "Could not save the dataset.");
       }
       setDatasetExportState((current) => ({
         pendingDatasetIds: current.pendingDatasetIds.filter(
           (pendingId) => pendingId !== datasetId,
         ),
-        error: null,
+        error: result.warnings?.length ? `Saved with warnings: ${result.warnings.join(' ')}` : null,
       }));
     } catch (error) {
       setDatasetExportState((current) => ({
@@ -570,7 +572,7 @@ export default function App() {
         ),
         error: error?.message
           ? String(error.message)
-          : "Could not save the CSV dataset.",
+          : "Could not save the dataset.",
       }));
     }
   }, [dataSource, datasetCsvExportAvailable]);
@@ -652,7 +654,7 @@ export default function App() {
       setDesktopImportState({
         status: "error",
         summary: result ?? null,
-        error: "No CSV files were imported.",
+        error: "No dataset files were imported.",
         progress: null,
       });
     } catch (error) {
@@ -852,7 +854,7 @@ export default function App() {
     >
       {fileDropAvailable && csvFileDrop.isDraggingFiles && (
         <div className="dropOverlay" aria-hidden="true">
-          <div className="dropOverlayText">Drop CSV to import</div>
+          <div className="dropOverlayText">Drop CSV or GeoJSON to import</div>
         </div>
       )}
       <div className="rightPane">
@@ -907,6 +909,9 @@ export default function App() {
               : undefined}
             onSaveAsCsv={datasetCsvExportAvailable
               ? saveDatasetAsCsv
+              : undefined}
+            onSaveAsGeojson={desktopCapabilities.datasetGeojsonExport
+              ? (datasetId) => saveDatasetAsCsv(datasetId, 'geojson')
               : undefined}
             removeActionLabel="Remove"
             onToggleEnabled={desktopDatasetVisibilityAvailable

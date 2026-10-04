@@ -63,7 +63,7 @@ try {
     initialized: true,
     reused: false,
     databaseStorage: 'memory',
-    schemaVersion: 3,
+    schemaVersion: 4,
   });
   const repeatedInitialize = await runtime.handleMessage(request(
     'initialize-repeated',

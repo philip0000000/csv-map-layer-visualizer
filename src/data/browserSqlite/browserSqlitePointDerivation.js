@@ -10,6 +10,7 @@ import {
 import {
   getBrowserSqliteTimelineExtent,
 } from './browserSqliteTimeline.js';
+import { resolveEmbeddedGeojson } from '../geojsonFeatureModel.js';
 
 const DEFAULT_IMAGE_SIZE_METERS = 100;
 const MIN_IMAGE_SIZE_METERS = 1;
@@ -89,6 +90,8 @@ export function rebuildBrowserSqlitePointFeatures(database, datasetId) {
       while (sourceRows.step()) {
         const stored = sourceRows.getAsObject();
         const row = parseJsonObject(stored.row_json);
+        // Compact geometry is derived once in its own component table, never as a legacy point.
+        if (resolveEmbeddedGeojson(row).kind !== 'legacy') continue;
         const featureType = getRowFeatureType(row, featureTypeField);
 
         // Explicit line, region, or unknown feature types are not point failures.

@@ -22,6 +22,7 @@ export const DATA_SOURCE_METHODS = Object.freeze({
   setDatasetEnabled: "setDatasetEnabled",
   removeDataset: "removeDataset",
   saveDatasetAsCsv: "saveDatasetAsCsv",
+  saveDatasetAsGeojson: "saveDatasetAsGeojson",
   updateDatasetMapping: "updateDatasetMapping",
   getPreviewPage: "getPreviewPage",
   getSearchRows: "getSearchRows",
@@ -96,6 +97,8 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {(datasetId: string) => DatasetCsvSaveResult | Promise<DatasetCsvSaveResult>} saveDatasetAsCsv
  *   Saves one dataset's current committed SQLite rows without exposing runtime
  *   filesystem or database access to presentation code.
+ * @property {(datasetId: string) => DatasetCsvSaveResult | Promise<DatasetCsvSaveResult>} saveDatasetAsGeojson
+ *   Exports current geometry and typed properties as an uncompressed FeatureCollection.
  * @property {(datasetId: string, mapping: CoordinateMapping) => MappingMutationResult | Promise<MappingMutationResult>} updateDatasetMapping
  *   Changes coordinate fields and returns normalized detected timeline metadata.
  * @property {(query: PreviewPageQuery) => PreviewPageResult | Promise<PreviewPageResult>} getPreviewPage
@@ -232,11 +235,12 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {boolean} canceled
  * @property {string|null} datasetId
  * @property {string|null} fileName
+ * @property {string[]} [warnings] Representational omissions reported after a successful export.
  * @property {BackendFailure|null} error
  */
 
 /**
- * @typedef {"queued"|"started"|"parsing"|"storing"|"completed"} ImportProgressState
+ * @typedef {"queued"|"started"|"reading"|"parsing"|"storing"|"completed"} ImportProgressState
  */
 
 /**
@@ -248,6 +252,8 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
  * @property {number} totalFiles
  * @property {number|null} completedRows
  * @property {number|null} totalRows
+ * @property {number|null} [sourceBytes] Source bytes read before optional decompression.
+ * @property {number|null} [expandedBytes] Decoded document bytes after decompression.
  * @property {boolean|null} ok
  */
 
@@ -530,7 +536,8 @@ export const BACKEND_FAILURE_CATEGORIES = Object.freeze({
 /**
  * @typedef {object} FeatureDetailsResult
  * @property {string|null} featureId
- * @property {Record<string, string>|null} row
+ * @property {string|number|null} [sourceFeatureId] Original GeoJSON identity, separate from internal component IDs.
+ * @property {Record<string, unknown>|null} row CSV text or typed GeoJSON properties.
  * @property {string|null} [latField]
  * @property {string|null} [lonField]
  */

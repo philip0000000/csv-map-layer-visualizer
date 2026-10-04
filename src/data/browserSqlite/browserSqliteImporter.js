@@ -1,4 +1,9 @@
 import Papa from 'papaparse';
+import { readCsvTextChunks } from '../csvTextStream.js';
+import { ImportReadError, readImportTextChunks } from '../importTextStream.js';
+import { GeojsonValidationError, normalizeGeojsonFeature, validateGeojsonDocumentMetadata } from '../geojson.js';
+import { GeojsonDocumentError, readGeojsonFeatures } from '../geojsonStream.js';
+import { geojsonPropertyToCsv, resolveEmbeddedGeojson } from '../geojsonFeatureModel.js';
 import { autoDetectLatLon } from '../../components/geoColumns.js';
 import {
   autoDetectRangeFields,
@@ -30,9 +35,10 @@ export const BROWSER_SQLITE_CSV_ROW_BATCH_SIZE = 500;
 const MAX_BROWSER_SQLITE_CSV_CHUNK_SIZE_BYTES = 16 * 1024 * 1024;
 
 /**
- * Incrementally import one browser CSV File into the temporary SQLite database.
+ * Incrementally import one browser CSV/GeoJSON File, optionally gzip-compressed, into SQLite.
  *
- * PapaParse reads bounded File slices with no nested parser worker. Normalized
+ * Plain CSV uses PapaParse File slices; other formats share streaming transport.
+ * Both paths use no nested parser worker. Normalized
  * rows are retained only until one bounded storage batch is inserted. The file
  * transaction commits only after parsing and metadata finalization succeed.
  *
@@ -56,6 +62,12 @@ export function importBrowserSqliteCsvFile(database, file, options = {}) {
     input.fileName,
     settings,
   );
+
+  // Plain CSV keeps its established file-slice path; native GeoJSON and gzip
+  // share bounded byte transport, the storage batches, and the file transaction.
+  if (/\.(?:geojson(?:\.gz)?|csv\.gz)$/i.test(input.fileName)) {
+    return importStreamedFile(activeImport, state, file, settings);
+  }
 
   return new Promise((resolve, reject) => {
     const fail = (error, fallbackCode = 'csv-import-failed') => {
@@ -88,10 +100,10 @@ export function importBrowserSqliteCsvFile(database, file, options = {}) {
             abortParser(parser);
           }
         },
-        complete: () => {
+        complete: async () => {
           if (state.settled) return;
           try {
-            const result = finalizeParsedFile(state);
+            const result = await finalizeParsedFile(state);
             state.settled = true;
             resolve(result);
           } catch (error) {
@@ -106,6 +118,88 @@ export function importBrowserSqliteCsvFile(database, file, options = {}) {
       fail(error);
     }
   });
+}
+
+/**
+ * Import gzip CSV or native GeoJSON without buffering the expanded document.
+ * The transaction commits only after the gzip trailer and final document record have
+ * been consumed; corruption or cancellation removes all rows from this file.
+ */
+async function importStreamedFile(activeImport, state, file, settings) {
+  try {
+    const text = (probe = false) => readImportTextChunks(readFileBytes(file, settings.chunkSizeBytes), {
+      fileName: state.fileName,
+      shouldCancel: settings.shouldCancel,
+      onProgress: probe ? undefined : bytes => {
+        state.readProgress = bytes;
+        emitImporterProgress(state, 'reading');
+      },
+    });
+    if (/\.geojson(?:\.gz)?$/i.test(state.fileName)) {
+      state.headers = ['geometry', 'geometryInterpretation'];
+      const headers = new Set(state.headers);
+      for await (const value of readGeojsonFeatures(text, {
+        shouldCancel: settings.shouldCancel,
+        onCollectionStart: () => { state.isFeatureCollection = true; },
+        onMetadata: metadata => {
+          try { state.geojsonMetadata = validateGeojsonDocumentMetadata(metadata); }
+          catch (error) { throw new GeojsonDocumentError(error.message); }
+          state.sawParsedRows = true;
+        },
+      })) {
+        state.sawParsedRows = true;
+        state.totalParsedRowCount++;
+        try {
+          if (state.isFeatureCollection && value?.type !== 'Feature') {
+            throw new GeojsonValidationError('FeatureCollection entries must be Features.');
+          }
+          const feature = normalizeGeojsonFeature(value);
+          const row = Object.fromEntries(Object.entries(feature.properties ?? {}).map(([key, property]) => [key, geojsonPropertyToCsv(property)]));
+          // Authoritative typed properties stay inside the Feature. Reserved CSV
+          // columns cannot overwrite similarly named original GeoJSON properties.
+          row.geometry = JSON.stringify(feature);
+          row.geometryInterpretation = 'geojson';
+          // A native Feature's custom featureType property is metadata, not a CSV declaration.
+          delete row.featureType;
+          Object.keys(row).forEach(key => headers.add(key));
+          state.pendingRows.push(row);
+          if (state.pendingRows.length >= state.batchSize) flushPendingRows(state);
+        } catch (error) {
+          if (!(error instanceof GeojsonValidationError)) throw error;
+          state.skippedRowCount++;
+          pushCsvWarning(state.warnings, `Skipped GeoJSON feature ${state.totalParsedRowCount}: ${error.message}`);
+        }
+        // Yield by batch so small Features do not each incur a timer round trip.
+        if (state.totalParsedRowCount % state.batchSize === 0) {
+          emitImporterProgress(state, 'parsing');
+          await state.yieldControl();
+        }
+      }
+      state.headers = [...headers];
+    } else {
+      for await (const result of readCsvTextChunks(text(), { shouldCancel: settings.shouldCancel })) {
+        throwIfCanceled(state);
+        processParsedChunk(state, result);
+        emitImporterProgress(state, 'parsing');
+        await state.yieldControl();
+      }
+    }
+    const result = await finalizeParsedFile(state);
+    state.settled = true;
+    return result;
+  } catch (error) {
+    state.pendingRows.length = 0;
+    state.settled = true;
+    try { rollbackBrowserSqliteFileImport(activeImport); } catch { /* Preserve the read/import failure. */ }
+    throw normalizeImporterError(error, 'csv-read-failed');
+  }
+}
+
+/** Read bounded file slices as bytes; do not call File.text() or expand the whole file. */
+async function* readFileBytes(file, chunkSizeBytes) {
+  for (let offset = 0; offset < file.size; offset += chunkSizeBytes) {
+    yield new Uint8Array(await file.slice(offset, offset + chunkSizeBytes).arrayBuffer());
+  }
 }
 
 function createParserState(activeImport, fileName, settings) {
@@ -187,7 +281,14 @@ function processParsedRow(state, row) {
     state.parsedLineNumber,
     state.warnings,
   );
-  state.pendingRows.push(csvRowToObject(row, state.headers));
+  const normalized = csvRowToObject(row, state.headers);
+  const compact = resolveEmbeddedGeojson(normalized);
+  if (compact.kind === 'invalid') {
+    state.skippedRowCount++;
+    pushCsvWarning(state.warnings, `Skipped row ${state.parsedLineNumber}: ${compact.warning}`);
+    return;
+  }
+  state.pendingRows.push(normalized);
   if (state.pendingRows.length >= state.batchSize) flushPendingRows(state);
 }
 
@@ -203,7 +304,7 @@ function flushPendingRows(state) {
   emitImporterProgress(state, 'storing');
 }
 
-function finalizeParsedFile(state) {
+async function finalizeParsedFile(state) {
   throwIfCanceled(state);
   if (!state.sawParsedRows) {
     throw new BrowserSqliteImporterError(
@@ -225,7 +326,13 @@ function finalizeParsedFile(state) {
 
   const detectedFields = detectImportFields(state.headers);
   const importedAt = state.now();
-  const committed = completeBrowserSqliteFileImport(state.activeImport, {
+  const committed = await completeBrowserSqliteFileImport(state.activeImport, {
+    beforeCommit: async () => {
+      emitImporterProgress(state, 'storing');
+      await state.yieldControl();
+      throwIfCanceled(state);
+    },
+    geojsonMetadata: state.geojsonMetadata,
     headers: state.headers,
     totalParsedRowCount: state.totalParsedRowCount,
     skippedRowCount: state.skippedRowCount,
@@ -387,6 +494,7 @@ function emitImporterProgress(state, phase) {
       completedRows: state.storedRowCount,
       parsedRows: state.totalParsedRowCount,
       storedBatchCount: state.batchCount,
+      ...(state.readProgress ? { sourceBytes: state.readProgress.sourceBytes, expandedBytes: state.readProgress.expandedBytes } : {}),
     });
   } catch {
     // Progress listeners cannot alter the file transaction outcome.
@@ -464,6 +572,11 @@ function normalizeBoundedInteger(value, fallback, minimum, maximum, label) {
 
 function normalizeImporterError(error, fallbackCode) {
   if (error instanceof BrowserSqliteImporterError) return error;
+  if (error?.code === 'csv-record-size-limit') return new BrowserSqliteImporterError(error.code, 'A CSV record exceeds the supported size limit.');
+  if (error instanceof ImportReadError) {
+    return new BrowserSqliteImporterError(error.code, error.message);
+  }
+  if (error instanceof GeojsonDocumentError) return new BrowserSqliteImporterError(error.code, error.message);
   if (error instanceof BrowserSqliteImportTransactionError) {
     return new BrowserSqliteImporterError(
       'csv-import-storage-failed',

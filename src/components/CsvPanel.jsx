@@ -16,25 +16,25 @@ import { getParsingWarningsMessageKey } from "./messageDismissalState";
  * CsvPanel
  *
  * Left-side (overlay) panel that lets the user:
- * - Import one or more CSV files
- * - Select one CSV file for paginated preview in either runtime
- * - Enable or disable CSV files for map display
+ * - Import supported CSV/GeoJSON datasets with optional gzip
+ * - Select one dataset for paginated preview in either runtime
+ * - Enable or disable datasets for map display
  * - Unload browser files or remove desktop datasets
  * - Save one loaded dataset's current SQLite state as CSV
  * - Preview basic metadata and bounded source-row pages
  * - Search stored rows and select their map features without navigating the map
  *
- * This component does NOT parse CSV files itself.
+ * This component delegates parsing and storage to the data source.
  * Parsing and storage are handled by the browser hook or desktop bridge.
  */
 export default function CsvPanel({
   dataSource,
   dataRevision,
   onFeatureSelect,
-  files,            // Array of loaded CSV file objects
-  selectedId,       // ID of the currently selected CSV file
+  files,            // Array of loaded dataset objects
+  selectedId,       // ID of the currently selected dataset
   onSelect,         // Callback to change selected CSV
-  onImportFiles,    // Callback to import new CSV files
+  onImportFiles,    // Callback to import supported dataset files
   desktopImport,
   datasetListState,
   viewportQueryStats,
@@ -44,6 +44,7 @@ export default function CsvPanel({
   onLoadMorePreview,
   onUnloadFile,     // Callback to unload a CSV by ID
   onSaveAsCsv,      // Callback to save the current SQLite rows for one CSV
+  onSaveAsGeojson,  // Callback to export current geometry as a GeoJSON FeatureCollection
   removeActionLabel,
   onToggleEnabled,  // Callback to toggle file visibility
   onUpdateMapping,  // Callback when user changes latitude/longitude fields
@@ -206,6 +207,7 @@ export default function CsvPanel({
             viewportQueryStats={viewportQueryStats}
             onUnloadFile={onUnloadFile}
             onSaveAsCsv={onSaveAsCsv}
+            onSaveAsGeojson={onSaveAsGeojson}
             removeActionLabel={removeActionLabel}
             onToggleEnabled={onToggleEnabled}
             onUseRecommendedTimelineRange={useRecommendedTimelineRange}

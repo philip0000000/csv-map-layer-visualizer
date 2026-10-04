@@ -518,6 +518,7 @@ assert.deepEqual(
     'set-dataset-enabled',
     'remove-dataset',
     'export-dataset-csv',
+    'export-dataset-geojson',
     'update-dataset-mapping',
     'get-preview-page',
     'get-preview-feature',

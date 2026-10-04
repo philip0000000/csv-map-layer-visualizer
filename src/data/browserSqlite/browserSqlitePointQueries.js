@@ -1,6 +1,7 @@
 import {
   queryBrowserSqliteGeometries,
 } from './browserSqliteGeometryQueries.js';
+import { mergeGeojsonMapResult } from '../geojsonStorage.js';
 
 export const DEFAULT_BROWSER_SQLITE_RENDER_BUDGET = 1_000;
 export const MAX_BROWSER_SQLITE_RENDER_BUDGET = 10_000;
@@ -16,6 +17,11 @@ export const MAX_BROWSER_SQLITE_RENDER_BUDGET = 10_000;
  * @returns {object} Compact exact or grouped map result.
  */
 export function queryBrowserSqliteMapView(database, query = {}) {
+  return mergeGeojsonMapResult(database, query, queryLegacyMapView(database, query));
+}
+
+/** Preserve legacy SQL grouping while adding separately indexed compact components. */
+function queryLegacyMapView(database, query = {}) {
   requireDatabase(database);
   const geometryResult = queryBrowserSqliteGeometries(database, query);
   const bounds = normalizeBounds(query.bounds);

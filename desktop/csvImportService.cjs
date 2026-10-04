@@ -12,6 +12,7 @@ const { rebuildSqliteDatasetRegions } = require("./sqliteZoneService.cjs");
 const DATE_SYNONYMS = ["date", "datetime", "timestamp", "time", "created", "createdat"];
 // These fields are small enough to keep beside each imported point. Later map queries can read them without loading the full row.
 const COMPACT_FIELD_NAMES = [
+  'arrow',
   "featureType",
   "featureId",
   "part",
@@ -365,6 +366,8 @@ function insertImportResult(db, summary, features, sourceRows) {
     }
     // Region parts derive inside the import transaction, so partial geometry never persists.
     rebuildSqliteDatasetRegions({ db, datasetId: summary.datasetId });
+    // Retain this compatibility entry point while sharing derived line behavior.
+    require('./sqliteLineService.cjs').rebuildSqliteDatasetLines({ db, datasetId: summary.datasetId });
   });
 
   runImport();
@@ -562,4 +565,7 @@ function getCompactFields(row, detectedFields) {
 module.exports = {
   importCsvFileToSqlite,
   importCsvFilesToSqlite,
+  // Retain the synchronous compatibility entry points; the incremental importer
+  // reuses their established desktop row normalization without retaining all rows.
+  buildImportRows,
 };

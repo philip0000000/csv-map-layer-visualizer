@@ -2,7 +2,7 @@
 export function normalizeExampleName(value) {
   const requested = String(value ?? '').trim();
   if (
-    !/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.csv$/.test(requested) ||
+    !/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.(?:csv|geojson)(?:\.gz)?$/i.test(requested) ||
     requested.includes('..')
   ) {
     return null;

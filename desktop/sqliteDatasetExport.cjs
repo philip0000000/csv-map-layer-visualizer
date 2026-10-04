@@ -1,6 +1,7 @@
 "use strict";
 
 const Papa = require("papaparse");
+const { getDatasetExportFileName } = require('../src/data/importFileFormats.js');
 
 /** Reconstruct one desktop dataset from its current committed SQLite rows. */
 function exportSqliteDatasetCsv({ db, datasetId } = {}) {
@@ -68,7 +69,7 @@ function parseJson(value) {
 /** Keep the imported display name while ensuring the Save As type is CSV. */
 function ensureCsvExtension(value) {
   const fileName = requireString(value);
-  return /\.csv$/i.test(fileName) ? fileName : `${fileName}.csv`;
+  return getDatasetExportFileName(fileName, 'csv');
 }
 
 /** Reject missing identifiers before preparing any dataset-specific query. */

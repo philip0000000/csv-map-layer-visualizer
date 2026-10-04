@@ -3,8 +3,11 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
-const { importCsvFilesToSqlite } = require("./csvImportService.cjs");
-const { importDroppedCsvFilesToSqlite } = require("./droppedCsvImport.cjs");
+const { importMapFilesToSqlite } = require("./mapImportService.cjs");
+const { validateDroppedCsvFilePaths } = require("./droppedCsvImport.cjs");
+const { createSqliteAdapter } = require('./sqliteAdapter.cjs');
+const { exportDatasetGeojson } = require('../src/data/geojsonExport.js');
+const { normalizeExampleName } = require('../src/data/browserExampleImport.js');
 const {
   getSqliteDatasetSummary,
   getSqlitePreviewPage,
@@ -32,6 +35,24 @@ const {
 
 const LOCAL_DATA_DIR_NAME = ".local-data";
 const SQLITE_DB_FILE_NAME = "csv-map-layer-visualizer.sqlite";
+const activeMapImports = new Map();
+
+/** Own one live database connection until asynchronous import and rollback finish. */
+async function runMapImport(event, filePaths) {
+  if (activeMapImports.size) return { ok: false, canceled: false, successfulCount: 0, failedCount: 0, results: [] };
+  const state = { canceled: false };
+  activeMapImports.set(event.sender.id, state);
+  let db;
+  try {
+    db = openDesktopSqliteStore();
+    return await importMapFilesToSqlite({ db, filePaths,
+      shouldCancel: () => state.canceled || event.sender.isDestroyed(),
+      onProgress: progress => sendCsvImportProgress(event, progress) });
+  } finally {
+    closeSqliteStore(db);
+    activeMapImports.delete(event.sender.id);
+  }
+}
 let customTileMutationQueue = Promise.resolve();
 
 function getDevServerUrl() {
@@ -44,6 +65,22 @@ function getDevServerUrl() {
  * Keep file paths and database access in the main process.
  */
 function registerDesktopBridgeHandlers() {
+  // Resolve only supported bundled examples; renderer input cannot select arbitrary paths.
+  ipcMain.handle('desktop:importExample', async (event, request = {}) => {
+    const name = normalizeExampleName(request.name);
+    if (!name) return { ok: false, results: [], successfulCount: 0, failedCount: 0 };
+    const root = path.resolve(__dirname, '..', 'public', 'examples');
+    let target = path.join(root, name);
+    if (!fs.existsSync(target) && !name.includes('/')) {
+      try {
+        const index = JSON.parse(fs.readFileSync(path.join(root, 'examples-index.json'), 'utf8'));
+        const match = (index.files ?? []).find(entry => normalizeExampleName(entry)
+          && entry.split('/').at(-1).toLowerCase() === name.toLowerCase());
+        if (match) target = path.join(root, match);
+      } catch { /* A missing manifest leaves the normal missing-file import result. */ }
+    }
+    return runMapImport(event, [target]);
+  });
   // Aggregate bounds in SQLite rather than importing all grouped source rows into the UI.
   ipcMain.handle('desktop:getGroupBounds', (_event, query = {}) => {
     let db;
@@ -101,10 +138,10 @@ function registerDesktopBridgeHandlers() {
   // The renderer asks to import, but the main process opens the file picker.
   ipcMain.handle("desktop:importCsvToSqlite", async (event) => {
     const fileResult = await dialog.showOpenDialog({
-      title: "Import CSV files",
+      title: "Import CSV or GeoJSON files",
       properties: ["openFile", "multiSelections"],
       filters: [
-        { name: "CSV files", extensions: ["csv"] },
+        { name: "CSV / GeoJSON / gzip files", extensions: ["csv", "geojson", "gz"] },
         { name: "All files", extensions: ["*"] },
       ],
     });
@@ -113,17 +150,7 @@ function registerDesktopBridgeHandlers() {
       return { ok: false, canceled: true };
     }
 
-    const db = openDesktopSqliteStore();
-
-    try {
-      return importCsvFilesToSqlite({
-        db,
-        filePaths: fileResult.filePaths,
-        onProgress: (progress) => sendCsvImportProgress(event, progress),
-      });
-    } finally {
-      closeSqliteStore(db);
-    }
+    return runMapImport(event, fileResult.filePaths);
   });
   ipcMain.handle("desktop:queryMapView", async (_event, query = {}) => {
     const db = openDesktopSqliteStore();
@@ -140,17 +167,15 @@ function registerDesktopBridgeHandlers() {
     }
   });
   ipcMain.handle("desktop:importDroppedCsvFiles", async (event, request = {}) => {
-    const db = openDesktopSqliteStore();
-
-    try {
-      return importDroppedCsvFilesToSqlite({
-        db,
-        filePaths: request?.filePaths,
-        onProgress: (progress) => sendCsvImportProgress(event, progress),
-      });
-    } finally {
-      closeSqliteStore(db);
-    }
+    const validated = validateDroppedCsvFilePaths(request?.filePaths);
+    const result = await runMapImport(event, validated.validFilePaths);
+    return { ...result, failedCount: result.failedCount + validated.invalidResults.length,
+      results: [...result.results, ...validated.invalidResults] };
+  });
+  ipcMain.handle('desktop:cancelImport', event => {
+    const active = activeMapImports.get(event.sender.id);
+    if (active) active.canceled = true;
+    return { canceled: !!active };
   });
   ipcMain.handle("desktop:getDatasetSummary", async () => {
     const db = openDesktopSqliteStore();
@@ -186,7 +211,7 @@ function registerDesktopBridgeHandlers() {
       closeSqliteStore(db);
     }
   });
-  ipcMain.handle("desktop:saveDatasetAsCsv", async (event, request = {}) => {
+  for (const format of ['csv', 'geojson']) ipcMain.handle(format === 'csv' ? 'desktop:saveDatasetAsCsv' : 'desktop:saveDatasetAsGeojson', async (event, request = {}) => {
     const requestedDatasetId = typeof request?.datasetId === "string"
       ? request.datasetId.trim()
       : null;
@@ -196,17 +221,18 @@ function registerDesktopBridgeHandlers() {
       const db = openDesktopSqliteStore();
       try {
         // Serialize before opening the dialog so no partial output can precede a failure.
-        exported = exportSqliteDatasetCsv({ db, datasetId: requestedDatasetId });
+        exported = format === 'csv' ? exportSqliteDatasetCsv({ db, datasetId: requestedDatasetId })
+          : exportDatasetGeojson(createSqliteAdapter(db), requestedDatasetId);
       } finally {
         closeSqliteStore(db);
       }
 
       const owner = BrowserWindow.fromWebContents(event.sender);
       const saveResult = await dialog.showSaveDialog(owner, {
-        title: "Save CSV dataset",
+        title: format === 'csv' ? 'Save CSV dataset' : 'Save GeoJSON dataset',
         defaultPath: exported.fileName,
         filters: [
-          { name: "CSV files", extensions: ["csv"] },
+          { name: format === 'csv' ? 'CSV files' : 'GeoJSON files', extensions: [format] },
           { name: "All files", extensions: ["*"] },
         ],
       });
@@ -215,12 +241,13 @@ function registerDesktopBridgeHandlers() {
         return { ok: false, canceled: true, datasetId: exported.datasetId };
       }
 
-      writeUtf8FileAtomically(saveResult.filePath, exported.csvText);
+      writeUtf8FileAtomically(saveResult.filePath, format === 'csv' ? exported.csvText : exported.geojsonText);
       return {
         ok: true,
         canceled: false,
         datasetId: exported.datasetId,
         fileName: path.basename(saveResult.filePath),
+        ...(exported.warnings ? { warnings: exported.warnings } : {}),
       };
     } catch {
       // Raw paths, SQLite details, and filesystem errors never cross the preload boundary.

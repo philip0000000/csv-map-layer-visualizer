@@ -2,9 +2,12 @@
 
 This document describes the CSV structure supported by `csv-map-layer-visualizer`, including coordinates, feature types, timeline fields, point markers, point images, line definitions, and region definitions.
 
+Optional compact geometry, standalone GeoJSON, gzip inputs, and export mappings
+are documented in [GeoJSON and gzip imports](geojson-and-gzip.md).
+
 ## CSV expectations
 
-Minimum required:
+Minimum required for legacy coordinate rows (compact `geometry` rows supply their own coordinates):
 - Two columns that represent coordinates:
   - Latitude in `[-90..90]`
   - Longitude in `[-180..180]`

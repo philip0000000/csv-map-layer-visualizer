@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld("csvMapDesktop", {
   isDesktop: true,
   getStatus: () => ipcRenderer.invoke("desktop:getStatus"),
   importCsvToSqlite: () => ipcRenderer.invoke("desktop:importCsvToSqlite"),
+  importExample: name => ipcRenderer.invoke('desktop:importExample', { name }),
+  cancelImport: () => ipcRenderer.invoke('desktop:cancelImport'),
   importDroppedCsvFiles: (files) => {
     const filePaths = Array.from(files ?? []).map((file) => {
       try {
@@ -41,6 +43,7 @@ contextBridge.exposeInMainWorld("csvMapDesktop", {
     "desktop:saveDatasetAsCsv",
     { datasetId },
   ),
+  saveDatasetAsGeojson: datasetId => ipcRenderer.invoke('desktop:saveDatasetAsGeojson', { datasetId }),
   // Expose structured lookup requests without exposing SQLite or raw SQL.
   getFeatureDetails: (query) => ipcRenderer.invoke('desktop:getFeatureDetails', query),
   getGroupRows: (query) => ipcRenderer.invoke('desktop:getGroupRows', query),

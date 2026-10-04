@@ -2,10 +2,13 @@ import { exactRowToPoint } from './browserSqlitePointQueries.js';
 import { storedRowToGeometry } from './browserSqliteGeometryQueries.js';
 import { detectFeatureTypeField, getRowFeatureType } from '../../components/featureTypes.js';
 import { parseFlexibleFloat, isValidLat, isValidLon } from '../../components/geoColumns.js';
+import { queryGeojsonComponents } from '../geojsonStorage.js';
 
 /** Resolve one source row without viewport limits or grouping, using existing derived geometry. */
 export function getBrowserSqlitePreviewFeature(database, { sourceRef }) {
   const { datasetId, rowIndex } = sourceRef;
+  const compact = queryGeojsonComponents(database, {}, sourceRef);
+  if (compact.matching) return compact;
   const point = one(database, 'SELECT * FROM point_features WHERE dataset_id = ? AND source_row_index = ?', [datasetId, rowIndex]);
   if (point) return { points: [exactRowToPoint(point)] };
   const source = one(database, `SELECT s.row_json, d.columns_json, d.coordinate_mapping_json

@@ -1,0 +1,134 @@
+[
+  {
+    "originalBytes": 42061663,
+    "sampleVertices": 99998,
+    "fileName": "lines-legacy.csv",
+    "bytes": 6343363,
+    "rows": 99998,
+    "features": 12446,
+    "importMs": 4355,
+    "usableMs": 4415,
+    "peakRssMiB": 269
+  },
+  {
+    "originalBytes": 42061663,
+    "sampleVertices": 99998,
+    "fileName": "lines-legacy.csv.gz",
+    "bytes": 1231378,
+    "rows": 99998,
+    "features": 12446,
+    "importMs": 7756,
+    "usableMs": 7812,
+    "peakRssMiB": 194
+  },
+  {
+    "originalBytes": 42061663,
+    "sampleVertices": 99998,
+    "fileName": "lines-compact.csv",
+    "bytes": 5055525,
+    "rows": 12446,
+    "features": 12446,
+    "importMs": 2803,
+    "usableMs": 2837,
+    "peakRssMiB": 158
+  },
+  {
+    "originalBytes": 42061663,
+    "sampleVertices": 99998,
+    "fileName": "lines-compact.csv.gz",
+    "bytes": 1027781,
+    "rows": 12446,
+    "features": 12446,
+    "importMs": 5894,
+    "usableMs": 5937,
+    "peakRssMiB": 172
+  },
+  {
+    "originalBytes": 42061663,
+    "sampleVertices": 99998,
+    "fileName": "lines-native.geojson",
+    "bytes": 7457297,
+    "rows": 12446,
+    "features": 12446,
+    "importMs": 4398,
+    "usableMs": 4435,
+    "peakRssMiB": 317
+  },
+  {
+    "originalBytes": 42061663,
+    "sampleVertices": 99998,
+    "fileName": "lines-native.geojson.gz",
+    "bytes": 1140991,
+    "rows": 12446,
+    "features": 12446,
+    "importMs": 4255,
+    "usableMs": 4292,
+    "peakRssMiB": 241
+  },
+  {
+    "originalBytes": 96381424,
+    "sampleVertices": 99987,
+    "fileName": "regions-legacy.csv",
+    "bytes": 6105801,
+    "rows": 99987,
+    "features": 20543,
+    "importMs": 4394,
+    "usableMs": 4442,
+    "peakRssMiB": 263
+  },
+  {
+    "originalBytes": 96381424,
+    "sampleVertices": 99987,
+    "fileName": "regions-legacy.csv.gz",
+    "bytes": 1540578,
+    "rows": 99987,
+    "features": 20543,
+    "importMs": 7785,
+    "usableMs": 7843,
+    "peakRssMiB": 188
+  },
+  {
+    "originalBytes": 96381424,
+    "sampleVertices": 99987,
+    "fileName": "regions-compact.csv",
+    "bytes": 6694170,
+    "rows": 20541,
+    "features": 20542,
+    "importMs": 4106,
+    "usableMs": 4158,
+    "peakRssMiB": 226
+  },
+  {
+    "originalBytes": 96381424,
+    "sampleVertices": 99987,
+    "fileName": "regions-compact.csv.gz",
+    "bytes": 1677085,
+    "rows": 20541,
+    "features": 20542,
+    "importMs": 8143,
+    "usableMs": 8194,
+    "peakRssMiB": 183
+  },
+  {
+    "originalBytes": 96381424,
+    "sampleVertices": 99987,
+    "fileName": "regions-native.geojson",
+    "bytes": 9575460,
+    "rows": 20541,
+    "features": 20542,
+    "importMs": 6032,
+    "usableMs": 6079,
+    "peakRssMiB": 324
+  },
+  {
+    "originalBytes": 96381424,
+    "sampleVertices": 99987,
+    "fileName": "regions-native.geojson.gz",
+    "bytes": 1840435,
+    "rows": 20541,
+    "features": 20542,
+    "importMs": 5861,
+    "usableMs": 5906,
+    "peakRssMiB": 306
+  }
+]

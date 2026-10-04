@@ -5,13 +5,21 @@ const MAX_RENDER_BUDGET = 10000;
 const DEFAULT_IMAGE_SIZE_METERS = 100;
 const MIN_IMAGE_SIZE_METERS = 1;
 const MAX_IMAGE_SIZE_METERS = 100000;
+const { createSqliteAdapter } = require('./sqliteAdapter.cjs');
+const { mergeGeojsonMapResult } = require('../src/data/geojsonStorage.js');
 
 /**
- * Query compact point and region render data from the desktop SQLite store.
+ * Query compact point, line, and region render data from the desktop SQLite store.
  * Bounds and timeline filters run in SQLite before render-budget grouping.
  * This intentionally avoids row_json; full details use a separate lookup path.
  */
 function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAULT_RENDER_BUDGET }) {
+  return mergeGeojsonMapResult(createSqliteAdapter(db), { bounds, timeline, renderBudget },
+    queryLegacyMapView({ db, bounds, timeline, renderBudget }));
+}
+
+/** Retain established legacy grouping and query separately indexed compact components. */
+function queryLegacyMapView({ db, bounds, timeline = null, renderBudget = DEFAULT_RENDER_BUDGET }) {
   if (!db?.open) {
     throw new TypeError("An open SQLite database is required.");
   }
@@ -54,29 +62,35 @@ function querySqliteMapView({ db, bounds, timeline = null, renderBudget = DEFAUL
     : returnedCount;
   const hiddenByRenderBudget = Math.max(0, totalMatchingCount - representedCount);
   const regionResult = queryMatchingRegions(db, normalizedBounds, timeline, budget);
+  const lineResult = queryMatchingRegions(db, normalizedBounds, timeline, Math.max(0, budget - regionResult.regions.length), 'line');
 
   return {
     points,
-    lines: [],
+    lines: lineResult.regions,
     regions: regionResult.regions,
     stats: {
       skippedPoints: 0,
       skippedLines: 0,
       skippedRegions: 0,
       skippedPointsByTimeline,
-      skippedLinesByTimeline: 0,
+      skippedLinesByTimeline: lineResult.skippedByTimeline,
       skippedRegionsByTimeline: regionResult.skippedByTimeline,
-      skippedByTimeline: skippedPointsByTimeline + regionResult.skippedByTimeline,
+      skippedByTimeline: skippedPointsByTimeline + regionResult.skippedByTimeline + lineResult.skippedByTimeline,
       limitedToRenderBudget: overBudget ? budget : null,
       totalMatchingCount,
       returnedCount,
       hiddenByRenderBudget,
       overBudget,
       totalMatchingRegionCount: regionResult.totalMatchingCount,
+      totalMatchingLineCount: lineResult.totalMatchingCount,
+      returnedLineCount: lineResult.regions.length,
       returnedRegionCount: regionResult.regions.length,
-      hiddenGeometryCount: Math.max(0, regionResult.totalMatchingCount - regionResult.regions.length),
-      geometryLimit: regionResult.totalMatchingCount > regionResult.regions.length ? budget : null,
-      geometryOverLimit: regionResult.totalMatchingCount > regionResult.regions.length,
+      hiddenGeometryCount: Math.max(0, regionResult.totalMatchingCount - regionResult.regions.length)
+        + Math.max(0, lineResult.totalMatchingCount - lineResult.regions.length),
+      geometryLimit: regionResult.totalMatchingCount > regionResult.regions.length
+        || lineResult.totalMatchingCount > lineResult.regions.length ? budget : null,
+      geometryOverLimit: regionResult.totalMatchingCount > regionResult.regions.length
+        || lineResult.totalMatchingCount > lineResult.regions.length,
     },
   };
 }
@@ -86,8 +100,9 @@ function countMatchingFeatures(db, filter) {
   return normalizeCount(row?.count);
 }
 
-/** Query compact persistent regions with the same visibility and timeline rules as points. */
-function queryMatchingRegions(db, bounds, timeline, renderBudget) {
+/** Query fixed internal line/region tables with shared visibility and timeline rules. */
+function queryMatchingRegions(db, bounds, timeline, renderBudget, kind = 'region') {
+  const table = kind === 'line' ? 'line_features' : 'geometry_features';
   const timelineFilter = buildTimelineFilter(timeline);
   const boundsClauses = [
     "dataset_id IN (SELECT id FROM datasets WHERE enabled = 1)",
@@ -106,7 +121,7 @@ function queryMatchingRegions(db, bounds, timeline, renderBudget) {
   };
   const clauses = [...boundsClauses, ...timelineFilter.clauses];
   const count = (whereClauses, whereParams) => normalizeCount(db.prepare(`
-    SELECT COUNT(*) AS count FROM geometry_features
+    SELECT COUNT(*) AS count FROM ${table}
     WHERE ${whereClauses.join(" AND ")}
   `).get(whereParams)?.count);
   const totalMatchingCount = count(clauses, params);
@@ -114,11 +129,11 @@ function queryMatchingRegions(db, bounds, timeline, renderBudget) {
     ? count(boundsClauses, params)
     : totalMatchingCount;
   const rows = db.prepare(`
-    SELECT dataset_id, feature_id, part, source_row_index,
+    SELECT dataset_id, feature_id, ${kind === 'line' ? "'0' AS part, arrow_mode" : 'part'}, source_row_index,
            coordinates_json, style_json, timeline_start_year, timeline_end_year
-    FROM geometry_features
+    FROM ${table}
     WHERE ${clauses.join(" AND ")}
-    ORDER BY dataset_id, part_order_index, feature_id, part
+    ORDER BY dataset_id, ${kind === 'line' ? 'source_row_index' : 'part_order_index'}, feature_id, part
     LIMIT @limit
   `).all({ ...params, limit: renderBudget });
   return {
@@ -131,6 +146,7 @@ function queryMatchingRegions(db, bounds, timeline, renderBudget) {
       part: String(row.part),
       coordinates: parseCoordinates(row.coordinates_json),
       style: parseCompactFields(row.style_json),
+      ...(kind === 'line' ? { arrow: row.arrow_mode } : {}),
       sourceRef: {
         datasetId: String(row.dataset_id),
         rowIndex: normalizeCount(row.source_row_index),
@@ -299,7 +315,7 @@ function buildBoundsFilter(bounds) {
   const clauses = [
     "dataset_id IN (SELECT id FROM datasets WHERE enabled = 1)",
     // Region vertices now render from geometry_features; retain every other existing point-row behavior.
-    "COALESCE(LOWER(TRIM(json_extract(compact_json, '$.featureType'))), 'point') <> 'region'",
+    "COALESCE(LOWER(TRIM(json_extract(compact_json, '$.featureType'))), 'point') NOT IN ('region', 'line')",
     "lat BETWEEN @south AND @north",
   ];
   const params = {

@@ -1,0 +1,5 @@
+name,featureType,lat,lon,geometry
+Valid point survives,point,59.31,18,
+Malformed GeoJSON is skipped,,59.31,18,"{""type"":""Polygon"",""coordinates"":"
+Conflicting type is skipped,point,59.31,18,"{""type"":""LineString"",""coordinates"":[[18,59.36],[18.04,59.37],[18.08,59.36]]}"
+Projected coordinates are skipped,,59.31,18,"{""type"":""Point"",""coordinates"":[674000,6580000]}"

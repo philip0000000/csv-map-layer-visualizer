@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
+import { getImportFileFormat } from '../data/importFileFormats.js';
 
 export function useCsvFileDrop({ onImportFiles }) {
-  /** True when CSV files are being dragged over the app */
+  /** True when supported dataset files are being dragged over the app. */
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
   /**
@@ -63,7 +64,7 @@ export function useCsvFileDrop({ onImportFiles }) {
 
     const csvFiles = files.filter((file) => {
       const name = String(file?.name ?? "").toLowerCase();
-      return name.endsWith(".csv") || file?.type === "text/csv";
+      return getImportFileFormat(name) !== null || file?.type === "text/csv";
     });
 
     if (csvFiles.length === 0) return;

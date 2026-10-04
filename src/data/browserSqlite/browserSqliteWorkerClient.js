@@ -246,6 +246,11 @@ export function createBrowserSqliteWorkerClient(options = {}) {
     return sendRequest(BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_CSV, { datasetId });
   }
 
+  /** Serialize current geometry and typed metadata inside the database worker. */
+  function exportDatasetGeojson(datasetId) {
+    return sendRequest(BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_GEOJSON, { datasetId });
+  }
+
   function updateDatasetMapping(datasetId, mapping) {
     return sendRequest(BROWSER_SQLITE_OPERATIONS.UPDATE_DATASET_MAPPING, {
       datasetId,
@@ -347,6 +352,7 @@ export function createBrowserSqliteWorkerClient(options = {}) {
     setDatasetEnabled,
     removeDataset,
     exportDatasetCsv,
+    exportDatasetGeojson,
     updateDatasetMapping,
     getPreviewPage,
     queryMapView,

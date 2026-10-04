@@ -14,6 +14,14 @@ const zoneTarget = await getFeatureNavigationTarget({
   },
 }, { sourceRef });
 assert.deepEqual(zoneTarget.bounds, { south: 0, north: 21, west: 0, east: 31 });
+const mixedZone = await getFeatureNavigationTarget({
+  getPreviewFeature: async () => ({ selectionKind: 'point', lat: 0, lon: 0 }),
+  getLogicalZone: async () => ({ parts: [{ coordinates: [
+    [[59, 18], [60, 19], [59, 19], [59, 18]],
+    [[59.1, 18.1], [59.2, 18.2], [59.1, 18.2], [59.1, 18.1]],
+  ] }] }),
+}, { geojsonComponent: true, featureId: 'geojson:0', sourceRef, coordinates: [[[59, 18], [60, 19], [59, 19], [59, 18]]] });
+assert.deepEqual(mixedZone.bounds, { south: 59, north: 60, west: 18, east: 19 });
 await assert.rejects(getFeatureNavigationTarget({ getPreviewFeature: async () => null }, { sourceRef }), /no longer available/);
 const groupRef = { id: 'captured' };
 assert.deepEqual(await getFeatureNavigationTarget({ getGroupBounds: async (query) => {

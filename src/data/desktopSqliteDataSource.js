@@ -37,16 +37,17 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
     browserFileImport: false,
     nativeFilePickerImport: typeof desktopApi?.importCsvToSqlite === 'function',
     droppedFileImport: typeof desktopApi?.importDroppedCsvFiles === 'function',
-    exampleImport: false,
+    exampleImport: typeof desktopApi?.importExample === 'function',
     multipleFileImport:
       typeof desktopApi?.importCsvToSqlite === 'function' ||
       typeof desktopApi?.importDroppedCsvFiles === 'function',
     importProgress: typeof desktopApi?.onCsvImportProgress === 'function',
-    importCancellation: false,
+    importCancellation: typeof desktopApi?.cancelImport === 'function',
     datasetSelection: typeof desktopApi?.getPreviewPage === 'function',
     datasetVisibility: typeof desktopApi?.setDatasetEnabled === 'function',
     datasetRemoval: typeof desktopApi?.removeDataset === 'function',
     datasetCsvExport: typeof desktopApi?.saveDatasetAsCsv === 'function',
+    datasetGeojsonExport: typeof desktopApi?.saveDatasetAsGeojson === 'function',
     datasetMapping: false,
     previewPaging: typeof desktopApi?.getPreviewPage === 'function',
     points: typeof desktopApi?.queryMapView === 'function',
@@ -106,11 +107,12 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
       );
     },
 
-    importExample() {
+    importExample(request = {}) {
       assertActive(DATA_SOURCE_METHODS.importExample);
-      return unsupportedImport(
+      return runImport(
         DATA_SOURCE_METHODS.importExample,
-        'Example imports are unavailable in the desktop backend.',
+        () => desktopApi?.importExample?.(request.name),
+        capabilities.exampleImport,
       );
     },
 
@@ -146,9 +148,11 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
       return cleanup;
     },
 
-    cancelImport(importId) {
+    async cancelImport(importId) {
       assertActive(DATA_SOURCE_METHODS.cancelImport);
-      return normalizeImportCancellationResult(null, importId);
+      if (!capabilities.importCancellation || activeImportId !== importId) return normalizeImportCancellationResult(null, importId);
+      try { return normalizeImportCancellationResult({ ok: true, ...await desktopApi.cancelImport() }, importId); }
+      catch { return normalizeImportCancellationResult(null, importId); }
     },
 
     /** Reconcile session selection against the retained datasets without loading rows. */
@@ -249,6 +253,15 @@ export function createDesktopSqliteDataSource({ desktopApi } = {}) {
       } catch {
         return normalizeDatasetCsvSaveResult(null, normalizedId);
       }
+    },
+
+    /** Let the native bridge own the GeoJSON save dialog and atomic file write. */
+    async saveDatasetAsGeojson(datasetId) {
+      assertActive(DATA_SOURCE_METHODS.saveDatasetAsGeojson);
+      const normalizedId = normalizeId(datasetId);
+      try {
+        return normalizeDatasetCsvSaveResult(await desktopApi.saveDatasetAsGeojson(normalizedId), normalizedId, 'geojson');
+      } catch { return normalizeDatasetCsvSaveResult(null, normalizedId, 'geojson'); }
     },
 
     updateDatasetMapping(datasetId) {

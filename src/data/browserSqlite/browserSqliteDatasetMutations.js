@@ -7,6 +7,7 @@ import {
 import {
   rebuildBrowserSqliteGeometryFeatures,
 } from './browserSqliteGeometryDerivation.js';
+import { rebuildGeojsonFeatures } from '../geojsonStorage.js';
 
 /**
  * Enable or disable one completely imported dataset.
@@ -102,6 +103,10 @@ export function updateBrowserSqliteDatasetMapping(
     `, [JSON.stringify({ latField, lonField }), normalizedId]);
     rebuildBrowserSqlitePointFeatures(database, normalizedId);
     rebuildBrowserSqliteGeometryFeatures(database, normalizedId);
+    const counts = rebuildGeojsonFeatures(database, normalizedId);
+    database.run(`UPDATE datasets SET point_feature_count = point_feature_count + ?,
+      line_feature_count = line_feature_count + ?, region_feature_count = region_feature_count + ? WHERE id = ?`,
+    [counts.point, counts.line, counts.region, normalizedId]);
     database.run('COMMIT');
   } catch (error) {
     safeRollback(database);

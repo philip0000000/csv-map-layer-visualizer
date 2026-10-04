@@ -78,6 +78,7 @@ Optional:
 
 For full format details, supported columns, notes, and examples, see:
 - [CSV format documentation](docs/csv-format.md)
+- [GeoJSON, gzip, compact CSV, and export](docs/geojson-and-gzip.md)
 
 ## Getting started (development)
 

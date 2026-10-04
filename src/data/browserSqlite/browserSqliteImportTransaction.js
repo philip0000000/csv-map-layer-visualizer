@@ -6,6 +6,8 @@ import {
   rebuildBrowserSqliteGeometryFeatures,
 } from './browserSqliteGeometryDerivation.js';
 import { getBrowserSqliteTimelineExtent } from './browserSqliteTimeline.js';
+import { readRows, rebuildGeojsonFeatures } from '../geojsonStorage.js';
+import { resolveEmbeddedGeojson } from '../geojsonFeatureModel.js';
 
 /** Maximum already-normalized rows accepted by one storage call. */
 export const MAX_BROWSER_SQLITE_IMPORT_BATCH_ROWS = 1_000;
@@ -205,23 +207,42 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
       state.database,
       state.datasetId,
     );
-    state.database.run('COMMIT');
-    finishActiveImport(state, 'complete');
-
-    return {
+    const compactCounts = rebuildGeojsonFeatures(state.database, state.datasetId);
+    state.database.run(`UPDATE datasets SET point_feature_count = point_feature_count + ?,
+      line_feature_count = line_feature_count + ?, region_feature_count = region_feature_count + ? WHERE id = ?`,
+    [compactCounts.point, compactCounts.line, compactCounts.region, state.datasetId]);
+    if (metadata.geojsonMetadata) {
+      state.database.run('INSERT INTO geojson_documents(dataset_id, metadata_json) VALUES (?, ?)',
+        [state.datasetId, JSON.stringify(metadata.geojsonMetadata)]);
+    }
+    const result = {
       datasetId: state.datasetId,
       rowCount: state.nextSourceRowIndex,
       totalParsedRowCount: normalized.totalParsedRowCount,
       skippedRowCount: normalized.skippedRowCount,
-      pointFeatureCount: pointResult.pointFeatureCount,
+      pointFeatureCount: pointResult.pointFeatureCount + compactCounts.point,
       skippedPointCount: pointResult.skippedPointCount,
-      lineFeatureCount: geometryResult.lineFeatureCount,
+      lineFeatureCount: geometryResult.lineFeatureCount + compactCounts.line,
       skippedLineCount: geometryResult.skippedLineCount,
-      regionFeatureCount: geometryResult.regionFeatureCount,
+      regionFeatureCount: geometryResult.regionFeatureCount + compactCounts.region,
       skippedRegionCount: geometryResult.skippedRegionCount,
       recommendedTimelineRange,
       importedAt: normalized.importedAt,
     };
+    const commit = () => {
+      state.database.run('COMMIT');
+      finishActiveImport(state, 'complete');
+      return result;
+    };
+    if (typeof metadata.beforeCommit === 'function') {
+      // The worker can receive a queued cancellation after synchronous derivation
+      // but before the file becomes committed. Direct storage callers stay synchronous.
+      return Promise.resolve().then(metadata.beforeCommit).then(commit).catch(error => {
+        abortActiveImport(state);
+        throw error;
+      });
+    }
+    return commit();
   } catch (error) {
     abortActiveImport(state);
     if (error instanceof BrowserSqliteImportTransactionError) throw error;
@@ -234,6 +255,7 @@ export function completeBrowserSqliteFileImport(activeImport, metadata) {
 
 /** Scan stored source rows once to calculate the immutable import recommendation. */
 function calculateRecommendedTimelineRange(database, datasetId, detectedFields) {
+  const native = /\.geojson(?:\.gz)?$/i.test(readRows(database, 'SELECT file_name FROM datasets WHERE id = ?', [datasetId])[0]?.file_name);
   const rows = database.prepare(`
     SELECT row_json
     FROM source_rows
@@ -248,7 +270,8 @@ function calculateRecommendedTimelineRange(database, datasetId, detectedFields) 
     while (rows.step()) {
       const stored = rows.getAsObject();
       const row = parseStoredRow(stored.row_json);
-      const extent = getBrowserSqliteTimelineExtent(row, detectedFields);
+      const compact = resolveEmbeddedGeojson(row, { native });
+      const extent = compact.kind === 'geojson' ? compact.timeline : getBrowserSqliteTimelineExtent(row, detectedFields);
       if (!extent) continue;
       startYear = startYear == null
         ? extent.startYear

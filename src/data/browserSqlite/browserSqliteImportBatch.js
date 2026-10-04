@@ -3,6 +3,7 @@ import {
   importBrowserSqliteCsvFile,
 } from './browserSqliteImporter.js';
 import { MAX_BROWSER_SQLITE_IMPORT_FILES } from './browserSqliteProtocol.js';
+import { getImportErrorMessage } from '../importErrors.js';
 
 export { MAX_BROWSER_SQLITE_IMPORT_FILES };
 
@@ -18,7 +19,7 @@ export const BROWSER_SQLITE_IMPORT_PROGRESS_INTERVAL_MS = 100;
  * unopened. Progress never contains source rows.
  *
  * @param {object} database Initialized temporary sql.js database.
- * @param {File[]} files Browser CSV files, processed in supplied order.
+ * @param {File[]} files Supported browser CSV/GeoJSON files, processed in supplied order.
  * @param {object} [options] Internal worker orchestration options.
  * @returns {Promise<object>} Small batch result with per-file metadata.
  */
@@ -75,18 +76,18 @@ export async function importBrowserSqliteCsvBatch(
           shouldCancel: settings.shouldCancel,
           yieldControl: settings.yieldControl,
           onProgress: (progress) => {
-            const state = progress.phase === 'storing' ? 'storing' : 'parsing';
+            const state = ['storing', 'reading'].includes(progress.phase) ? progress.phase : 'parsing';
             const completedRows = state === 'storing'
               ? progress.completedRows
               : progress.parsedRows;
-            reportProgress(createProgressEvent(
+            reportProgress({ ...createProgressEvent(
               settings.importId,
               fileEntry.fileName,
               index,
               normalizedFiles.length,
               state,
               completedRows,
-            ));
+            ), ...(progress.sourceBytes != null ? { sourceBytes: progress.sourceBytes, expandedBytes: progress.expandedBytes } : {}) });
           },
         },
       );
@@ -105,7 +106,7 @@ export async function importBrowserSqliteCsvBatch(
     } catch (error) {
       const fileCanceled = isCanceledError(error) ||
         isCancellationRequested(settings.shouldCancel);
-      const result = createFailedFileResult(fileEntry.fileName, fileCanceled);
+      const result = createFailedFileResult(fileEntry.fileName, fileCanceled, error);
       results.push(result);
       reportProgress(createProgressEvent(
         settings.importId,
@@ -259,7 +260,8 @@ function normalizeSuccessfulFileResult(value, fileName) {
   };
 }
 
-function createFailedFileResult(fileName, canceled) {
+function createFailedFileResult(fileName, canceled, error) {
+  const message = getImportErrorMessage(error?.code);
   return {
     ok: false,
     fileName,
@@ -270,10 +272,10 @@ function createFailedFileResult(fileName, canceled) {
     warnings: [],
     detectedFields: null,
     error: {
-      code: canceled ? 'import-canceled' : 'import-failed',
+      code: canceled ? 'import-canceled' : message ? error.code : 'import-failed',
       message: canceled
         ? 'Import canceled.'
-        : 'The CSV file could not be imported.',
+        : message ?? 'The CSV file could not be imported.',
     },
   };
 }

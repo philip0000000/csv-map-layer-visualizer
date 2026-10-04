@@ -11,5 +11,7 @@ export function buildMarkerDetailFields(
     (key) => key !== latField && key !== lonField,
   );
 
-  return keys.slice(0, limit).map((key) => [key, row[key]]);
+  // Typed GeoJSON metadata may contain arrays/objects; show their JSON rather than [object Object].
+  return keys.slice(0, limit).map((key) => [key,
+    row[key] === null ? 'null' : typeof row[key] === 'object' ? JSON.stringify(row[key]) : row[key]]);
 }

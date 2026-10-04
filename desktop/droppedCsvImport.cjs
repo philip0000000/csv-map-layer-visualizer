@@ -3,11 +3,13 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { importCsvFilesToSqlite } = require("./csvImportService.cjs");
+const { getImportFileFormat } = require('../src/data/importFileFormats.js');
 
 const MAX_DROPPED_CSV_FILES = 100;
 
 /**
- * Validate renderer-provided drop paths before any file is read or imported.
+ * Retain the synchronous CSV compatibility entry point used by existing callers/tests.
+ * The application uses mapImportService for streaming imports of all supported formats.
  */
 function importDroppedCsvFilesToSqlite({ db, filePaths, onProgress = null }) {
   if (!db?.open) {
@@ -38,16 +40,16 @@ function validateDroppedCsvFilePaths(filePaths) {
       invalidResults.push(createInvalidResult(fileName, "The dropped file is invalid."));
       return;
     }
-    if (path.extname(filePath).toLowerCase() !== ".csv") {
-      invalidResults.push(createInvalidResult(fileName, "Only CSV files can be imported."));
+    if (!getImportFileFormat(filePath)) {
+      invalidResults.push(createInvalidResult(fileName, "Only CSV or GeoJSON files, optionally gzip compressed, can be imported."));
       return;
     }
 
     try {
       const realPath = fs.realpathSync(path.resolve(filePath));
       const stats = fs.statSync(realPath);
-      if (!stats.isFile() || path.extname(realPath).toLowerCase() !== ".csv") {
-        invalidResults.push(createInvalidResult(fileName, "The dropped item is not a CSV file."));
+      if (!stats.isFile() || !getImportFileFormat(realPath)) {
+        invalidResults.push(createInvalidResult(fileName, "The dropped item is not a supported dataset file."));
         return;
       }
 
@@ -59,7 +61,7 @@ function validateDroppedCsvFilePaths(filePaths) {
       seenPaths.add(comparisonPath);
       validFilePaths.push(realPath);
     } catch {
-      invalidResults.push(createInvalidResult(fileName, "The CSV file could not be found or read."));
+      invalidResults.push(createInvalidResult(fileName, "The dataset file could not be found or read."));
     }
   });
 

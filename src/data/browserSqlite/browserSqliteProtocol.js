@@ -12,6 +12,7 @@ export const BROWSER_SQLITE_OPERATIONS = Object.freeze({
   SET_DATASET_ENABLED: 'set-dataset-enabled',
   REMOVE_DATASET: 'remove-dataset',
   EXPORT_DATASET_CSV: 'export-dataset-csv',
+  EXPORT_DATASET_GEOJSON: 'export-dataset-geojson',
   UPDATE_DATASET_MAPPING: 'update-dataset-mapping',
   GET_PREVIEW_PAGE: 'get-preview-page',
   GET_SEARCH_ROWS: 'get-search-rows',
@@ -29,6 +30,7 @@ const OPERATION_SET = new Set(Object.values(BROWSER_SQLITE_OPERATIONS));
 const PROGRESS_STATES = new Set([
   'queued',
   'started',
+  'reading',
   'parsing',
   'storing',
   'completed',
@@ -145,6 +147,8 @@ export function createBrowserSqliteProgressEvent(value) {
     'totalFiles',
     'completedRows',
     'totalRows',
+    'sourceBytes',
+    'expandedBytes',
     'ok',
   ], 'invalid-progress');
 
@@ -210,6 +214,10 @@ export function createBrowserSqliteProgressEvent(value) {
     totalFiles,
     completedRows,
     totalRows,
+    ...(value.sourceBytes != null ? {
+      sourceBytes: normalizeNullableCount(value.sourceBytes, 'source bytes', 'invalid-progress'),
+      expandedBytes: normalizeNullableCount(value.expandedBytes, 'expanded bytes', 'invalid-progress'),
+    } : {}),
     ok: value.state === 'completed' ? value.ok : null,
   };
 }
@@ -236,6 +244,7 @@ function normalizeOperationPayload(operation, payload) {
       return normalizeDatasetEnabledPayload(payload);
     case BROWSER_SQLITE_OPERATIONS.REMOVE_DATASET:
     case BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_CSV:
+    case BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_GEOJSON:
       return normalizeDatasetIdPayload(payload);
     case BROWSER_SQLITE_OPERATIONS.UPDATE_DATASET_MAPPING:
       return normalizeDatasetMappingPayload(payload);
@@ -458,11 +467,13 @@ function normalizeLogicalZoneUpdatePayload(payload) {
   const parts = payload.parts.map((part) => {
     requirePlainRecord(part, 'invalid-request', 'A logical-zone part must be an object.');
     requireOnlyKeys(part, ['part', 'coordinates']);
-    if (!Array.isArray(part.coordinates) || part.coordinates.length < 4) {
+    const nested = Array.isArray(part.coordinates?.[0]?.[0]);
+    const rings = nested ? part.coordinates : [part.coordinates];
+    if (!rings.length || rings.some(ring => !Array.isArray(ring) || ring.length < 4)) {
       throwProtocolError('invalid-request', 'A region part requires a coordinate ring.');
     }
-    coordinateCount += part.coordinates.length;
-    const coordinates = part.coordinates.map((coordinate) => {
+    const normalizeRing = ring => ring.map((coordinate) => {
+      coordinateCount++;
       if (!Array.isArray(coordinate) || coordinate.length !== 2) {
         throwProtocolError('invalid-request', 'A zone coordinate must be a latitude-longitude pair.');
       }
@@ -471,6 +482,7 @@ function normalizeLogicalZoneUpdatePayload(payload) {
         normalizeFiniteNumber(coordinate[1], 'zone longitude'),
       ];
     });
+    const coordinates = nested ? rings.map(normalizeRing) : normalizeRing(part.coordinates);
     return {
       part: normalizeIdentifier(part.part, 'part ID', 'invalid-request'),
       coordinates,

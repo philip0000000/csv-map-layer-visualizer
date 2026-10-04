@@ -1,4 +1,5 @@
 import Papa from 'papaparse';
+import { getDatasetExportFileName } from '../importFileFormats.js';
 
 /** Reconstruct one complete browser dataset from committed source rows. */
 export function exportBrowserSqliteDatasetCsv(database, datasetId) {
@@ -83,7 +84,8 @@ function parseStoredRow(value) {
 /** Keep the imported display name while ensuring a usable CSV download name. */
 function ensureCsvExtension(value) {
   const fileName = normalizeRequiredString(value);
-  return /\.csv$/i.test(fileName) ? fileName : `${fileName}.csv`;
+  // Compressed input still exports an ordinary CSV, without a misleading .gz suffix.
+  return getDatasetExportFileName(fileName, 'csv');
 }
 
 /** Normalize dataset metadata and reject empty identifiers or filenames. */

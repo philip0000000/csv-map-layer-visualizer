@@ -16,6 +16,7 @@ export default function CsvFileControls({
   viewportQueryStats,
   onUnloadFile,
   onSaveAsCsv,
+  onSaveAsGeojson,
   removeActionLabel = "Unload",
   onToggleEnabled,
   onUseRecommendedTimelineRange,
@@ -121,14 +122,15 @@ export default function CsvFileControls({
   /** Open the existing dataset menu with actions scoped to the right-clicked row. */
   function handleRowContextMenu(event, file) {
     const range = file.recommendedTimelineRange;
-    if (!range && !canSaveAsCsv) return;
+    if (!range && !canSaveAsCsv && typeof onSaveAsGeojson !== 'function') return;
 
     event.preventDefault();
     clearHoverMessage();
     setContextMenu({
       datasetId: file.id,
       range,
-      ...getFloatingPosition(event.clientX, event.clientY, 360, range ? 80 : 44),
+      ...getFloatingPosition(event.clientX, event.clientY, 360,
+        8 + (Number(!!range) + Number(canSaveAsCsv) + Number(typeof onSaveAsGeojson === 'function')) * 36),
     });
   }
 
@@ -162,7 +164,7 @@ export default function CsvFileControls({
         <button
           className="csvBtnPrimary csvImportButton"
           onClick={handleClickImport}
-          aria-label="Import CSV files"
+          aria-label="Import CSV or GeoJSON files"
         >
           Import...
         </button>
@@ -177,7 +179,7 @@ export default function CsvFileControls({
               className="csvBtnPrimary csvDesktopImportButton"
               onClick={desktopImport.onImport}
               disabled={isDesktopImporting}
-              aria-label="Import CSV files"
+              aria-label="Import CSV or GeoJSON files"
             >
               {isDesktopImporting ? "Importing..." : "Import..."}
             </button>
@@ -186,6 +188,9 @@ export default function CsvFileControls({
           {isDesktopImporting && desktopProgress && (
             <div className="csvDesktopImportStatus" role="status">
               Importing {desktopProgress.fileNumber} of {desktopProgress.totalFiles}: {desktopProgress.fileName}
+              {desktopProgress.sourceBytes != null
+                ? ` — ${(desktopProgress.sourceBytes / 1048576).toFixed(1)} MB read, ${(desktopProgress.expandedBytes / 1048576).toFixed(1)} MB expanded`
+                : desktopProgress.completedRows != null ? ` — ${desktopProgress.completedRows.toLocaleString()} rows` : ''}
             </div>
           )}
 
@@ -251,7 +256,7 @@ export default function CsvFileControls({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.csv.gz,.geojson,.geojson.gz,text/csv,application/geo+json"
           multiple
           onChange={handleFileChange}
           style={{ display: "none" }}
@@ -318,9 +323,9 @@ export default function CsvFileControls({
         )}
 
         {datasetListState?.status === "loading" && files.length === 0 ? (
-          <div className="csvEmptyState">Loading CSV files...</div>
+          <div className="csvEmptyState">Loading datasets...</div>
         ) : files.length === 0 ? (
-          <div className="csvEmptyState">No CSV files loaded.</div>
+          <div className="csvEmptyState">No datasets loaded.</div>
         ) : (
           files.map((file) => (
             <div
@@ -426,6 +431,16 @@ export default function CsvFileControls({
               }}
             >
               Save as CSV…
+            </button>
+          )}
+          {typeof onSaveAsGeojson === 'function' && (
+            <button type="button" role="menuitem"
+              disabled={datasetListState?.pendingExportDatasetIds?.includes(contextMenu.datasetId)}
+              onClick={() => {
+                onSaveAsGeojson(contextMenu.datasetId);
+                setContextMenu(null);
+              }}>
+              Save as GeoJSON…
             </button>
           )}
         </div>

@@ -5,11 +5,14 @@ import {
   DEFAULT_PREVIEW_ROWS_LIMIT,
 } from './dataSource.js';
 
+import { getImportErrorMessage } from './importErrors.js';
+
 const FAILURE_CATEGORIES = new Set(Object.values(BACKEND_FAILURE_CATEGORIES));
 const OPERATIONS = new Set(Object.values(DATA_SOURCE_METHODS));
 const IMPORT_PROGRESS_STATES = new Set([
   'queued',
   'started',
+  'reading',
   'parsing',
   'storing',
   'completed',
@@ -40,6 +43,7 @@ const CAPABILITY_KEYS = [
   'datasetVisibility',
   'datasetRemoval',
   'datasetCsvExport',
+  'datasetGeojsonExport',
   'datasetMapping',
   'previewPaging',
   'points',
@@ -123,6 +127,10 @@ export function normalizeImportProgress(value) {
     totalFiles,
     completedRows: normalizeOptionalNonNegativeInteger(value.completedRows),
     totalRows: normalizeOptionalNonNegativeInteger(value.totalRows),
+    ...(value.sourceBytes != null ? {
+      sourceBytes: normalizeOptionalNonNegativeInteger(value.sourceBytes),
+      expandedBytes: normalizeOptionalNonNegativeInteger(value.expandedBytes),
+    } : {}),
     ok: value.state === 'completed' ? value.ok === true : null,
   };
 }
@@ -198,7 +206,7 @@ export function normalizeImportFileResult(value, context = {}) {
           operation: OPERATIONS.has(context.operation)
             ? context.operation
             : DATA_SOURCE_METHODS.importBrowserFiles,
-          message: 'The CSV file could not be imported.',
+          message: getImportErrorMessage(value.errorCode ?? value.error?.code) ?? 'The CSV file could not be imported.',
           recoverable: true,
           datasetId: value.datasetId,
         }),
@@ -322,8 +330,8 @@ export function normalizeDatasetMutationResult(value, context = {}) {
   };
 }
 
-/** Normalize one runtime-specific CSV save without exposing paths or raw errors. */
-export function normalizeDatasetCsvSaveResult(value, datasetId) {
+/** Normalize one runtime-specific dataset save without exposing paths or raw errors. */
+export function normalizeDatasetCsvSaveResult(value, datasetId, format = 'csv') {
   const source = isRecord(value) ? value : {};
   const normalizedDatasetId = normalizeNullableId(datasetId ?? source.datasetId);
   const canceled = source.canceled === true;
@@ -334,12 +342,13 @@ export function normalizeDatasetCsvSaveResult(value, datasetId) {
     canceled,
     datasetId: normalizedDatasetId,
     fileName: ok ? normalizeDisplayName(source.fileName) : null,
+    ...(Array.isArray(source.warnings) && source.warnings.length ? { warnings: normalizeStringList(source.warnings) } : {}),
     error: ok || canceled
       ? null
       : normalizeBackendFailure(source.error, {
           category: BACKEND_FAILURE_CATEGORIES.QUERY_FAILED,
-          operation: DATA_SOURCE_METHODS.saveDatasetAsCsv,
-          message: 'The selected CSV dataset could not be saved.',
+          operation: format === 'geojson' ? DATA_SOURCE_METHODS.saveDatasetAsGeojson : DATA_SOURCE_METHODS.saveDatasetAsCsv,
+          message: `The selected ${format === 'geojson' ? 'GeoJSON' : 'CSV'} dataset could not be saved.`,
           recoverable: true,
           datasetId: normalizedDatasetId,
         }),
@@ -479,7 +488,11 @@ export function normalizeFeatureDetailsResult(value) {
   const source = isRecord(value) ? value : {};
   return {
     featureId: normalizeNullableId(source.featureId),
-    row: normalizeRow(source.row),
+    ...(Object.hasOwn(source, 'sourceFeatureId') ? { sourceFeatureId:
+      typeof source.sourceFeatureId === 'string' || Number.isFinite(source.sourceFeatureId) ? source.sourceFeatureId : null } : {}),
+    // Canonical Features carry typed JSON. Legacy CSV/detail fixtures retain
+    // their established text normalization rather than coercing arbitrary JSON.
+    row: Object.hasOwn(source, 'sourceFeatureId') ? normalizeJsonProperties(source.row) : normalizeRow(source.row),
     latField: normalizeNullableString(source.latField),
     lonField: normalizeNullableString(source.lonField),
   };
@@ -534,7 +547,7 @@ export function normalizeLogicalZoneResult(value) {
 function normalizeLogicalZonePart(value) {
   if (!isRecord(value)) return null;
   const part = normalizeNullableString(value.part);
-  const coordinates = normalizeCoordinates(value.coordinates, 3, true);
+  const coordinates = normalizePolygonCoordinates(value.coordinates);
   return part && coordinates
     ? { part, coordinates, style: normalizeStyle(value.style) }
     : null;
@@ -561,6 +574,7 @@ function normalizePointFeature(value) {
 
   return {
     id,
+    ...(value.geojsonComponent === true ? { geojsonComponent: true, featureId: value.featureId, part: normalizeNullableString(value.part) } : {}),
     renderType,
     lat,
     lon,
@@ -587,6 +601,7 @@ function normalizeLineFeature(value) {
   return {
     id,
     featureId: normalizeNullableId(value.featureId),
+    ...(value.geojsonComponent === true ? { geojsonComponent: true } : {}),
     coordinates,
     style: normalizeStyle(value.style),
     arrow: LINE_ARROW_MODES.has(value.arrow) ? value.arrow : 'none',
@@ -600,12 +615,13 @@ function normalizeLineFeature(value) {
 function normalizeRegionFeature(value) {
   if (!isRecord(value)) return null;
   const id = normalizeNullableId(value.id);
-  const coordinates = normalizeCoordinates(value.coordinates, 3, true);
+  const coordinates = normalizePolygonCoordinates(value.coordinates);
   if (!id || !coordinates) return null;
 
   return {
     id,
     featureId: normalizeNullableId(value.featureId),
+    ...(value.geojsonComponent === true ? { geojsonComponent: true } : {}),
     part: normalizeNullableString(value.part),
     coordinates,
     style: normalizeStyle(value.style),
@@ -751,6 +767,15 @@ function normalizeCapturedTimeline(value) {
   };
 }
 
+/** Preserve polygon holes as nested rings while retaining flat legacy polygons. */
+function normalizePolygonCoordinates(value) {
+  if (Array.isArray(value?.[0]?.[0])) {
+    const rings = value.map(ring => normalizeCoordinates(ring, 3, true));
+    return rings.length && rings.every(Boolean) ? rings : null;
+  }
+  return normalizeCoordinates(value, 3, true);
+}
+
 function normalizeCoordinates(value, minimumLength, closeRing) {
   if (!Array.isArray(value)) return null;
   const coordinates = value.map(normalizeCoordinate).filter(Boolean);
@@ -790,6 +815,13 @@ function normalizeStyle(value) {
 function normalizeRows(value) {
   if (!Array.isArray(value)) return [];
   return value.map(normalizeRow).filter(Boolean);
+}
+
+/** Copy validated Feature properties without stripping nested values or JSON types. */
+function normalizeJsonProperties(value) {
+  if (!isRecord(value)) return null;
+  try { return JSON.parse(JSON.stringify(value)); }
+  catch { return null; }
 }
 
 function normalizeRow(value) {

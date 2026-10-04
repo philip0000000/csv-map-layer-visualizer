@@ -1,5 +1,7 @@
 /** Find the smallest continuous longitude interval, including dateline crossings. */
 export function geometryNavigationBounds(coordinates) {
+  // Polygon holes introduce a ring level; navigation uses every geographic tuple.
+  if (Array.isArray(coordinates?.[0]?.[0])) coordinates = coordinates.flat();
   if (!coordinates?.length) throw new Error('This feature has no map geometry.');
   let south = 90;
   let north = -90;
@@ -33,6 +35,16 @@ export async function getFeatureNavigationTarget(dataSource, feature) {
   }
   const current = await dataSource.getPreviewFeature({ sourceRef: feature.sourceRef });
   if (!current) throw new Error('This feature is no longer available on the map.');
+  if (feature.geojsonComponent === true) {
+    // A mixed parent's Preview row resolves to its first component. Navigation
+    // must keep the clicked component's kind instead of switching to that first point.
+    if (Array.isArray(feature.coordinates?.[0]?.[0])) {
+      const zone = await dataSource.getLogicalZone({ datasetId: feature.sourceRef.datasetId, featureId: feature.featureId });
+      return { bounds: geometryNavigationBounds(zone?.parts?.flatMap(part => part.coordinates)) };
+    }
+    if (feature.coordinates) return { bounds: geometryNavigationBounds(feature.coordinates) };
+    return { point: [feature.lat, feature.lon] };
+  }
   if (current.selectionKind === 'region') {
     const zone = await dataSource.getLogicalZone({ datasetId: current.sourceRef.datasetId, featureId: current.featureId });
     return { bounds: geometryNavigationBounds(zone?.parts?.flatMap((part) => part.coordinates)) };

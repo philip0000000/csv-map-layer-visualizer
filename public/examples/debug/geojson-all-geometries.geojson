@@ -1,0 +1,394 @@
+{
+  "type": "FeatureCollection",
+  "origin": "Debug fixture",
+  "features": [
+    {
+      "type": "Feature",
+      "id": 0,
+      "properties": {
+        "name": "Point",
+        "year": 1300,
+        "color": "#cc3344",
+        "fillColor": "#44aa77",
+        "fillOpacity": 0.35,
+        "arrow": "end",
+        "nested": {
+          "tags": [
+            "debug",
+            "Point"
+          ],
+          "enabled": true,
+          "count": 0
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          18,
+          59.32,
+          25
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 1,
+      "properties": {
+        "name": "MultiPoint",
+        "year": 1400,
+        "color": "#cc3344",
+        "fillColor": "#44aa77",
+        "fillOpacity": 0.35,
+        "arrow": "end",
+        "nested": {
+          "tags": [
+            "debug",
+            "MultiPoint"
+          ],
+          "enabled": true,
+          "count": 1
+        }
+      },
+      "geometry": {
+        "type": "MultiPoint",
+        "coordinates": [
+          [
+            18.01,
+            59.32
+          ],
+          [
+            18.01,
+            59.33
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 2,
+      "properties": {
+        "name": "LineString",
+        "year": 1500,
+        "color": "#cc3344",
+        "fillColor": "#44aa77",
+        "fillOpacity": 0.35,
+        "arrow": "end",
+        "nested": {
+          "tags": [
+            "debug",
+            "LineString"
+          ],
+          "enabled": true,
+          "count": 2
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            18,
+            59.36
+          ],
+          [
+            18.04,
+            59.37
+          ],
+          [
+            18.08,
+            59.36
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 3,
+      "properties": {
+        "name": "MultiLineString",
+        "year": 1600,
+        "color": "#cc3344",
+        "fillColor": "#44aa77",
+        "fillOpacity": 0.35,
+        "arrow": "end",
+        "nested": {
+          "tags": [
+            "debug",
+            "MultiLineString"
+          ],
+          "enabled": true,
+          "count": 3
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              18.09,
+              59.32
+            ],
+            [
+              18.1,
+              59.34
+            ]
+          ],
+          [
+            [
+              18.11,
+              59.32
+            ],
+            [
+              18.12,
+              59.34
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 4,
+      "properties": {
+        "name": "Polygon with hole",
+        "year": 1700,
+        "color": "#cc3344",
+        "fillColor": "#44aa77",
+        "fillOpacity": 0.35,
+        "arrow": "end",
+        "nested": {
+          "tags": [
+            "debug",
+            "Polygon with hole"
+          ],
+          "enabled": true,
+          "count": 4
+        }
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              18.02,
+              59.32
+            ],
+            [
+              18.06,
+              59.32
+            ],
+            [
+              18.06,
+              59.35
+            ],
+            [
+              18.02,
+              59.35
+            ],
+            [
+              18.02,
+              59.32
+            ]
+          ],
+          [
+            [
+              18.03,
+              59.33
+            ],
+            [
+              18.04,
+              59.33
+            ],
+            [
+              18.04,
+              59.34
+            ],
+            [
+              18.03,
+              59.34
+            ],
+            [
+              18.03,
+              59.33
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 5,
+      "properties": {
+        "name": "MultiPolygon",
+        "year": 1800,
+        "color": "#cc3344",
+        "fillColor": "#44aa77",
+        "fillOpacity": 0.35,
+        "arrow": "end",
+        "nested": {
+          "tags": [
+            "debug",
+            "MultiPolygon"
+          ],
+          "enabled": true,
+          "count": 5
+        }
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [
+                18.14,
+                59.32
+              ],
+              [
+                18.18,
+                59.32
+              ],
+              [
+                18.18,
+                59.35
+              ],
+              [
+                18.14,
+                59.35
+              ],
+              [
+                18.14,
+                59.32
+              ]
+            ]
+          ],
+          [
+            [
+              [
+                18.2,
+                59.32
+              ],
+              [
+                18.24,
+                59.32
+              ],
+              [
+                18.24,
+                59.35
+              ],
+              [
+                18.2,
+                59.35
+              ],
+              [
+                18.2,
+                59.32
+              ]
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 6,
+      "properties": {
+        "name": "Mixed collection",
+        "year": 1900,
+        "color": "#cc3344",
+        "fillColor": "#44aa77",
+        "fillOpacity": 0.35,
+        "arrow": "end",
+        "nested": {
+          "tags": [
+            "debug",
+            "Mixed collection"
+          ],
+          "enabled": true,
+          "count": 6
+        }
+      },
+      "geometry": {
+        "type": "GeometryCollection",
+        "geometries": [
+          {
+            "type": "Point",
+            "coordinates": [
+              17.96,
+              59.38
+            ]
+          },
+          {
+            "type": "LineString",
+            "coordinates": [
+              [
+                17.96,
+                59.39
+              ],
+              [
+                18,
+                59.4
+              ]
+            ]
+          },
+          {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  17.919999999999998,
+                  59.38
+                ],
+                [
+                  17.959999999999997,
+                  59.38
+                ],
+                [
+                  17.959999999999997,
+                  59.410000000000004
+                ],
+                [
+                  17.919999999999998,
+                  59.410000000000004
+                ],
+                [
+                  17.919999999999998,
+                  59.38
+                ]
+              ],
+              [
+                [
+                  17.93,
+                  59.39
+                ],
+                [
+                  17.939999999999998,
+                  59.39
+                ],
+                [
+                  17.939999999999998,
+                  59.400000000000006
+                ],
+                [
+                  17.93,
+                  59.400000000000006
+                ],
+                [
+                  17.93,
+                  59.39
+                ]
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 0,
+      "properties": {
+        "name": "Non-spatial duplicate ID",
+        "value": null
+      },
+      "geometry": null
+    }
+  ]
+}

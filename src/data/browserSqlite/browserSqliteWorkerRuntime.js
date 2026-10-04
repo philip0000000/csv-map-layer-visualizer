@@ -17,6 +17,7 @@ import {
   removeBrowserSqliteDataset,
 } from './browserSqliteDatasetRemoval.js';
 import { exportBrowserSqliteDatasetCsv } from './browserSqliteDatasetExport.js';
+import { exportDatasetGeojson } from '../geojsonExport.js';
 import {
   importBrowserSqliteCsvBatch,
 } from './browserSqliteImportBatch.js';
@@ -160,6 +161,8 @@ export function createBrowserSqliteWorkerRuntime({
           requireDatabase(database),
           request.payload.datasetId,
         );
+      case BROWSER_SQLITE_OPERATIONS.EXPORT_DATASET_GEOJSON:
+        return exportDatasetGeojson(requireDatabase(database), request.payload.datasetId);
       case BROWSER_SQLITE_OPERATIONS.UPDATE_DATASET_MAPPING:
         return updateBrowserSqliteDatasetMapping(
           requireDatabase(database),

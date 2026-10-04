@@ -2,11 +2,12 @@ const EARTH_RADIUS_METERS = 6371008.8;
 const MIN_TRANSFORM_RADIUS_METERS = 0.5;
 const MIN_SCALE_FACTOR = 0.000001;
 
-/** Calculate one local-projection centre from every non-duplicated zone vertex. */
+/** Calculate one local-projection centre from non-duplicated outer-ring vertices. */
 export function calculateZoneTransformCenter(parts) {
   const vertices = [];
   for (const part of Array.isArray(parts) ? parts : []) {
-    const coordinates = Array.isArray(part?.coordinates) ? part.coordinates : [];
+    const source = Array.isArray(part?.coordinates) ? part.coordinates : [];
+    const coordinates = Array.isArray(source[0]?.[0]) ? source[0] : source;
     const limit = isClosedRing(coordinates) ? coordinates.length - 1 : coordinates.length;
     for (let index = 0; index < limit; index += 1) {
       const coordinate = normalizeCoordinate(coordinates[index]);
@@ -31,7 +32,7 @@ export function calculateZoneTransformCenter(parts) {
   };
 }
 
-/** Resolve a complete multipart preview from the operation fixed at drag start. */
+/** Transform every part and hole together using the operation fixed at drag start. */
 export function transformZoneParts(parts, { operation, center, start, current } = {}) {
   if (!['move', 'rotate', 'scale'].includes(operation)) return null;
   const normalizedCenter = normalizeLatLng(center);
@@ -73,18 +74,24 @@ export function transformZoneParts(parts, { operation, center, start, current } 
   const transformed = [];
   for (const part of Array.isArray(parts) ? parts : []) {
     if (!Array.isArray(part?.coordinates)) return null;
-    const coordinates = [];
-    for (const value of part.coordinates) {
-      const coordinate = normalizeCoordinate(value);
-      if (!coordinate) return null;
-      const result = unprojectLatLng(
-        applyVector(projectCoordinate(coordinate, normalizedCenter)),
-        normalizedCenter,
-      );
-      if (!result) return null;
-      coordinates.push([result.lat, result.lng]);
+    const nested = Array.isArray(part.coordinates[0]?.[0]);
+    const rings = nested ? part.coordinates : [part.coordinates];
+    const transformedRings = [];
+    for (const ring of rings) {
+      const coordinates = [];
+      for (const value of ring) {
+        const coordinate = normalizeCoordinate(value);
+        if (!coordinate) return null;
+        const result = unprojectLatLng(
+          applyVector(projectCoordinate(coordinate, normalizedCenter)),
+          normalizedCenter,
+        );
+        if (!result) return null;
+        coordinates.push([result.lat, result.lng]);
+      }
+      transformedRings.push(coordinates);
     }
-    transformed.push({ ...part, coordinates });
+    transformed.push({ ...part, coordinates: nested ? transformedRings : transformedRings[0] });
   }
   return transformed;
 }

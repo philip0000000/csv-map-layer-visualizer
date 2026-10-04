@@ -2,6 +2,8 @@
 
 const Database = require("better-sqlite3");
 const { rebuildSqliteDatasetRegions } = require("./sqliteZoneService.cjs");
+const { createSqliteAdapter } = require('./sqliteAdapter.cjs');
+const { initializeGeojsonStorage } = require('../src/data/geojsonStorage.js');
 
 /**
  * Open the SQLite database and apply compatible storage migrations.
@@ -63,6 +65,10 @@ function initializeSchema(db) {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_features_dataset_source_row
       ON features(dataset_id, source_row_index);
 
+    CREATE INDEX IF NOT EXISTS idx_features_geometry_order
+      ON features(dataset_id, TRIM(json_extract(compact_json, '$.featureId')),
+        COALESCE(NULLIF(TRIM(json_extract(compact_json, '$.part')), ''), '0'), source_row_index);
+
     CREATE TABLE IF NOT EXISTS geometry_features (
       dataset_id TEXT NOT NULL,
       feature_id TEXT NOT NULL,
@@ -83,12 +89,33 @@ function initializeSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_geometry_features_dataset_bounds
       ON geometry_features(dataset_id, min_lat, max_lat, min_lon, max_lon);
+
+    CREATE TABLE IF NOT EXISTS line_features (
+      dataset_id TEXT NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
+      feature_id TEXT NOT NULL, source_row_index INTEGER NOT NULL,
+      min_lat REAL NOT NULL, max_lat REAL NOT NULL, min_lon REAL NOT NULL, max_lon REAL NOT NULL,
+      timeline_start_year INTEGER, timeline_end_year INTEGER,
+      coordinates_json TEXT NOT NULL, style_json TEXT NOT NULL, arrow_mode TEXT NOT NULL,
+      PRIMARY KEY(dataset_id, feature_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_line_features_bounds ON line_features(dataset_id, min_lat, max_lat, min_lon, max_lon);
   `);
 
   ensureDatasetEnabledColumn(db);
   ensureDatasetRecommendedTimelineColumns(db);
   migratePersistentRegions(db);
   migrateSourceRows(db);
+  // Additive tables leave legacy datasets and their committed adjustments intact.
+  initializeGeojsonStorage(createSqliteAdapter(db));
+  if (Number(db.pragma('user_version', { simple: true })) < 3) {
+    db.transaction(() => {
+      // Existing region edits are retained; only previously unmaterialized lines are added.
+      for (const dataset of db.prepare('SELECT id FROM datasets').all()) {
+        require('./sqliteLineService.cjs').rebuildSqliteDatasetLines({ db, datasetId: dataset.id });
+      }
+      db.pragma('user_version = 3');
+    })();
+  }
 }
 
 /** Preserve legacy edited rows and install source storage once, atomically. */

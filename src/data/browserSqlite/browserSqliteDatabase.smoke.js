@@ -26,7 +26,7 @@ try {
     FROM sqlite_schema
     WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
     ORDER BY name
-  `), ['datasets', 'geometry_features', 'point_features', 'source_rows']);
+  `), ['datasets', 'geojson_components', 'geojson_documents', 'geojson_features', 'geometry_features', 'point_features', 'source_rows']);
   assert.deepEqual(
     readColumn(database, 'PRAGMA table_info(datasets)', 'name'),
     [

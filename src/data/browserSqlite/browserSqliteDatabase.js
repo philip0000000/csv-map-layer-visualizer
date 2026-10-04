@@ -4,7 +4,9 @@
  * The version describes databases created during the current page session. It
  * does not imply that database bytes are persisted or migrated across sessions.
  */
-export const BROWSER_SQLITE_SCHEMA_VERSION = 3;
+import { initializeGeojsonStorage } from '../geojsonStorage.js';
+
+export const BROWSER_SQLITE_SCHEMA_VERSION = 4;
 
 const closedDatabases = new WeakSet();
 
@@ -236,8 +238,9 @@ export function initializeBrowserSqliteSchema(database) {
           timeline_end_year
         );
 
-      PRAGMA user_version = 3;
+      PRAGMA user_version = 4;
     `);
+    initializeGeojsonStorage(database);
     database.run('COMMIT');
   } catch (error) {
     try {

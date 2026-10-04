@@ -5,6 +5,9 @@
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
+    "smoke:import-formats": "node src/data/geojson.smoke.js && node src/data/geojsonStream.smoke.js && node src/data/importTextStream.smoke.js && node src/data/csvTextStream.smoke.js && node src/data/browserSqlite/browserSqliteGzipImporter.smoke.js && node src/data/browserSqlite/browserSqliteGeojson.smoke.js",
+    "benchmark:import-formats": "node src/data/importFormats.benchmark.js 100000",
+    "smoke:desktop-import-formats": "node desktop/mapImportService.smoke.cjs",
     "smoke:heatmap": "node src/components/heatmap.smoke.js && node src/components/mapViewQueryScheduler.smoke.js",
     "validate:heatmap": "node desktop/run-electron.cjs desktop/heatmapValidation.cjs",
     "smoke:feature-map-navigation": "node src/components/featureMapNavigation.smoke.js",

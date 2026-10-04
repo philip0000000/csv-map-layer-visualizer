@@ -123,7 +123,7 @@ function verifyLegacyMigration() {
     assert.equal(summary.totalRows, 2);
     assert.equal(summary.missingSourceRowCount, 2);
     assert.equal(getSqlitePreviewPage({ db, datasetId: "legacy" }).rows[0].name, "Edited again");
-    assert.equal(db.pragma("user_version", { simple: true }), 2);
+    assert.equal(db.pragma("user_version", { simple: true }), 3);
   } finally {
     closeSqliteStore(db);
   }

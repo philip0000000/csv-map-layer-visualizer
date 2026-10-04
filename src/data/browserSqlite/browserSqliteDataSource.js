@@ -43,6 +43,7 @@ const CAPABILITIES = normalizeBackendCapabilities({
   datasetVisibility: true,
   datasetRemoval: true,
   datasetCsvExport: true,
+  datasetGeojsonExport: true,
   datasetMapping: true,
   previewPaging: true,
   points: true,
@@ -268,6 +269,19 @@ export function createBrowserSqliteDataSource(options = {}) {
         }, normalizedId);
       } catch (error) {
         return failedDatasetCsvSave(normalizedId, error);
+      }
+    },
+
+    /** Download an uncompressed FeatureCollection; SQLite never crosses into UI code. */
+    async saveDatasetAsGeojson(datasetId) {
+      assertActive(DATA_SOURCE_METHODS.saveDatasetAsGeojson);
+      const normalizedId = normalizeId(datasetId);
+      try {
+        const exported = await workerClient.exportDatasetGeojson(normalizedId);
+        (options.downloadGeojson ?? downloadBrowserGeojson)(exported.geojsonText, exported.fileName);
+        return normalizeDatasetCsvSaveResult({ ok: true, ...exported }, normalizedId, 'geojson');
+      } catch {
+        return normalizeDatasetCsvSaveResult(null, normalizedId, 'geojson');
       }
     },
 
@@ -502,10 +516,20 @@ function failedDatasetCsvSave(datasetId, error) {
 
 /** Download a completed UTF-8 CSV using APIs available on GitHub Pages. */
 function downloadBrowserCsv(csvText, fileName) {
+  return downloadBrowserText(csvText, fileName, 'text/csv;charset=utf-8');
+}
+
+/** Use the registered GeoJSON MIME type for a complete uncompressed document. */
+function downloadBrowserGeojson(text, fileName) {
+  return downloadBrowserText(text, fileName, 'application/geo+json;charset=utf-8');
+}
+
+/** Initiate one file download and release its temporary URL after the browser starts reading. */
+function downloadBrowserText(csvText, fileName, mimeType) {
   if (typeof csvText !== 'string' || typeof fileName !== 'string' || !fileName) {
     throw new TypeError('A serialized CSV and filename are required.');
   }
-  const url = URL.createObjectURL(new Blob([csvText], { type: 'text/csv;charset=utf-8' }));
+  const url = URL.createObjectURL(new Blob([csvText], { type: mimeType }));
   const link = document.createElement('a');
   try {
     link.href = url;

@@ -3,9 +3,11 @@
 const DEFAULT_GROUP_ROWS_LIMIT = 30;
 const MAX_GROUP_ROWS_LIMIT = 100;
 const GROUP_ROWS_SORT_ORDER = 'dataset-source-row';
+const { createSqliteAdapter } = require('./sqliteAdapter.cjs');
+const { getGeojsonFeatureDetails } = require('../src/data/geojsonStorage.js');
 
 /**
- * Fetch the stored CSV row for one exact SQLite-backed marker.
+ * Fetch source metadata for one SQLite-backed feature, retaining typed GeoJSON properties.
  */
 function getSqliteFeatureDetails({ db, sourceRef } = {}) {
   assertOpenDatabase(db);
@@ -15,6 +17,8 @@ function getSqliteFeatureDetails({ db, sourceRef } = {}) {
   if (!normalizedSourceRef) {
     return createEmptyFeatureDetailsResult();
   }
+  const compactDetails = getGeojsonFeatureDetails(createSqliteAdapter(db), normalizedSourceRef);
+  if (compactDetails) return compactDetails;
 
   const storedFeature = db.prepare([
     'SELECT id, compact_json, row_json',
@@ -106,7 +110,7 @@ function buildGroupWhereClause(groupRef) {
   const clauses = [
     datasetFilter.sql,
     // Region vertices render as polygons and therefore cannot belong to a point marker.
-    "COALESCE(LOWER(TRIM(json_extract(compact_json, '$.featureType'))), 'point') <> 'region'",
+    "COALESCE(LOWER(TRIM(json_extract(compact_json, '$.featureType'))), 'point') NOT IN ('region', 'line')",
     'lat BETWEEN @south AND @north',
     crossesAntimeridian
       ? '(lon >= @west OR lon <= @east)'
